@@ -38,6 +38,7 @@ type OpenAPIResourceDefinition struct {
 	// Specification of the OpenAPI v3 documentation.
 	Spec *highv3.Document `json:"spec,omitempty" yaml:"spec,omitempty"`
 }
+
 type rawOpenAPIResourceDefinitionJSON struct {
 	Settings *OpenAPIResourceSettings `json:"settings,omitempty"`
 	Ref      string                   `json:"ref,omitempty"`

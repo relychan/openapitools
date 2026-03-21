@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"maps"
 	"net/http"
 	"strings"
@@ -19,43 +20,26 @@ import (
 //go:embed openapi-3.json
 var openapiDocument []byte
 
-type RelixyActionConfig struct{}
+type ProxyActionConfig struct{}
 
 // JSONSchema defines a custom definition for JSON schema.
-func (RelixyActionConfig) JSONSchema() *jsonschema.Schema {
+func (ProxyActionConfig) JSONSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
 		OneOf: []*jsonschema.Schema{
 			{
-				Description: "Proxy configuration to the remote REST service",
-				Ref:         "#/$defs/RelixyRESTActionConfig",
+				Description: "Proxy configuration to the remote RESTful service",
+				Ref:         "#/$defs/ProxyRESTfulActionConfig",
 			},
 			{
 				Description: "Configurations for proxying request to the remote GraphQL server",
-				Ref:         "#/$defs/RelixyGraphQLActionConfig",
+				Ref:         "#/$defs/ProxyGraphQLActionConfig",
 			},
 		},
 	}
 }
 
-func genProxyActionSchema() (*jsonschema.Schema, error) {
-	r := new(jsonschema.Reflector)
-
-	// for _, name := range []string{
-	// 	"proxyc/handler/graphqlhandler",
-	// 	"proxyc/handler/proxyhandler",
-	// 	"proxyc/handler/resthandler",
-	// } {
-	// 	err := r.AddGoComments(
-	// 		"github.com/relychan/relixy/"+name,
-	// 		"../"+name,
-	// 		jsonschema.WithFullComment(),
-	// 	)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// }
-
-	reflectSchema := r.Reflect(RelixyActionConfig{})
+func genProxyActionSchema(r *jsonschema.Reflector) *jsonschema.Schema {
+	reflectSchema := r.Reflect(ProxyActionConfig{})
 
 	for _, externalType := range []any{
 		graphqlhandler.ProxyGraphQLActionConfig{},
@@ -76,26 +60,24 @@ func genProxyActionSchema() (*jsonschema.Schema, error) {
 		}
 	}
 
-	return reflectSchema, nil
+	return reflectSchema
 }
 
 func genOpenAPIResourceSchema() (*jsonschema.Schema, error) {
-	actionSchema, err := genProxyActionSchema()
-	if err != nil {
-		return nil, fmt.Errorf("failed to write jsonschema for RelixyAction: %w", err)
-	}
-
 	r := new(jsonschema.Reflector)
 
-	// err = r.AddGoComments(
-	// 	"github.com/relychan/relixy/schema",
-	// 	"../schema",
-	// 	jsonschema.WithFullComment(),
-	// )
-	// if err != nil {
-	// 	return nil, err
-	// }
+	err := r.AddGoComments(
+		"github.com/relychan/openapitools",
+		".",
+		jsonschema.WithFullComment(),
+	)
+	if err != nil {
+		return nil, err
+	}
 
+	log.Printf("%v", r.CommentMap)
+
+	actionSchema := genProxyActionSchema(r)
 	reflectSchema := r.Reflect(oaschema.OpenAPIResourceDefinition{})
 
 	openApiSpec, err := loadOpenAPISchema()

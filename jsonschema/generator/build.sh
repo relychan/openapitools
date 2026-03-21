@@ -1,5 +1,6 @@
 #!/bin/bash
 
+
 cat <<< '
 go 1.26
 

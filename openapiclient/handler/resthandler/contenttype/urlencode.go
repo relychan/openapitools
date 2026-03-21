@@ -96,7 +96,7 @@ func (fue *formURLEncoder) Encode(params parameter.ParameterItems) string {
 
 func (fue *formURLEncoder) getEncodingStyle(
 	rootKey string,
-) (oaschema.ParameterEncodingStyle, bool, bool) {
+) (oaschema.ParameterEncodingStyle, bool, bool) { //nolint:revive
 	style := oaschema.EncodingStyleForm
 	explode := true
 	allowReserved := false
@@ -164,7 +164,7 @@ func (fue *formURLEncoder) buildParams(rootKey string, params parameter.Paramete
 
 // Set delimited-separated array values for simple params.
 // For example: /users?id=3|4|5.
-func (fue *formURLEncoder) setParamDelimitedStyle(
+func (fue *formURLEncoder) setParamDelimitedStyle( //nolint:revive
 	rootKey string,
 	params parameter.ParameterItems,
 	separator byte,

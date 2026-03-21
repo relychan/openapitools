@@ -18,5 +18,5 @@ lint-fix:
 
 .PHONY: build-jsonschema
 build-jsonschema:
-	cd jsonschema/generator && go run .
+	./jsonschema/generator/build.sh
 

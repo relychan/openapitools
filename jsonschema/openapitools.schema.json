@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
- "$id": "https://github.com/relychan/relixy/schema/relixy-resource",
- "$ref": "#/$defs/RelixyResource",
+ "$id": "https://github.com/relychan/openapitools/oaschema/open-api-resource-definition",
+ "$ref": "#/$defs/OpenAPIResourceDefinition",
  "$defs": {
   "AuthLocation": {
    "type": "string",
@@ -749,6 +749,17 @@
    "type": "object",
    "description": "HTTPTransportConfig stores the http.Transport configuration for the http client."
   },
+  "HealthCheckConfig": {
+   "properties": {
+    "http": {
+     "$ref": "#/$defs/HTTPHealthCheckConfig",
+     "description": "Configurations for health check through HTTP protocol."
+    }
+   },
+   "additionalProperties": false,
+   "type": "object",
+   "description": "HealthCheckConfig holds health check configurations for server recovery."
+  },
   "OAuth2Config": {
    "properties": {
     "type": {
@@ -793,105 +804,7 @@
    ],
    "description": "OAuth2Flows contain configuration information for the flow types supported."
   },
-  "RelixyActionConfig": {
-   "oneOf": [
-    {
-     "$ref": "#/$defs/RelixyRESTActionConfig",
-     "description": "Proxy configuration to the remote REST service"
-    },
-    {
-     "$ref": "#/$defs/RelixyGraphQLActionConfig",
-     "description": "Configurations for proxying request to the remote GraphQL server"
-    }
-   ]
-  },
-  "RelixyCustomGraphQLResponseConfig": {
-   "properties": {
-    "httpErrorCode": {
-     "type": "integer",
-     "maximum": 599,
-     "minimum": 400,
-     "default": 400
-    },
-    "body": {
-     "$ref": "#/$defs/TemplateTransformerConfig"
-    }
-   },
-   "additionalProperties": false,
-   "type": "object"
-  },
-  "RelixyCustomRESTResponseConfig": {
-   "properties": {
-    "body": {
-     "$ref": "#/$defs/TemplateTransformerConfig"
-    }
-   },
-   "additionalProperties": false,
-   "type": "object"
-  },
-  "RelixyGraphQLActionConfig": {
-   "properties": {
-    "type": {
-     "type": "string",
-     "enum": [
-      "graphql"
-     ]
-    },
-    "request": {
-     "$ref": "#/$defs/RelixyGraphQLRequestConfig"
-    },
-    "response": {
-     "$ref": "#/$defs/RelixyCustomGraphQLResponseConfig"
-    }
-   },
-   "additionalProperties": false,
-   "type": "object",
-   "required": [
-    "type"
-   ]
-  },
-  "RelixyGraphQLRequestConfig": {
-   "properties": {
-    "headers": {
-     "additionalProperties": {
-      "$ref": "#/$defs/FieldMappingEntryStringConfig"
-     },
-     "type": "object"
-    },
-    "query": {
-     "type": "string"
-    },
-    "variables": {
-     "additionalProperties": {
-      "$ref": "#/$defs/FieldMappingEntryConfig"
-     },
-     "type": "object"
-    },
-    "extensions": {
-     "additionalProperties": {
-      "$ref": "#/$defs/FieldMappingEntryConfig"
-     },
-     "type": "object"
-    }
-   },
-   "additionalProperties": false,
-   "type": "object",
-   "required": [
-    "query"
-   ]
-  },
-  "RelixyHealthCheckConfig": {
-   "properties": {
-    "http": {
-     "$ref": "#/$defs/HTTPHealthCheckConfig",
-     "description": "Configurations for health check through HTTP protocol."
-    }
-   },
-   "additionalProperties": false,
-   "type": "object",
-   "description": "RelixyHealthCheckConfig holds health check configurations for server recovery."
-  },
-  "RelixyOpenAPIForwardHeadersConfig": {
+  "OpenAPIForwardHeadersConfig": {
    "properties": {
     "request": {
      "items": {
@@ -910,45 +823,12 @@
    },
    "additionalProperties": false,
    "type": "object",
-   "description": "RelixyOpenAPIForwardHeadersConfig contains configurations for headers forwarding,."
+   "description": "OpenAPIForwardHeadersConfig contains configurations for headers forwarding,."
   },
-  "RelixyOpenAPIResource": {
-   "properties": {
-    "version": {
-     "type": "string",
-     "enum": [
-      "v1"
-     ],
-     "description": "Version of the resource"
-    },
-    "kind": {
-     "type": "string",
-     "const": "OpenAPI",
-     "description": "Kind of the resource which is always OpenAPI."
-    },
-    "metadata": {
-     "$ref": "#/$defs/RelixyResourceMetadata",
-     "description": "Metadata of the resource"
-    },
-    "definition": {
-     "$ref": "#/$defs/RelixyOpenAPIResourceDefinition",
-     "description": "Definition of the OpenAPI documentation"
-    }
-   },
-   "additionalProperties": false,
-   "type": "object",
-   "required": [
-    "version",
-    "kind",
-    "metadata",
-    "definition"
-   ],
-   "description": "RelixyOpenAPIResource represents an OpenAPI resource."
-  },
-  "RelixyOpenAPIResourceDefinition": {
+  "OpenAPIResourceDefinition": {
    "properties": {
     "settings": {
-     "$ref": "#/$defs/RelixyOpenAPISettings",
+     "$ref": "#/$defs/OpenAPIResourceSettings",
      "description": "Settings of the OpenAPI resource."
     },
     "ref": {
@@ -962,9 +842,9 @@
    },
    "additionalProperties": false,
    "type": "object",
-   "description": "RelixyOpenAPIResourceDefinition defines fields of a relixy OpenAPI resource."
+   "description": "OpenAPIResourceDefinition defines fields of an OpenAPI resource."
   },
-  "RelixyOpenAPISettings": {
+  "OpenAPIResourceSettings": {
    "properties": {
     "expose": {
      "type": "boolean",
@@ -986,43 +866,188 @@
      "description": "Headers define custom headers to be injected to the remote server.\nMerged with the global headers."
     },
     "forwardHeaders": {
-     "$ref": "#/$defs/RelixyOpenAPIForwardHeadersConfig",
+     "$ref": "#/$defs/OpenAPIForwardHeadersConfig",
      "description": "ForwardHeaders define configurations for headers forwarding"
     },
     "healthCheck": {
-     "$ref": "#/$defs/RelixyHealthCheckConfig",
+     "$ref": "#/$defs/HealthCheckConfig",
      "description": "HealthCheck define the health check policy for load balancer recovery."
     }
    },
    "additionalProperties": false,
    "type": "object",
-   "description": "RelixyOpenAPISettings hold settings of the rely proxy."
+   "description": "OpenAPIResourceSettings hold settings of the rely proxy."
   },
-  "RelixyRESTActionConfig": {
+  "ProxyActionConfig": {
+   "oneOf": [
+    {
+     "$ref": "#/$defs/ProxyRESTfulActionConfig",
+     "description": "Proxy configuration to the remote RESTful service"
+    },
+    {
+     "$ref": "#/$defs/ProxyGraphQLActionConfig",
+     "description": "Configurations for proxying request to the remote GraphQL server"
+    }
+   ]
+  },
+  "ProxyCustomGraphQLResponseConfig": {
+   "properties": {
+    "httpErrorCode": {
+     "type": "integer",
+     "maximum": 599,
+     "minimum": 400,
+     "description": "HTTP error code will be used if the response body has errors.\nIf not set, forward the HTTP status from the upstream response which is usually 200 OK.",
+     "default": 400
+    },
+    "body": {
+     "$ref": "#/$defs/TemplateTransformerConfig",
+     "description": "Configurations for transforming response data."
+    }
+   },
+   "additionalProperties": false,
+   "type": "object",
+   "description": "ProxyCustomGraphQLResponseConfig represents configurations for the proxy response."
+  },
+  "ProxyCustomRESTfulResponseConfig": {
+   "properties": {
+    "body": {
+     "$ref": "#/$defs/TemplateTransformerConfig",
+     "description": "Configurations for transforming response data."
+    }
+   },
+   "additionalProperties": false,
+   "type": "object",
+   "description": "ProxyCustomRESTfulResponseConfig represents configurations for the proxy response."
+  },
+  "ProxyGraphQLActionConfig": {
    "properties": {
     "type": {
      "type": "string",
      "enum": [
-      "rest"
-     ]
+      "graphql"
+     ],
+     "description": "Type of the proxy action which is always graphql."
     },
     "request": {
-     "$ref": "#/$defs/RelixyRESTRequestConfig"
+     "$ref": "#/$defs/ProxyGraphQLRequestConfig",
+     "description": "Configurations for the GraphQL proxy request."
     },
     "response": {
-     "$ref": "#/$defs/RelixyCustomRESTResponseConfig"
+     "$ref": "#/$defs/ProxyCustomGraphQLResponseConfig",
+     "description": "Configurations for evaluating graphql responses."
     }
    },
    "additionalProperties": false,
    "type": "object",
    "required": [
     "type"
-   ]
+   ],
+   "description": "ProxyGraphQLActionConfig represents a proxy action config for GraphQL."
   },
-  "RelixyRESTRequestConfig": {
+  "ProxyGraphQLRequestConfig": {
+   "properties": {
+    "headers": {
+     "additionalProperties": {
+      "$ref": "#/$defs/FieldMappingEntryStringConfig"
+     },
+     "type": "object",
+     "description": "The configuration to transform request headers."
+    },
+    "query": {
+     "type": "string",
+     "description": "GraphQL query to be sent."
+    },
+    "variables": {
+     "additionalProperties": {
+      "$ref": "#/$defs/FieldMappingEntryConfig"
+     },
+     "type": "object",
+     "description": "Definition of GraphQL variables."
+    },
+    "extensions": {
+     "additionalProperties": {
+      "$ref": "#/$defs/FieldMappingEntryConfig"
+     },
+     "type": "object",
+     "description": "Definition of GraphQL extensions."
+    }
+   },
+   "additionalProperties": false,
+   "type": "object",
+   "required": [
+    "query"
+   ],
+   "description": "ProxyGraphQLRequestConfig represents configurations for the proxy request."
+  },
+  "ProxyRESTfulActionConfig": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "enum": [
+      "rest"
+     ],
+     "description": "Type of the proxy action which is always rest."
+    },
+    "request": {
+     "$ref": "#/$defs/ProxyRESTfulRequestConfig",
+     "description": "Configurations for the REST proxy request."
+    },
+    "response": {
+     "$ref": "#/$defs/ProxyCustomRESTfulResponseConfig",
+     "description": "Configurations for evaluating REST responses."
+    }
+   },
+   "additionalProperties": false,
+   "type": "object",
+   "required": [
+    "type"
+   ],
+   "description": "ProxyRESTfulActionConfig represents a proxy action config for REST operation."
+  },
+  "ProxyRESTfulParameterConfig": {
    "properties": {
     "path": {
-     "type": "string"
+     "type": "string",
+     "description": "JMESPath expression to find a value in the input data"
+    },
+    "default": {
+     "$ref": "#/$defs/EnvAny",
+     "description": "Default value to be used when no value is found"
+    },
+    "name": {
+     "type": "string",
+     "description": "The name of the parameter."
+    },
+    "explode": {
+     "type": "boolean",
+     "description": "When this is true, parameter values of type array or object generate separate parameters for each value of the array or key-value pair of the map."
+    },
+    "allowReserved": {
+     "type": "boolean",
+     "description": "When this is true, parameter values are serialized using reserved expansion."
+    },
+    "in": {
+     "type": "integer",
+     "description": "The location of the parameter."
+    },
+    "style": {
+     "type": "integer",
+     "description": "Describes how the parameter value will be serialized depending on the type of the parameter value."
+    }
+   },
+   "additionalProperties": false,
+   "type": "object",
+   "required": [
+    "name",
+    "in"
+   ],
+   "description": "ProxyRESTfulParameterConfig represents  an object of transformation configurations for a parameter."
+  },
+  "ProxyRESTfulRequestConfig": {
+   "properties": {
+    "path": {
+     "type": "string",
+     "description": "Overrides the request path. Use the original request path if empty."
     },
     "method": {
      "type": "string",
@@ -1032,68 +1057,44 @@
       "PATCH",
       "PUT",
       "DELETE"
-     ]
+     ],
+     "description": "Overrides the request method. Use the original request method if empty."
     },
-    "query": {
+    "parameters": {
      "oneOf": [
       {
-       "additionalProperties": {
-        "$ref": "#/$defs/FieldMappingEntryStringConfig"
+       "items": {
+        "$ref": "#/$defs/ProxyRESTfulParameterConfig"
        },
-       "type": "object"
+       "type": "array",
+       "description": "The configuration to transform query, path, header and cookie parameters."
       },
       {
        "type": "null"
       }
      ]
     },
-    "headers": {
-     "additionalProperties": {
-      "$ref": "#/$defs/FieldMappingEntryStringConfig"
-     },
-     "type": "object"
+    "contentType": {
+     "type": "string",
+     "description": "Content type of the body to be transformed to."
     },
     "body": {
-     "$ref": "#/$defs/TemplateTransformerConfig"
-    }
-   },
-   "additionalProperties": false,
-   "type": "object"
-  },
-  "RelixyResource": {
-   "oneOf": [
-    {
-     "$ref": "#/$defs/RelixyOpenAPIResource",
-     "description": "Definition of an OpenAPI resource"
+     "$ref": "#/$defs/TemplateTransformerConfig",
+     "description": "The configuration to transform request body."
     },
-    {
-     "$ref": "https://raw.githubusercontent.com/relychan/rely-auth/refs/heads/main/jsonschema/auth.schema.json",
-     "description": "Definition of a RelyAuth resource"
-    }
-   ]
-  },
-  "RelixyResourceMetadata": {
-   "properties": {
-    "name": {
-     "type": "string",
-     "description": "Name of the resource",
-     "default": "default"
-    },
-    "description": {
-     "type": "string",
-     "description": "Description of the resource"
-    },
-    "instruction": {
-     "type": "string",
-     "description": "System instruction for the current resource. It's important to the LLM"
+    "forwardAllQueryParams": {
+     "type": "boolean",
+     "description": "If this is true, all query parameters will be forwarded.\nThe default value is true if there is no query parameter is configured."
     }
    },
    "additionalProperties": false,
    "type": "object",
    "required": [
-    "name"
+    "parameters",
+    "contentType",
+    "forwardAllQueryParams"
    ],
-   "description": "RelixyResourceMetadata represents common metadata of the resource."
+   "description": "ProxyRESTfulRequestConfig represents configurations for the proxy request."
   },
   "TLSClientCertificate": {
    "properties": {
