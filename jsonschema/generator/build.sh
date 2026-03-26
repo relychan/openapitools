@@ -1,5 +1,6 @@
 #!/bin/bash
 
+set -euo pipefail
 
 cat <<< '
 go 1.26

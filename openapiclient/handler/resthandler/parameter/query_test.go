@@ -27,7 +27,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 		name     string
 		value    any
 		encoding BaseParameter
-		expected []string
+		expected string
 	}{
 		{
 			name:  "empty",
@@ -38,7 +38,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Explode: new(true),
 				Style:   new(oaschema.EncodingStyleForm),
 			},
-			expected: []string{""},
+			expected: "",
 		},
 		{
 			name:  "form_explode_single",
@@ -49,7 +49,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Explode: new(true),
 				Style:   new(oaschema.EncodingStyleForm),
 			},
-			expected: []string{"id=3"},
+			expected: "id=3",
 		},
 		{
 			name:  "form_single",
@@ -60,7 +60,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Explode: new(false),
 				Style:   new(oaschema.EncodingStyleForm),
 			},
-			expected: []string{"id=3"},
+			expected: "id=3",
 		},
 		{
 			name:  "form_multiple",
@@ -72,7 +72,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Style:         new(oaschema.EncodingStyleForm),
 				AllowReserved: true,
 			},
-			expected: []string{"id=3,4,5"},
+			expected: "id=3,4,5",
 		},
 		{
 			name:  "form_explode_multiple",
@@ -84,7 +84,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Style:         new(oaschema.EncodingStyleForm),
 				AllowReserved: true,
 			},
-			expected: []string{"id=3&id=4&id=5"},
+			expected: "id=3&id=4&id=5",
 		},
 		{
 			name: "form_object",
@@ -98,7 +98,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Style:         new(oaschema.EncodingStyleForm),
 				AllowReserved: true,
 			},
-			expected: []string{"id=role,admin"},
+			expected: "id=role,admin",
 		},
 		{
 			name: "form_explode_object",
@@ -112,7 +112,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Style:         new(oaschema.EncodingStyleForm),
 				AllowReserved: true,
 			},
-			expected: []string{"role=admin"},
+			expected: "role=admin",
 		},
 		{
 			name: "form_array_object",
@@ -130,7 +130,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Style:         new(oaschema.EncodingStyleForm),
 				AllowReserved: true,
 			},
-			expected: []string{"id=role[0][user],admin"},
+			expected: "id=role[0][user],admin",
 		},
 		{
 			name: "form_explode_array_object_multiple",
@@ -150,10 +150,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Style:         new(oaschema.EncodingStyleForm),
 				AllowReserved: true,
 			},
-			expected: []string{
-				"role[0][user][0]=admin&role[0][user][0]=anonymous",
-				"role[0][user][0]=anonymous&role[0][user][0]=admin",
-			},
+			expected: "role[0][user][0]=admin&role[0][user][0]=anonymous",
 		},
 		{
 			name:  "spaceDelimited_array",
@@ -165,7 +162,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Style:         new(oaschema.EncodingStyleSpaceDelimited),
 				AllowReserved: true,
 			},
-			expected: []string{"id=3+4+5"},
+			expected: "id=3+4+5",
 		},
 		{
 			name: "spaceDelimited_object",
@@ -180,10 +177,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Explode:       new(false),
 				AllowReserved: false,
 			},
-			expected: []string{
-				"color=G+200+R+100",
-				"color=R+100+G+200",
-			},
+			expected: "color=G+200+R+100",
 		},
 		{
 			name:  "spaceDelimited_explode_array",
@@ -195,7 +189,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Explode:       new(true),
 				AllowReserved: false,
 			},
-			expected: []string{"id=3&id=4&id=5"},
+			expected: "id=3&id=4&id=5",
 		},
 		{
 			name:  "pipeDelimited_array",
@@ -207,7 +201,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Explode:       new(false),
 				AllowReserved: true,
 			},
-			expected: []string{"id=3%7C4%7C5"},
+			expected: "id=3%7C4%7C5",
 		},
 		{
 			name:  "pipeDelimited_explode_array",
@@ -219,7 +213,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Explode:       new(true),
 				AllowReserved: true,
 			},
-			expected: []string{"id=3&id=4&id=5"},
+			expected: "id=3&id=4&id=5",
 		},
 		{
 			name: "pipeDelimited_object",
@@ -234,10 +228,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Explode:       new(false),
 				AllowReserved: false,
 			},
-			expected: []string{
-				"color=G%7C200%7CR%7C100",
-				"color=R%7C100%7CG%7C200",
-			},
+			expected: "color=G%7C200%7CR%7C100",
 		},
 		{
 			name:  "deepObject_array_explode",
@@ -249,7 +240,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Explode:       new(true),
 				AllowReserved: true,
 			},
-			expected: []string{"id[]=3&id[]=4&id[]=5"},
+			expected: "id[]=3&id[]=4&id[]=5",
 		},
 		{
 			name: "deepObject_object_explode",
@@ -264,10 +255,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Explode:       new(true),
 				AllowReserved: false,
 			},
-			expected: []string{
-				"color%5BR%5D=100&color%5BG%5D=200",
-				"color%5BG%5D=200&color%5BR%5D=100",
-			},
+			expected: "color%5BG%5D=200&color%5BR%5D=100",
 		},
 		{
 			name: "deepObject_explode_array_object",
@@ -287,7 +275,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				Explode:       new(true),
 				AllowReserved: true,
 			},
-			expected: []string{"id[role][0][user][0][]=admin&id[role][0][user][0][]=anonymous"},
+			expected: "id[role][0][user][0][]=admin&id[role][0][user][0][]=anonymous",
 		},
 	}
 
@@ -295,12 +283,12 @@ func TestEncodingURLQueryParam(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			qValues := url.Values{}
 			SetQueryParam(qValues, tc.encoding, tc.value)
-			assert.Contains(t, tc.expected, EncodeQueryValuesUnescape(qValues))
+			assert.Equal(t, tc.expected, EncodeQueryValuesUnescape(qValues))
 		})
 	}
 }
 
-// BenchmarkSetQueryParam-11    	  681388	      1495 ns/op	    2288 B/op	      34 allocs/op
+// BenchmarkSetQueryParam-11    	  751687	      1525 ns/op	    2304 B/op	      35 allocs/op
 func BenchmarkSetQueryParam(b *testing.B) {
 	value := map[any]any{
 		"role": []any{

@@ -16,9 +16,11 @@ package oaschema
 
 import (
 	"slices"
+	"strings"
 
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
+	"github.com/relychan/goutils/httpheader"
 )
 
 // ExtractCommonParametersOfOperation extracts common parameters from operation's parameters.
@@ -83,4 +85,53 @@ func mergeOrderedMaps[K comparable, V any](dest, src *orderedmap.Map[K, V]) *ord
 	}
 
 	return dest
+}
+
+// GetDefaultContentType gets the default content type from the content map.
+func GetDefaultContentType(contents *orderedmap.Map[string, *highv3.MediaType]) string {
+	if contents == nil || contents.Len() == 0 {
+		return ""
+	}
+
+	var contentType string
+
+	iter := contents.First()
+
+	contentType = iter.Key()
+
+	for ; iter != nil; iter = iter.Next() {
+		key := strings.ToLower(iter.Key())
+		// always prefer JSON content type.
+		for item := range strings.SplitSeq(key, ",") {
+			item = strings.TrimSpace(item)
+			if IsContentTypeJSON(item) {
+				return item
+			}
+		}
+	}
+
+	return contentType
+}
+
+// IsContentTypeXML checks if the content type is XML.
+func IsContentTypeXML(contentType string) bool {
+	return strings.HasPrefix(contentType, httpheader.ContentTypeXML) ||
+		strings.HasPrefix(contentType, httpheader.ContentTypeTextXML) ||
+		strings.HasSuffix(contentType, "+xml")
+}
+
+// IsContentTypeJSON checks if the content type is JSON.
+func IsContentTypeJSON(contentType string) bool {
+	return strings.HasPrefix(contentType, httpheader.ContentTypeJSON) ||
+		strings.HasSuffix(contentType, "+json")
+}
+
+// IsContentTypeText checks if the content type relates to text.
+func IsContentTypeText(contentType string) bool {
+	return strings.HasPrefix(contentType, "text/")
+}
+
+// IsContentTypeMultipartForm checks the content type relates to multipart form.
+func IsContentTypeMultipartForm(contentType string) bool {
+	return strings.HasPrefix(contentType, "multipart/")
 }

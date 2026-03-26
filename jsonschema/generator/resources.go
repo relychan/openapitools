@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"maps"
 	"net/http"
 	"strings"
 
-	"github.com/invopop/jsonschema"
 	"github.com/relychan/goutils"
+	"github.com/relychan/jsonschema"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/graphqlhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler"
@@ -74,8 +73,6 @@ func genOpenAPIResourceSchema() (*jsonschema.Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	log.Printf("%v", r.CommentMap)
 
 	actionSchema := genProxyActionSchema(r)
 	reflectSchema := r.Reflect(oaschema.OpenAPIResourceDefinition{})
@@ -152,12 +149,11 @@ func downloadRemoteSchemas() ([]*jsonschema.Schema, error) {
 			return nil, fmt.Errorf("failed to download file %s: %w", fileURL, err)
 		}
 
-		if rawResp != nil && rawResp.Body != nil {
-			defer goutils.CatchWarnErrorFunc(rawResp.Body.Close) //nolint:revive
-		}
-
 		if rawResp.StatusCode != http.StatusOK {
 			rawBody, err := io.ReadAll(rawResp.Body)
+
+			goutils.CatchWarnErrorFunc(rawResp.Body.Close)
+
 			if err != nil {
 				return nil, fmt.Errorf("failed to download %s schema: %s", fileURL, rawResp.Status) //nolint
 			}
@@ -168,6 +164,9 @@ func downloadRemoteSchemas() ([]*jsonschema.Schema, error) {
 		jsonSchema := new(jsonschema.Schema)
 
 		err = json.NewDecoder(rawResp.Body).Decode(jsonSchema)
+
+		goutils.CatchWarnErrorFunc(rawResp.Body.Close)
+
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode gohttpc schema: %w", err)
 		}

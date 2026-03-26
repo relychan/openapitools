@@ -92,13 +92,8 @@ func parseMediaTypeForDataURI(input string) (*DataURI, DataURIEncoding) {
 	for part := range parts {
 		trimmed := strings.TrimSpace(part)
 
-		trimmedEnc := DataUriASCII
 		if trimmed == "base64" {
-			trimmedEnc = DataURIBase64
-		}
-
-		if trimmedEnc == DataURIBase64 || trimmedEnc == DataUriASCII {
-			dataEncoding = trimmedEnc
+			dataEncoding = DataURIBase64
 
 			continue
 		}

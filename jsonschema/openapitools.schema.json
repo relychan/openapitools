@@ -3,15 +3,6 @@
  "$id": "https://github.com/relychan/openapitools/oaschema/open-api-resource-definition",
  "$ref": "#/$defs/OpenAPIResourceDefinition",
  "$defs": {
-  "AuthLocation": {
-   "type": "string",
-   "enum": [
-    "header",
-    "query",
-    "cookie"
-   ],
-   "description": "Defines the location enum for setting authentication value"
-  },
   "BasicAuthConfig": {
    "anyOf": [
     {
@@ -46,10 +37,6 @@
     "password": {
      "$ref": "#/$defs/EnvString",
      "description": "Password to authenticate."
-    },
-    "description": {
-     "type": "string",
-     "description": "A description for security scheme."
     }
    },
    "additionalProperties": false,
@@ -364,18 +351,13 @@
   },
   "HTTPAuthConfig": {
    "properties": {
-    "in": {
-     "$ref": "#/$defs/AuthLocation",
-     "description": "The location enum for setting authentication value"
+    "tokenLocation": {
+     "$ref": "#/$defs/TokenLocation",
+     "description": "The location where the auth credential will be injected."
     },
-    "name": {
-     "type": "string",
-     "description": "Name of the field to validate, for example, Authorization header.",
-     "default": "Authorization"
-    },
-    "scheme": {
-     "type": "string",
-     "description": "The name of the HTTP Authentication scheme to be used in the Authorization header as defined in RFC7235.\nThe values used SHOULD be registered in the IANA Authentication Scheme registry. https://www.iana.org/assignments/http-authschemes/http-authschemes.xhtml\nThe value is case-insensitive, as defined in RFC7235."
+    "value": {
+     "$ref": "#/$defs/EnvString",
+     "description": "Value of the access token."
     },
     "type": {
      "type": "string",
@@ -383,23 +365,14 @@
       "http"
      ],
      "description": "Type of the http authenticator."
-    },
-    "value": {
-     "$ref": "#/$defs/EnvString",
-     "description": "Value of the access token."
-    },
-    "description": {
-     "type": "string",
-     "description": "A description for security scheme."
     }
    },
    "additionalProperties": false,
    "type": "object",
    "required": [
-    "in",
-    "name",
-    "type",
-    "value"
+    "tokenLocation",
+    "value",
+    "type"
    ],
    "description": "HTTPAuthConfig contains configurations for http authentication\nIf the scheme is [bearer], the authenticator follows OpenAPI 3 specification.\n\n[bearer]: https://swagger.io/docs/specification/authentication/bearer-authentication"
   },
@@ -736,13 +709,13 @@
       }
      ]
     },
-    "disableKeepAlives": {
-     "type": "boolean",
-     "description": "DisableKeepAlives, if true, disables HTTP keep-alives and will only use the connection to the server for a single HTTP request.\nThis is unrelated to the similarly named TCP keep-alives."
-    },
     "forceAttemptHTTP2": {
      "type": "boolean",
      "description": "ForceAttemptHTTP2 controls whether HTTP/2 is enabled when a non-zero Dial, DialTLS, or DialContext func or TLSClientConfig is provided.\nDefault is true."
+    },
+    "disableKeepAlives": {
+     "type": "boolean",
+     "description": "DisableKeepAlives, if true, disables HTTP keep-alives and will only use the connection to the server for a single HTTP request.\nThis is unrelated to the similarly named TCP keep-alives."
     }
    },
    "additionalProperties": false,
@@ -772,10 +745,6 @@
     "flows": {
      "$ref": "#/$defs/OAuth2Flows",
      "description": "An object containing configuration information for the flow types supported."
-    },
-    "description": {
-     "type": "string",
-     "description": "A description for security scheme."
     },
     "tokenLocation": {
      "$ref": "#/$defs/TokenLocation",
@@ -910,6 +879,10 @@
   },
   "ProxyCustomRESTfulResponseConfig": {
    "properties": {
+    "contentType": {
+     "type": "string",
+     "description": "Content type of the response to be transformed to."
+    },
     "body": {
      "$ref": "#/$defs/TemplateTransformerConfig",
      "description": "Configurations for transforming response data."
@@ -946,6 +919,10 @@
   },
   "ProxyGraphQLRequestConfig": {
    "properties": {
+    "url": {
+     "type": "string",
+     "description": "Overrides the request URL. Use the original request path if empty."
+    },
     "headers": {
      "additionalProperties": {
       "$ref": "#/$defs/FieldMappingEntryStringConfig"
@@ -1045,9 +1022,9 @@
   },
   "ProxyRESTfulRequestConfig": {
    "properties": {
-    "path": {
+    "url": {
      "type": "string",
-     "description": "Overrides the request path. Use the original request path if empty."
+     "description": "Overrides the request URL. Use the original request path if empty."
     },
     "method": {
      "type": "string",
@@ -1089,11 +1066,6 @@
    },
    "additionalProperties": false,
    "type": "object",
-   "required": [
-    "parameters",
-    "contentType",
-    "forwardAllQueryParams"
-   ],
    "description": "ProxyRESTfulRequestConfig represents configurations for the proxy request."
   },
   "TLSClientCertificate": {
@@ -1244,8 +1216,14 @@
   "TokenLocation": {
    "properties": {
     "in": {
-     "$ref": "#/$defs/AuthLocation",
-     "description": "The location enum for setting authentication value"
+     "type": "string",
+     "enum": [
+      "header",
+      "query",
+      "cookie"
+     ],
+     "description": "Location where the api key is in.",
+     "default": "header"
     },
     "name": {
      "type": "string",
@@ -2194,7 +2172,7 @@
      "description": "An alternative servers array to service this operation. If a servers array is specified at the Path Item Object or OpenAPI Object level, it will be overridden by this value."
     },
     "x-rely-proxy-action": {
-     "$ref": "#/$defs/RelixyActionConfig",
+     "$ref": "#/$defs/ProxyActionConfig",
      "description": "Defines action information to proxy request to the remote server."
     }
    },

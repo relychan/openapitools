@@ -54,7 +54,7 @@ func (j OpenAPIResourceDefinition) MarshalJSON() ([]byte, error) {
 	}
 
 	if j.Settings != nil {
-		result["settings"] = j.Spec.Security
+		result["settings"] = j.Settings
 	}
 
 	if j.Spec != nil {
@@ -123,7 +123,7 @@ func (j *OpenAPIResourceDefinition) UnmarshalYAML(value *yaml.Node) error {
 		}
 
 		keyNode := value.Content[i]
-		if keyNode.Kind != yaml.ScalarNode && keyNode.Tag != "!!str" {
+		if keyNode.Kind != yaml.ScalarNode || keyNode.Tag != goutils.YAMLStrTag {
 			return fmt.Errorf(
 				"%w. Expected a key string, got %s",
 				ErrInvalidOpenAPIResourceDefinitionYAML,

@@ -147,7 +147,9 @@ func (w *MultipartWriter) WriteField(fieldName, value string, headers http.Heade
 }
 
 func createFieldMIMEHeader(fieldName string, headers http.Header) textproto.MIMEHeader {
-	h := textproto.MIMEHeader(headers)
+	h := make(textproto.MIMEHeader)
+
+	maps.Copy(h, headers)
 	h.Set(httpheader.ContentDisposition, "form-data; name="+strconv.Quote(fieldName))
 
 	return h

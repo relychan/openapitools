@@ -18,6 +18,7 @@ package proxyhandler
 import (
 	"context"
 	"net/http"
+	"net/url"
 
 	"github.com/hasura/goenvconf"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
@@ -31,11 +32,19 @@ type ProxyHandler interface {
 	// Type returns type of the current handler.
 	Type() ProxyActionType
 	// Handle resolves the HTTP request and proxies that request to the remote server.
+	// The response is decoded to a native Go type.
 	Handle(
 		ctx context.Context,
-		request *http.Request,
+		request *Request,
 		options *ProxyHandleOptions,
 	) (*http.Response, any, error)
+	// Stream resolves the HTTP request and proxies that request to the remote server.
+	// The response body can be a raw stream or transformed reader.
+	Stream(
+		ctx context.Context,
+		request *Request,
+		options *ProxyHandleOptions,
+	) (*http.Response, error)
 }
 
 // NewProxyHandlerOptions hold request options for the proxy handler.
@@ -58,7 +67,7 @@ func (nrp NewProxyHandlerOptions) GetEnvFunc() goenvconf.GetEnvFunc {
 type NewProxyHandlerFunc func(operation *highv3.Operation, rawProxyAction *yaml.Node, options *NewProxyHandlerOptions) (ProxyHandler, error)
 
 // NewRequestFunc abstracts a function to create an HTTP request.
-type NewRequestFunc func(method string, url string) *gohttpc.RequestWithClient
+type NewRequestFunc func(method string, uri string) *gohttpc.RequestWithClient
 
 // ProxyHandleOptions hold request options for the proxy handler.
 type ProxyHandleOptions struct {
@@ -66,4 +75,16 @@ type ProxyHandleOptions struct {
 	Settings    *oaschema.OpenAPIResourceSettings
 	Path        string
 	ParamValues map[string]string
+}
+
+// Request represents an HTTP request to be proxying.
+type Request struct {
+	// Method specifies the HTTP method (GET, POST, PUT, etc.).
+	Method string
+	// URL specifies either the URI being proxied.
+	URL *url.URL
+	// Header contains the request header fields.
+	Header http.Header
+	// Body is the request's body.
+	Body any
 }

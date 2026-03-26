@@ -48,6 +48,7 @@ var (
 		oaschema.EncodingStylePipeDelimited,
 		oaschema.EncodingStyleDeepObject,
 	)
+	errUnclosedTemplateString = errors.New("expected a closed curly bracket")
 )
 
 // BaseParameter represents an object of common configurations for a parameter.
@@ -86,7 +87,7 @@ func (conf BaseParameter) Validate() error {
 			*conf.Style != oaschema.EncodingStyleSpaceDelimited &&
 			*conf.Style != oaschema.EncodingStylePipeDelimited &&
 			*conf.Style != oaschema.EncodingStyleDeepObject) {
-			return fmt.Errorf("%w, got %s", errInvalidParamQueryStyle, conf.Style)
+			return errInvalidParamQueryStyle
 		}
 	default:
 		return fmt.Errorf("%w, got: %s", errInvalidParamIn, conf.In)

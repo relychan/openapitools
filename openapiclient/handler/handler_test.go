@@ -52,7 +52,7 @@ func TestNewProxyHandler(t *testing.T) {
 			operation: createOperationWithProxyAction(t, resthandler.ProxyRESTfulActionConfig{
 				Type: resthandler.ProxyActionTypeREST,
 				Request: &resthandler.ProxyRESTfulRequestConfig{
-					Path: "/test",
+					URL: "/test",
 				},
 			}),
 			options: &proxyhandler.NewProxyHandlerOptions{

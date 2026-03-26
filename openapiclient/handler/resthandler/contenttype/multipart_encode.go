@@ -21,12 +21,12 @@ import (
 	"net/http"
 	"reflect"
 	"strconv"
-	"strings"
 	"time"
 
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
+	"github.com/relychan/openapitools/oaschema"
 )
 
 var (
@@ -171,16 +171,16 @@ func (mfe *multipartFormEncoder) evalRootValueReflection(reflectValue reflect.Va
 			contentType, headers := mfe.evalEncoding(keyStr)
 			mapValue := reflectValue.MapIndex(key)
 
-			if strings.HasPrefix(contentType, httpheader.ContentTypeJSON) {
+			if oaschema.IsContentTypeJSON(contentType) {
 				return mfe.writer.WriteJSON(keyStr, mapValue.Interface(), headers)
 			}
 
-			if IsContentTypeXML(contentType) {
+			if oaschema.IsContentTypeXML(contentType) {
 				return mfe.writer.WriteXML(keyStr, value.Interface(), headers)
 			}
 
 			if contentType == "" ||
-				strings.HasPrefix(contentType, "text/") {
+				oaschema.IsContentTypeText(contentType) {
 				return mfe.evalValueReflectionWithDefaultContentType(keyStr, value, headers)
 			}
 
@@ -198,16 +198,15 @@ func (mfe *multipartFormEncoder) evalRootValueReflection(reflectValue reflect.Va
 func (mfe *multipartFormEncoder) evalValue(key string, value any) error {
 	contentType, headers := mfe.evalEncoding(key)
 
-	if strings.HasPrefix(contentType, httpheader.ContentTypeJSON) {
+	if oaschema.IsContentTypeJSON(contentType) {
 		return mfe.writer.WriteJSON(key, value, headers)
 	}
 
-	if strings.HasPrefix(contentType, httpheader.ContentTypeXML) ||
-		strings.HasPrefix(contentType, httpheader.ContentTypeTextXML) {
+	if oaschema.IsContentTypeXML(contentType) {
 		return mfe.writer.WriteXML(key, value, headers)
 	}
 
-	if contentType == "" || strings.HasPrefix(contentType, "text/") {
+	if contentType == "" || oaschema.IsContentTypeText(contentType) {
 		return mfe.evalValueWithDefaultContentType(key, value, headers)
 	}
 

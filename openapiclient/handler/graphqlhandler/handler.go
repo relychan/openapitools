@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -42,6 +43,7 @@ import (
 // GraphQLHandler implements the ProxyHandler interface for GraphQL proxy.
 type GraphQLHandler struct {
 	parameters          []*highv3.Parameter
+	url                 string
 	operationName       string
 	query               string
 	operation           ast.Operation
@@ -78,6 +80,8 @@ func NewGraphQLHandler( //nolint:ireturn,nolintlint
 	if err != nil {
 		return nil, err
 	}
+
+	handler.url = proxyAction.Request.URL
 
 	getEnvFunc := options.GetEnvFunc()
 	handler.parameters = oaschema.MergeParameters(options.Parameters, operation.Parameters)
@@ -125,7 +129,7 @@ func (*GraphQLHandler) Type() proxyhandler.ProxyActionType {
 // Handle resolves the HTTP request and proxies that request to the remote server.
 func (ge *GraphQLHandler) Handle( //nolint:funlen
 	ctx context.Context,
-	request *http.Request,
+	request *proxyhandler.Request,
 	options *proxyhandler.ProxyHandleOptions,
 ) (*http.Response, any, error) {
 	span := trace.SpanFromContext(ctx)
@@ -143,9 +147,8 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 
 	logAttrs := make([]slog.Attr, 0, 13)
 
-	requestData, _, err := proxyhandler.NewRequestTemplateData(
+	requestData, err := proxyhandler.NewRequestTemplateData(
 		request,
-		httpheader.ContentTypeJSON,
 		options.ParamValues,
 	)
 	if err != nil {
@@ -202,7 +205,7 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 		),
 	)
 
-	req := options.NewRequest(http.MethodPost, "")
+	req := options.NewRequest(http.MethodPost, ge.url)
 	reqHeader := req.Header()
 
 	for key, header := range ge.headers {
@@ -300,6 +303,33 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 	ge.printLog(ctx, request, resp.Status, logAttrs)
 
 	return newResp, respBody, err
+}
+
+// Stream resolves the HTTP request and proxies that request to the remote server.
+// The response is a stream.
+func (ge *GraphQLHandler) Stream(
+	ctx context.Context,
+	request *proxyhandler.Request,
+	options *proxyhandler.ProxyHandleOptions,
+) (*http.Response, error) {
+	resp, data, err := ge.Handle(ctx, request, options)
+	if err != nil {
+		return resp, err
+	}
+
+	buf := new(bytes.Buffer)
+
+	err = json.NewEncoder(buf).Encode(data)
+	if err != nil {
+		return nil, &goutils.ErrorDetail{
+			Detail: err.Error(),
+			Code:   oaschema.ErrCodeWriteResponseError,
+		}
+	}
+
+	resp.Body = io.NopCloser(buf)
+
+	return resp, nil
 }
 
 func (ge *GraphQLHandler) transformResponse( //nolint:revive
@@ -451,7 +481,7 @@ func (ge *GraphQLHandler) resolveRequestExtensions(
 
 func (ge *GraphQLHandler) printLog(
 	ctx context.Context,
-	request *http.Request,
+	request *proxyhandler.Request,
 	message string,
 	attrs []slog.Attr,
 ) {
@@ -469,9 +499,9 @@ func (ge *GraphQLHandler) printLog(
 		slog.String("operation_type", string(ge.operation)),
 		slog.String("request_url", request.URL.String()),
 		slog.Any("variables", ge.variables),
-		otelutils.NewHeaderLogGroupAttrs(
+		otelutils.NewHeaderMatrixLogGroupAttrs(
 			"request_headers",
-			otelutils.NewTelemetryHeaders(request.Header),
+			otelutils.ExtractTelemetryHeaders(request.Header),
 		),
 	)
 

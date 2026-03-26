@@ -46,7 +46,7 @@ func TestRESTHandler_Properties(t *testing.T) {
 			name: "handler with POST method and custom path",
 			handler: &RESTfulHandler{
 				customRequest: &customRESTRequest{
-					Path:   "/custom/path",
+					URL:    "/custom/path",
 					Method: "POST",
 				},
 			},
@@ -58,7 +58,7 @@ func TestRESTHandler_Properties(t *testing.T) {
 			name: "handler with PUT method",
 			handler: &RESTfulHandler{
 				customRequest: &customRESTRequest{
-					Path:   "/api/resource",
+					URL:    "/api/resource",
 					Method: "PUT",
 				},
 			},
@@ -76,7 +76,7 @@ func TestRESTHandler_Properties(t *testing.T) {
 
 			assert.Equal(t, ProxyActionTypeREST, tc.handler.Type())
 			if tc.expectedPath != "" {
-				assert.Equal(t, tc.expectedPath, tc.handler.customRequest.Path)
+				assert.Equal(t, tc.expectedPath, tc.handler.customRequest.URL)
 			}
 		})
 	}
@@ -135,4 +135,22 @@ response:
 		_, err = NewRESTfulHandler(operation, &rawAction, options)
 		assert.True(t, err != nil)
 	})
+}
+
+func TestEvaluateRequestPath(t *testing.T) {
+	input := RESTfulHandler{
+		customRequest: &customRESTRequest{},
+	}
+	uri, _, err := input.evaluateRequestPath(
+		"https://localhost:8080/users/{id}/posts/{postId}",
+		&proxyhandler.RequestTemplateData{
+			Params: map[string]string{
+				"id":     "1",
+				"postId": "2",
+			},
+		},
+		map[string]any{},
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, "https://localhost:8080/users/1/posts/2", uri)
 }

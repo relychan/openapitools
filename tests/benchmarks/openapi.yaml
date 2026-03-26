@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../jsonschema/openapitools.schema.json
+spec:
+  openapi: "3.2.0"
+  servers:
+    - url: http://localhost:8080
+  paths:
+    /mock:
+      get: {}
+    /users:
+      get:
+        x-rely-proxy-action:
+          type: graphql
+          request:
+            url: /graphql
+            query: |
+              query GetUsers {
+                users {
+                  id
+                }
+              }

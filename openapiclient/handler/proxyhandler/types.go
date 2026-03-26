@@ -15,15 +15,11 @@
 package proxyhandler
 
 import (
-	"encoding/json"
 	"errors"
-	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/hasura/goenvconf"
-	"github.com/relychan/goutils"
-	"github.com/relychan/goutils/httpheader"
 )
 
 var (
@@ -70,10 +66,9 @@ type RequestTemplateData struct {
 
 // NewRequestTemplateData creates a new [RequestTemplateData] from the HTTP request to a map for request transformation.
 func NewRequestTemplateData(
-	request *http.Request,
-	contentType string,
+	request *Request,
 	paramValues map[string]string,
-) (*RequestTemplateData, bool, error) {
+) (*RequestTemplateData, error) {
 	requestHeaders := map[string]string{}
 
 	for key, header := range request.Header {
@@ -87,6 +82,7 @@ func NewRequestTemplateData(
 	requestData := &RequestTemplateData{
 		Params:  paramValues,
 		Headers: requestHeaders,
+		Body:    request.Body,
 	}
 
 	rawQuery := strings.TrimSpace(request.URL.RawQuery)
@@ -96,29 +92,7 @@ func NewRequestTemplateData(
 		requestData.QueryParams, _ = url.ParseQuery(rawQuery)
 	}
 
-	if request.Body == nil || request.Body == http.NoBody {
-		return requestData, true, nil
-	}
-
-	switch {
-	case strings.HasPrefix(contentType, httpheader.ContentTypeJSON):
-		defer goutils.CatchWarnErrorFunc(request.Body.Close)
-
-		var body any
-
-		err := json.NewDecoder(request.Body).Decode(&body)
-		if err != nil {
-			return nil, true, err
-		}
-
-		requestData.Body = body
-
-		return requestData, true, nil
-	default:
-		// skip other content types.
-	}
-
-	return requestData, false, nil
+	return requestData, nil
 }
 
 // ToMap converts the struct to map.

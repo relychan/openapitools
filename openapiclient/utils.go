@@ -16,65 +16,54 @@ package openapiclient
 
 import (
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 
 	"github.com/hasura/goenvconf"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httpheader"
+	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
+	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
+	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
 )
+
+// NewRequest creates a new proxy request from an HTTP request.
+func NewRequest(request *http.Request) (*proxyhandler.Request, error) {
+	req := &proxyhandler.Request{
+		Method: request.Method,
+		URL:    request.URL,
+		Header: request.Header,
+	}
+
+	if request.Body == nil || request.Body == http.NoBody {
+		return req, nil
+	}
+
+	contentType := request.Header.Get(httpheader.ContentType)
+
+	decodedBody, err := contenttype.Decode(contentType, request.Body)
+	if err != nil {
+		respErr := goutils.NewValidationError()
+		respErr.Detail = err.Error()
+
+		return nil, respErr
+	}
+
+	req.Body = decodedBody
+
+	return req, nil
+}
 
 // parse server url from static string or environment variables.
 func parseServerURL(server *highv3.Server, getEnv goenvconf.GetEnvFunc) (string, error) {
 	rawServerURL := strings.TrimSpace(server.URL)
-	if rawServerURL == "" {
-		return "", nil
-	}
 
-	var sb strings.Builder
-
-	var i int
-
-	urlLength := len(rawServerURL)
-	sb.Grow(urlLength)
-
-	for ; i < urlLength; i++ {
-		char := rawServerURL[i]
-		if char != '{' {
-			sb.WriteByte(char)
-
-			continue
-		}
-
-		i++
-
-		if i == urlLength-1 {
-			return "", fmt.Errorf(
-				"%w: closed curly bracket is missing in %s",
-				errInvalidServerURL,
-				rawServerURL,
-			)
-		}
-
-		j := i
-		// get and validate environment variable
-		for ; j < urlLength; j++ {
-			nextChar := rawServerURL[j]
-			if nextChar == '}' {
-				break
-			}
-		}
-
-		if j == i {
-			return "", fmt.Errorf(
-				"%w: closed curly bracket is missing in %s",
-				errInvalidServerURL,
-				rawServerURL,
-			)
-		}
-
+	return parameter.ReplaceURLTemplate(rawServerURL, func(s string) (string, error) {
 		var variable *highv3.ServerVariable
 
-		envVar := goenvconf.NewEnvStringVariable(rawServerURL[i:j])
+		envVar := goenvconf.NewEnvStringVariable(s)
 
 		if server.Variables != nil {
 			variable, _ = server.Variables.Get(*envVar.Variable)
@@ -85,27 +74,18 @@ func parseServerURL(server *highv3.Server, getEnv goenvconf.GetEnvFunc) (string,
 
 		part, err := envVar.GetCustom(getEnv)
 		if err != nil {
-			return "", fmt.Errorf(
-				"failed to get %s environment variable: %w",
-				*envVar.Variable,
-				err,
-			)
+			return "", err
 		}
 
 		if variable != nil && len(variable.Enum) > 0 && !slices.Contains(variable.Enum, part) {
-			return "", fmt.Errorf(
-				"%w: value of environment variable %s must be in %v, got `%s`",
-				errInvalidServerURL,
+			return "", fmt.Errorf( //nolint:err113
+				"value of environment variable %s must be in %v, got `%s`",
 				*envVar.Variable,
 				variable.Enum,
 				part,
 			)
 		}
 
-		sb.WriteString(part)
-
-		i = j
-	}
-
-	return sb.String(), nil
+		return part, nil
+	})
 }

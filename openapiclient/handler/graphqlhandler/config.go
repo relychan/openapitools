@@ -44,6 +44,8 @@ type ProxyGraphQLActionConfig struct {
 
 // ProxyGraphQLRequestConfig represents configurations for the proxy request.
 type ProxyGraphQLRequestConfig struct {
+	// Overrides the request URL. Use the original request path if empty.
+	URL string `json:"url,omitempty" yaml:"url,omitempty"`
 	// The configuration to transform request headers.
 	Headers map[string]jmes.FieldMappingEntryStringConfig `json:"headers,omitempty" yaml:"headers,omitempty"`
 	// GraphQL query to be sent.

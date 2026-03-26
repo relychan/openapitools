@@ -8,7 +8,7 @@ on:
 
 permissions:
   pull-requests: write
-  
+
 jobs:
   lint:
     name: Lint and test
@@ -29,16 +29,15 @@ jobs:
           version: latest
       - name: Test
         run: |
-          ./testdata/tls/create-certs.sh
           go test -v -race -timeout 3m -coverpkg=./... -coverprofile=coverage.out ./...
       - name: Go coverage format
-        if: ${{ github.event_name == 'pull_request' && github.repository == 'relychan/gohttpc' }}
+        if: ${{ github.event_name == 'pull_request' && github.repository == 'relychan/openapitools' }}
         run: |
           go get github.com/boumenot/gocover-cobertura
           go install github.com/boumenot/gocover-cobertura
           gocover-cobertura < coverage.out > coverage.xml
       - name: Code Coverage Summary Report
-        if: ${{ github.event_name == 'pull_request' && github.repository == 'relychan/gohttpc' }}
+        if: ${{ github.event_name == 'pull_request' && github.repository == 'relychan/openapitools' }}
         uses: irongut/CodeCoverageSummary@v1.3.0
         with:
           filename: coverage.xml

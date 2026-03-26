@@ -86,6 +86,8 @@ linters:
           arguments: [10]
         - name: var-naming
           disabled: true
+        - name: flag-parameter
+          disabled: true
     exhaustive:
       default-signifies-exhaustive: true
     nestif:

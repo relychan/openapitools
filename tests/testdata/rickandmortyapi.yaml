@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=../../jsonschema/openapitools.schema.json
+settings:
+  headers: {}
+  forwardHeaders:
+    request: []
+    response: []
+  http:
+    timeout: 60
+    transport:
+      tlsHandshakeTimeout: 10s
+      forceAttemptHTTP2: false
+    retry:
+      maxAttempts: 3
+      delay: 1000
+      maxDelay: 5000
+spec:
+  openapi: "3.2.0"
+  jsonSchemaDialect: https://spec.openapis.org/oas/3.2/dialect/2025-09-17
+  servers:
+    - url: https://rickandmortyapi.com/graphql
+  paths:
+    /characters:
+      get:
+        operationId: getCharacters
+        description: "Get characters"
+        x-rely-proxy-action:
+          type: graphql
+          request:
+            query: |
+              query GetCharacters {
+                characters(page: 1, filter: { name: "Morty" }) {
+                  info {
+                    count
+                  }
+                  results {
+                    name
+                  }
+                }
+                location(id: 1) {
+                  id
+                }
+                episodesByIds(ids: [1, 2]) {
+                  id
+                }
+              }
+    /characters/{id}:
+      get:
+        operationId: getCharacters
+        description: "Get character by ID"
+        x-rely-proxy-action:
+          type: graphql
+          request:
+            query: |
+              query Character($id: ID! = "1") {
+                character(id: $id) {
+                  id
+                  name
+                }
+              }

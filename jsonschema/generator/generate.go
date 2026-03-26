@@ -1,4 +1,4 @@
-// Package main generates the JSON schema for the relixy metadata.
+// Package main generates the JSON schema for the openapitools metadata.
 package main
 
 import (

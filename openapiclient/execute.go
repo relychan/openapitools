@@ -27,54 +27,100 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
+	"go.opentelemetry.io/otel/trace"
 )
+
+// Do routes and proxies the request to the remote server.
+func (pc *ProxyClient) Do(request *http.Request) (*http.Response, error) {
+	ctx, span := tracer.Start(request.Context(), "proxy_http_request")
+	defer span.End()
+
+	req, err := NewRequest(request)
+	if err != nil {
+		span.SetStatus(codes.Error, "failed to decode request body")
+		span.RecordError(err)
+
+		return nil, err
+	}
+
+	route, options, err := pc.prepareRequest(span, req)
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := route.Method.Handler.Stream(ctx, req, options)
+	if err != nil {
+		return response, pc.handleError(span, err, options.Path)
+	}
+
+	span.SetStatus(codes.Ok, "")
+
+	return response, nil
+}
 
 // Execute routes and proxies the request to the remote server.
 func (pc *ProxyClient) Execute(
 	ctx context.Context,
-	req *http.Request,
+	request *proxyhandler.Request,
 ) (*http.Response, any, error) {
-	ctx, span := tracer.Start(ctx, "Proxy")
+	ctx, span := tracer.Start(ctx, "proxy_request")
 	defer span.End()
 
+	route, options, err := pc.prepareRequest(span, request)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	response, responseBody, err := route.Method.Handler.Handle(ctx, request, options)
+	if err != nil {
+		return nil, nil, pc.handleError(span, err, options.Path)
+	}
+
+	span.SetStatus(codes.Ok, "")
+
+	return response, responseBody, nil
+}
+
+func (pc *ProxyClient) prepareRequest(
+	span trace.Span,
+	request *proxyhandler.Request,
+) (*internal.Route, *proxyhandler.ProxyHandleOptions, error) {
 	span.SetAttributes(
-		semconv.HTTPRequestMethodKey.String(req.Method),
-		semconv.URLOriginal(req.URL.String()),
+		semconv.HTTPRequestMethodKey.String(request.Method),
+		semconv.URLOriginal(request.URL.String()),
 	)
 
-	requestPath := req.URL.Path
-
-	if pc.metadata.Settings.Expose != nil && !*pc.metadata.Settings.Expose {
+	if pc.metadata.Settings != nil && pc.metadata.Settings.Expose != nil && !*pc.metadata.Settings.Expose {
 		// This API isn't exposed. Returns HTTP 404
 		return nil, nil, goutils.RFC9457Error{
 			Status:   http.StatusNotFound,
 			Title:    "Resource Not Found",
-			Instance: req.URL.Path,
+			Instance: request.URL.Path,
 		}
 	}
 
-	if pc.metadata.Settings.BasePath != "" && req.URL.Path != "" {
+	requestPath := request.URL.Path
+
+	if pc.metadata.Settings != nil && pc.metadata.Settings.BasePath != "" && request.URL.Path != "" {
 		// The URL path may omit the slash character
-		if req.URL.Path[0] == '/' {
-			requestPath = strings.TrimPrefix(req.URL.Path, pc.metadata.Settings.BasePath)
-		} else {
-			requestPath = strings.TrimPrefix(
-				req.URL.Path,
-				pc.metadata.Settings.BasePath[1:],
-			)
+		basePath := pc.metadata.Settings.BasePath
+		if requestPath[0] != '/' {
+			basePath = basePath[1:]
 		}
+
+		requestPath = strings.TrimPrefix(requestPath, basePath)
 	}
 
 	span.SetAttributes(semconv.URLPath(requestPath))
 
-	route := pc.node.FindRoute(requestPath, req.Method)
+	route := pc.node.FindRoute(requestPath, request.Method)
 	if route == nil {
 		span.SetStatus(codes.Error, "request path or method does not exist")
 
 		return nil, nil, goutils.RFC9457Error{
 			Status:   http.StatusNotFound,
 			Title:    "Resource Not Found",
-			Instance: req.URL.Path,
+			Instance: requestPath,
 		}
 	}
 
@@ -89,30 +135,30 @@ func (pc *ProxyClient) Execute(
 		Path:        requestPath,
 	}
 
-	response, responseBody, err := route.Method.Handler.Handle(ctx, req, options)
-	if err != nil {
-		span.SetStatus(codes.Error, "proxy failed")
-		span.RecordError(err)
+	return route, options, nil
+}
 
-		var rfc9457Error goutils.RFC9457Error
+func (*ProxyClient) handleError(
+	span trace.Span,
+	err error,
+	requestPath string,
+) *goutils.RFC9457Error {
+	span.SetStatus(codes.Error, "proxy failed")
+	span.RecordError(err)
 
-		if errors.As(err, &rfc9457Error) {
-			rfc9457Error.Instance = req.URL.Path
-		} else {
-			rfc9457Error = goutils.RFC9457Error{
-				Status:   http.StatusInternalServerError,
-				Title:    http.StatusText(http.StatusInternalServerError),
-				Detail:   err.Error(),
-				Instance: req.URL.Path,
-			}
-		}
+	rfc9457Error, ok := errors.AsType[*goutils.RFC9457Error](err)
+	if ok {
+		rfc9457Error.Instance = requestPath
 
-		return nil, nil, rfc9457Error
+		return rfc9457Error
 	}
 
-	span.SetStatus(codes.Ok, "")
-
-	return response, responseBody, nil
+	return &goutils.RFC9457Error{
+		Status:   http.StatusInternalServerError,
+		Title:    http.StatusText(http.StatusInternalServerError),
+		Detail:   err.Error(),
+		Instance: requestPath,
+	}
 }
 
 func (pc *ProxyClient) newRequestFunc(route *internal.Route) proxyhandler.NewRequestFunc {
@@ -129,7 +175,7 @@ func (pc *ProxyClient) newRequestFunc(route *internal.Route) proxyhandler.NewReq
 			reqHeader.Set(key, value)
 		}
 
-		if pc.metadata.Settings.ForwardHeaders != nil {
+		if pc.metadata.Settings != nil && pc.metadata.Settings.ForwardHeaders != nil {
 			for _, key := range pc.metadata.Settings.ForwardHeaders.Request {
 				value := reqHeader.Get(key)
 				if value != "" {

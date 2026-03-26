@@ -27,6 +27,7 @@ import (
 	"go.yaml.in/yaml/v4"
 )
 
+// ErrUnsupportedProxyType occurs when the proxy type is unsupported.
 var ErrUnsupportedProxyType = errors.New("unsupported proxy type")
 
 var proxyHandlerConstructors = map[proxyhandler.ProxyActionType]proxyhandler.NewProxyHandlerFunc{

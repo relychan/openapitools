@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hasura/goenvconf"
 	"github.com/relychan/goutils"
 	"github.com/relychan/openapitools/oaschema"
 )
@@ -43,13 +44,17 @@ func EncodeQueryValuesUnescape(values url.Values) string {
 
 	buf.Grow(len(values) * 4)
 
-	for k, vs := range values {
+	keys := goutils.GetSortedKeys(values)
+
+	for _, key := range keys {
+		vs := values[key]
+
 		for _, v := range vs {
 			if buf.Len() > 0 {
 				buf.WriteByte('&')
 			}
 
-			buf.WriteString(k)
+			buf.WriteString(key)
 			buf.WriteByte('=')
 			buf.WriteString(v)
 		}
@@ -80,6 +85,69 @@ func IsReservedCharacter[C byte | rune](c C) bool {
 	default:
 		return false
 	}
+}
+
+// ReplaceURLTemplate finds and replace variables in the template string.
+func ReplaceURLTemplate(input string, get goenvconf.GetEnvFunc) (string, error) {
+	if input == "" {
+		return "", nil
+	}
+
+	var sb strings.Builder
+
+	var inBracket bool
+
+	var i int
+
+	strLength := len(input)
+	sb.Grow(strLength)
+
+	for ; i < strLength; i++ {
+		char := input[i]
+		if char != '{' {
+			sb.WriteByte(char)
+
+			continue
+		}
+
+		i++
+
+		inBracket = true
+
+		if i == strLength-1 {
+			return "", errUnclosedTemplateString
+		}
+
+		j := i
+		// get and validate environment variable
+		for ; j < strLength; j++ {
+			nextChar := input[j]
+			if nextChar == '}' {
+				inBracket = false
+
+				break
+			}
+		}
+
+		if inBracket {
+			return "", errUnclosedTemplateString
+		}
+
+		value, err := get(input[i:j])
+		if err != nil {
+			return "", err
+		}
+
+		sb.WriteString(value)
+
+		i = j
+	}
+
+	if inBracket {
+		return "", errUnclosedTemplateString
+	}
+
+	return sb.String(), nil
 }
 
 // EvaluateParameterValue evaluates the type of the value and encode it into a string map.
@@ -274,8 +342,11 @@ func buildParamDelimitedStyleNonExplode(
 	assignSymbol byte,
 ) {
 	first := true
+	keys := goutils.GetSortedKeys(builtParams)
 
-	for key, values := range builtParams {
+	for _, key := range keys {
+		values := builtParams[key]
+
 		if !first {
 			sb.WriteByte(separator)
 		} else {

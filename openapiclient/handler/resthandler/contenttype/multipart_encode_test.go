@@ -84,7 +84,7 @@ Content-Disposition: form-data; name="xmlData"
 Content-Type: text/xml
 
 <?xml version="1.0" encoding="UTF-8"?>
-<xml><xml><street>3, Garden St</street></xml><xml><city>Hillsbery, UT</city></xml></xml>
+<xml><value><street>3, Garden St</street></value><value><city>Hillsbery, UT</city></value></xml>
 --
 Content-Disposition: form-data; name="profileImage"; filename="profileImage"
 Content-Type: image/png
@@ -138,7 +138,7 @@ Content-Type: application/json
 }
 
 // cpu: Apple M3 Pro
-// BenchmarkEncodeMultipartForm-11    	  129406	      8532 ns/op	   13202 B/op	     142 allocs/op
+// BenchmarkEncodeMultipartForm-11    	  135360	      8703 ns/op	   13747 B/op	     147 allocs/op
 func BenchmarkEncodeMultipartForm(b *testing.B) {
 	value := map[string]any{
 		"name": "bar",

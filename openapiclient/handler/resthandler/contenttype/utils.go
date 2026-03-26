@@ -16,18 +16,10 @@ package contenttype
 
 import (
 	"net/http"
-	"strings"
 
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
-	"github.com/relychan/goutils/httpheader"
 )
-
-// IsContentTypeXML checks if the content type is XML.
-func IsContentTypeXML(contentType string) bool {
-	return strings.HasPrefix(contentType, httpheader.ContentTypeXML) ||
-		strings.HasPrefix(contentType, httpheader.ContentTypeTextXML)
-}
 
 func getHeadersFromSchema(
 	headers http.Header,

@@ -4,11 +4,11 @@ go 1.26
 
 require (
 	github.com/hasura/goenvconf v0.6.2
-	github.com/hasura/gotel v0.6.2
+	github.com/hasura/gotel v0.7.2
 	github.com/pb33f/libopenapi v0.34.3
-	github.com/pb33f/ordered-map/v2 v2.3.0
-	github.com/relychan/gohttpc v0.0.0-20260316025457-56e8c73d54f8
-	github.com/relychan/gotransform v0.0.0-20260314155631-e5218f89403d
+	github.com/pb33f/ordered-map/v2 v2.3.1
+	github.com/relychan/gohttpc v0.0.0-20260324161142-817ec6aa7ee1
+	github.com/relychan/gotransform v0.0.0-20260324093131-a79b1f2fda47
 	github.com/relychan/goutils v0.0.0-20260320085159-a456d46cc0d9
 	github.com/stretchr/testify v1.11.1
 	github.com/vektah/gqlparser v1.3.1

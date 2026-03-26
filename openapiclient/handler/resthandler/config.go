@@ -16,7 +16,6 @@ package resthandler
 
 import (
 	"errors"
-	"fmt"
 	"mime"
 	"net/http"
 	"strconv"
@@ -50,6 +49,8 @@ type ProxyRESTfulActionConfig struct {
 
 // ProxyCustomRESTfulResponseConfig represents configurations for the proxy response.
 type ProxyCustomRESTfulResponseConfig struct {
+	// Content type of the response to be transformed to.
+	ContentType string `json:"contentType,omitempty" yaml:"contentType,omitempty"`
 	// Configurations for transforming response data.
 	Body *gotransform.TemplateTransformerConfig `json:"body,omitempty" yaml:"body,omitempty"`
 }
@@ -104,24 +105,24 @@ type ProxyRESTfulParameter struct {
 
 // ProxyRESTfulRequestConfig represents configurations for the proxy request.
 type ProxyRESTfulRequestConfig struct {
-	// Overrides the request path. Use the original request path if empty.
-	Path string `json:"path,omitempty" yaml:"path,omitempty"`
+	// Overrides the request URL. Use the original request path if empty.
+	URL string `json:"url,omitempty" yaml:"url,omitempty"`
 	// Overrides the request method. Use the original request method if empty.
 	Method string `json:"method,omitempty" jsonschema:"enum=GET,enum=POST,enum=PATCH,enum=PUT,enum=DELETE" yaml:"method,omitempty"`
 	// The configuration to transform query, path, header and cookie parameters.
-	Parameters []ProxyRESTfulParameterConfig `json:"parameters" yaml:"parameters" jsonschema:"nullable"`
+	Parameters []ProxyRESTfulParameterConfig `json:"parameters,omitempty" yaml:"parameters" jsonschema:"nullable"`
 	// Content type of the body to be transformed to.
-	ContentType string `json:"contentType" yaml:"contentType" jsonschema:"contentType"`
+	ContentType string `json:"contentType,omitempty" yaml:"contentType,omitempty"`
 	// The configuration to transform request body.
 	Body *gotransform.TemplateTransformerConfig `json:"body,omitempty" yaml:"body"`
 	// If this is true, all query parameters will be forwarded.
 	// The default value is true if there is no query parameter is configured.
-	ForwardAllQueryParams *bool `json:"forwardAllQueryParams" yaml:"forwardAllQueryParams"`
+	ForwardAllQueryParams *bool `json:"forwardAllQueryParams,omitempty" yaml:"forwardAllQueryParams"`
 }
 
 // IsZero checks if the configuration is empty.
 func (rr ProxyRESTfulRequestConfig) IsZero() bool {
-	return rr.Path == "" &&
+	return rr.URL == "" &&
 		rr.Method == "" &&
 		len(rr.Parameters) == 0 &&
 		(rr.Body == nil || rr.Body.IsZero()) &&
@@ -129,7 +130,7 @@ func (rr ProxyRESTfulRequestConfig) IsZero() bool {
 }
 
 type customRESTRequest struct {
-	Path                  string
+	URL                   string
 	Method                string
 	Parameters            []ProxyRESTfulParameter
 	Body                  gotransform.TemplateTransformer
@@ -138,7 +139,7 @@ type customRESTRequest struct {
 
 // IsZero checks if the configuration is empty.
 func (rr customRESTRequest) IsZero() bool {
-	return rr.Path == "" &&
+	return rr.URL == "" &&
 		rr.Method == "" &&
 		len(rr.Parameters) == 0 &&
 		(rr.Body == nil || rr.Body.IsZero()) &&
@@ -154,7 +155,7 @@ func newCustomRESTRequestFromConfig(
 	}
 
 	result := &customRESTRequest{
-		Path:                  conf.Path,
+		URL:                   conf.URL,
 		Method:                conf.Method,
 		ForwardAllQueryParams: conf.ForwardAllQueryParams,
 		Parameters:            make([]ProxyRESTfulParameter, len(conf.Parameters)),
@@ -210,36 +211,93 @@ func parseRequestContentType(
 
 	if conf != nil && conf.ContentType != "" {
 		contentType = conf.ContentType
-	} else if operation.RequestBody != nil && operation.RequestBody.Content != nil &&
-		operation.RequestBody.Content.Len() > 0 {
-		iter := operation.RequestBody.Content.First()
-
-		contentType = iter.Key()
-
-		for ; iter != nil; iter = iter.Next() {
-			key := strings.ToLower(iter.Key())
-			// always prefer JSON content type.
-			for item := range strings.SplitSeq(key, ",") {
-				item = strings.TrimSpace(item)
-				if strings.HasPrefix(item, httpheader.ContentTypeJSON) {
-					contentType = item
-				}
-			}
-		}
+	} else if operation.RequestBody != nil {
+		contentType = oaschema.GetDefaultContentType(operation.RequestBody.Content)
 	}
 
-	if contentType == "" {
-		return contentType, nil
-	}
-
-	_, _, err := mime.ParseMediaType(contentType)
+	result, err := ValidateContentType(contentType)
 	if err != nil {
 		return "", &goutils.ErrorDetail{
-			Detail:  fmt.Sprintf("invalid content type %s. %s", contentType, err),
+			Detail:  err.Error() + " " + contentType,
 			Pointer: "/contentType",
 			Code:    oaschema.ErrCodeInvalidRESTfulRequestConfig,
 		}
 	}
 
-	return contentType, nil
+	return result, nil
+}
+
+// ValidateContentType validates the content type and prefer the application/json content type
+// if the content type string has many content types.
+func ValidateContentType(contentType string) (string, error) {
+	if contentType == "" {
+		return contentType, nil
+	}
+
+	var result string
+
+	for item := range strings.SplitSeq(contentType, ",") {
+		trimmed := strings.TrimSpace(item)
+
+		parsed, _, err := mime.ParseMediaType(trimmed)
+		if err != nil {
+			continue
+		}
+
+		if parsed == httpheader.ContentTypeJSON {
+			return trimmed, nil
+		}
+
+		if result == "" {
+			result = trimmed
+		}
+	}
+
+	if result != "" {
+		return result, nil
+	}
+
+	return "", oaschema.ErrInvalidContentType
+}
+
+func parseResponseContentType(
+	operation *highv3.Operation,
+	conf *ProxyCustomRESTfulResponseConfig,
+) (string, error) {
+	var contentType string
+
+	if conf != nil && conf.ContentType != "" {
+		contentType = conf.ContentType
+	} else if operation.Responses != nil {
+		var successResponse *highv3.Response
+
+		for iter := operation.Responses.Codes.First(); iter != nil; iter = iter.Next() {
+			status := iter.Key()
+
+			if status == "200" || status == "201" || status == "204" {
+				successResponse = iter.Value()
+
+				break
+			}
+		}
+
+		if successResponse == nil && operation.Responses.Default != nil {
+			successResponse = operation.Responses.Default
+		}
+
+		if successResponse != nil {
+			contentType = oaschema.GetDefaultContentType(successResponse.Content)
+		}
+	}
+
+	result, err := ValidateContentType(contentType)
+	if err != nil {
+		return "", &goutils.ErrorDetail{
+			Detail:  err.Error() + " " + contentType,
+			Pointer: "/contentType",
+			Code:    oaschema.ErrCodeProxyRESTfulResponseConfig,
+		}
+	}
+
+	return result, nil
 }

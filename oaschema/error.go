@@ -41,6 +41,8 @@ var (
 	ErrInvalidOpenAPIResourceDefinitionYAML = errors.New(
 		"failed to parse OpenAPIResourceDefinition from YAML",
 	)
+	// ErrInvalidContentType occurs when the content type string is invalid.
+	ErrInvalidContentType = errors.New("invalid content type")
 )
 
 const (
@@ -52,6 +54,12 @@ const (
 	ErrCodeRequestTransformError = "request_transform_error"
 	// ErrCodeResponseTransformError represents a code for a response transformation error.
 	ErrCodeResponseTransformError = "response_transform_error"
+	// ErrCodeWriteResponseError represents a code for a response write error.
+	ErrCodeWriteResponseError = "write_response_error"
 	// ErrCodeInvalidRESTfulRequestConfig represents a code for invalid errors of ProxyRESTfulRequestConfig.
 	ErrCodeInvalidRESTfulRequestConfig = "invalid_restful_request_config"
+	// ErrCodeProxyRESTfulResponseConfig represents a code for invalid errors of ProxyRESTfulResponseConfig.
+	ErrCodeProxyRESTfulResponseConfig = "invalid_restful_response_config"
+	// ErrCodeInvalidServerURL represents a code for invalid server URL errors.
+	ErrCodeInvalidServerURL = "invalid_server_url"
 )

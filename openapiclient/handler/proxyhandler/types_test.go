@@ -15,10 +15,6 @@
 package proxyhandler
 
 import (
-	"bytes"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/hasura/goenvconf"
@@ -153,96 +149,6 @@ func TestOAuth2CredentialsErrors(t *testing.T) {
 	t.Run("errOAuth2TokenURLRequired", func(t *testing.T) {
 		err := errOAuth2TokenURLRequired
 		assert.ErrorContains(t, err, "tokenUrl")
-	})
-}
-
-// TestNewRequestTemplateData tests creating request template data
-func TestNewRequestTemplateData(t *testing.T) {
-	t.Run("with_json_body", func(t *testing.T) {
-		body := map[string]any{
-			"name":  "test",
-			"value": 123,
-		}
-		bodyBytes, _ := json.Marshal(body)
-		req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewReader(bodyBytes))
-		req.Header.Set("Content-Type", "application/json")
-
-		paramValues := map[string]string{
-			"id": "123",
-		}
-
-		data, alreadyRead, err := NewRequestTemplateData(req, "application/json", paramValues)
-		assert.NoError(t, err)
-		assert.True(t, alreadyRead)
-		assert.True(t, data != nil)
-		assert.Equal(t, "123", data.Params["id"])
-
-		// Body is parsed as map[string]any
-		bodyMap, ok := data.Body.(map[string]any)
-		assert.True(t, ok)
-		assert.Equal(t, "test", bodyMap["name"])
-		assert.Equal(t, float64(123), bodyMap["value"])
-	})
-
-	t.Run("with_empty_body", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		paramValues := map[string]string{
-			"userId": "456",
-		}
-
-		data, alreadyRead, err := NewRequestTemplateData(req, "", paramValues)
-		assert.NoError(t, err)
-		assert.True(t, alreadyRead)
-		assert.True(t, data != nil)
-		assert.Equal(t, "456", data.Params["userId"])
-		assert.True(t, data.Body == nil)
-	})
-
-	t.Run("with_query_parameters", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/test?search=query&limit=10", nil)
-		paramValues := map[string]string{}
-
-		data, alreadyRead, err := NewRequestTemplateData(req, "", paramValues)
-		assert.NoError(t, err)
-		assert.True(t, alreadyRead)
-		assert.True(t, data != nil)
-		assert.Equal(t, "query", data.QueryParams["search"][0])
-		assert.Equal(t, "10", data.QueryParams["limit"][0])
-	})
-
-	t.Run("with_headers", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		req.Header.Set("X-Custom-Header", "custom-value")
-		req.Header.Set("Authorization", "Bearer token")
-		paramValues := map[string]string{}
-
-		data, alreadyRead, err := NewRequestTemplateData(req, "", paramValues)
-		assert.NoError(t, err)
-		assert.True(t, alreadyRead)
-		assert.True(t, data != nil)
-		assert.Equal(t, "custom-value", data.Headers["x-custom-header"])
-		assert.Equal(t, "Bearer token", data.Headers["authorization"])
-	})
-
-	t.Run("with_invalid_json_body", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewReader([]byte("invalid json")))
-		req.Header.Set("Content-Type", "application/json")
-		paramValues := map[string]string{}
-
-		_, _, err := NewRequestTemplateData(req, "application/json", paramValues)
-		assert.True(t, err != nil)
-	})
-
-	t.Run("with_unsupported_content_type", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewReader([]byte("some data")))
-		req.Header.Set("Content-Type", "text/plain")
-		paramValues := map[string]string{}
-
-		data, alreadyRead, err := NewRequestTemplateData(req, "text/plain", paramValues)
-		assert.NoError(t, err)
-		assert.True(t, !alreadyRead)
-		assert.True(t, data != nil)
-		assert.True(t, data.Body == nil)
 	})
 }
 

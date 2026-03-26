@@ -18,25 +18,23 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"strings"
 
 	"github.com/relychan/goutils"
-	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 )
 
-// Serialize encodes the data by content type.
-func Serialize(contentType string, body any) (io.Reader, error) {
+// Encode encodes the data by content type.
+func Encode(contentType string, body any) (io.Reader, error) {
 	var bodyBytes []byte
 
 	var err error
 
 	switch {
-	case strings.HasPrefix(contentType, httpheader.ContentTypeJSON):
+	case oaschema.IsContentTypeJSON(contentType):
 		bodyBytes, err = json.Marshal(body)
-	case IsContentTypeXML(contentType):
+	case oaschema.IsContentTypeXML(contentType):
 		bodyBytes, err = EncodeXML(body)
-	case strings.HasPrefix(contentType, "text/"):
+	case oaschema.IsContentTypeText(contentType):
 		bodyBytes, err = EncodeText(body)
 	default:
 		// Encode binary by default.
@@ -52,4 +50,35 @@ func Serialize(contentType string, body any) (io.Reader, error) {
 	}
 
 	return bytes.NewBuffer(bodyBytes), nil
+}
+
+// Decode decodes the data by content type to arbitrary value.
+func Decode(contentType string, rawBody io.Reader) (any, error) {
+	if rawBody == nil {
+		return nil, nil
+	}
+
+	closer, ok := rawBody.(io.Closer)
+	if ok {
+		defer goutils.CatchWarnErrorFunc(closer.Close)
+	}
+
+	switch {
+	case oaschema.IsContentTypeJSON(contentType):
+		var result any
+
+		return result, json.NewDecoder(rawBody).Decode(&result)
+	case oaschema.IsContentTypeXML(contentType):
+		return DecodeXML(rawBody)
+	case oaschema.IsContentTypeText(contentType):
+		resultBytes, err := io.ReadAll(rawBody)
+		if err != nil {
+			return nil, err
+		}
+
+		return string(resultBytes), nil
+	default:
+		// Decode binary by default.
+		return io.ReadAll(rawBody)
+	}
 }

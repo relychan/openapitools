@@ -52,6 +52,10 @@ func NewProxyClient(
 		defaultHeaders: map[string]string{},
 	}
 
+	if client.clientOptions == nil {
+		client.clientOptions = gohttpc.NewClientOptions()
+	}
+
 	err := client.init(ctx)
 	if err != nil {
 		return nil, err
@@ -118,6 +122,10 @@ func (pc *ProxyClient) init(ctx context.Context) error {
 }
 
 func (pc *ProxyClient) initDefaultHeaders() error {
+	if pc.metadata.Settings == nil {
+		return nil
+	}
+
 	getEnv := pc.clientOptions.GetEnvFunc()
 
 	for key, envValue := range pc.metadata.Settings.Headers {
@@ -143,7 +151,8 @@ func (pc *ProxyClient) initServers(spec *highv3.Document) error {
 
 	var healthCheckBuilder *loadbalancer.HTTPHealthCheckPolicyBuilder
 
-	if pc.metadata.Settings.HealthCheck != nil &&
+	if pc.metadata.Settings != nil &&
+		pc.metadata.Settings.HealthCheck != nil &&
 		pc.metadata.Settings.HealthCheck.HTTP != nil {
 		healthCheckBuilder, err = pc.metadata.Settings.HealthCheck.HTTP.ToPolicyBuilder()
 		if err != nil {
