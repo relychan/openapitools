@@ -338,7 +338,7 @@ func newXMLInvalidKeyStringError(kind reflect.Kind, pointer string) *goutils.Err
 	return &goutils.ErrorDetail{
 		Detail:  "expected the type of key is a scalar, got: " + kind.String(),
 		Pointer: pointer,
-		Code:    oaschema.ErrCodeEncodeBodyError,
+		Code:    oaschema.ErrCodeXMLEncodeError,
 	}
 }
 
@@ -346,7 +346,7 @@ func newXMLEncodeError(err error, pointer string) *goutils.ErrorDetail {
 	return &goutils.ErrorDetail{
 		Detail:  err.Error(),
 		Pointer: pointer,
-		Code:    oaschema.ErrCodeEncodeBodyError,
+		Code:    oaschema.ErrCodeXMLEncodeError,
 	}
 }
 

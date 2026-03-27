@@ -16,7 +16,10 @@ package graphqlhandler
 
 import (
 	"errors"
+	"strconv"
+	"strings"
 
+	"github.com/relychan/goutils"
 	"github.com/vektah/gqlparser/ast"
 	"github.com/vektah/gqlparser/parser"
 )
@@ -57,5 +60,59 @@ func ValidateGraphQLString(query string) (*GraphQLHandler, error) {
 		return handler, nil
 	default:
 		return nil, ErrGraphQLUnsupportedQueryBatch
+	}
+}
+
+func convertVariableTypeFromString(varDef *ast.VariableDefinition, value string) (any, error) {
+	if varDef.Type == nil {
+		// unknown type. Returns the original value.
+		return value, nil
+	}
+
+	switch strings.ToLower(varDef.Type.NamedType) {
+	case "bool", "boolean":
+		return strconv.ParseBool(value)
+	case "int", "int8", "int16", "int32", "int64":
+		return strconv.ParseInt(value, 10, 64)
+	case "uint", "uint8", "uint16", "uint32", "uint64":
+		return strconv.ParseUint(value, 10, 64)
+	case "number", "decimal", "float", "float32", "float64", "double":
+		return strconv.ParseFloat(value, 64)
+	default:
+		// unknown type. Returns the original value.
+		return value, nil
+	}
+}
+
+func convertVariableTypeFromUnknownValue(varDef *ast.VariableDefinition, value any) (any, error) {
+	if varDef.Type == nil || value == nil {
+		// unknown type. Returns the original value.
+		return value, nil
+	}
+
+	if str, ok := value.(string); ok {
+		return convertVariableTypeFromString(varDef, str)
+	}
+
+	if strPtr, ok := value.(*string); ok {
+		if strPtr == nil {
+			return nil, nil
+		}
+
+		return convertVariableTypeFromString(varDef, *strPtr)
+	}
+
+	switch strings.ToLower(varDef.Type.NamedType) {
+	case "bool", "boolean":
+		return goutils.DecodeNullableBoolean(value)
+	case "int", "int8", "int16", "int32", "int64":
+		return goutils.DecodeNullableNumber[int64](value)
+	case "uint", "uint8", "uint16", "uint32", "uint64":
+		return goutils.DecodeNullableNumber[uint64](value)
+	case "number", "decimal", "float", "float32", "float64", "double":
+		return goutils.DecodeNullableNumber[float64](value)
+	default:
+		// unknown type. Returns the original value.
+		return value, nil
 	}
 }

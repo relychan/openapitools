@@ -46,10 +46,18 @@ var (
 )
 
 const (
-	// ErrCodeEncodeBodyError represents a code for an encoding error.
-	ErrCodeEncodeBodyError = "encode_body_error"
-	// ErrCodeMalformedXML represents a code for an encoding error.
+	// ErrCodeRequestDecodeBodyError represents a code for an decoding error from request body.
+	ErrCodeRequestDecodeBodyError = "request_decode_body_error"
+	// ErrCodeResponseDecodeBodyError represents a code for an decoding error from response body.
+	ErrCodeResponseDecodeBodyError = "response_decode_body_error"
+	// ErrCodeRequestEncodeBodyError represents a code for an encoding error from request body.
+	ErrCodeRequestEncodeBodyError = "request_encode_body_error"
+	// ErrCodeResponseEncodeBodyError represents a code for an encoding error from response body.
+	ErrCodeResponseEncodeBodyError = "response_encode_body_error"
+	// ErrCodeMalformedXML represents a code for a malformed XML error.
 	ErrCodeMalformedXML = "malformed_xml"
+	// ErrCodeXMLEncodeError represents a code for a XML encoding error.
+	ErrCodeXMLEncodeError = "xml_encode_error"
 	// ErrCodeRequestTransformError represents a code for a request transformation error.
 	ErrCodeRequestTransformError = "request_transform_error"
 	// ErrCodeResponseTransformError represents a code for a response transformation error.

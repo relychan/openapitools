@@ -27,7 +27,7 @@ func EncodeHeader(definition BaseParameter, value any) string {
 }
 
 // encodes the evaluated values to string using the simple style.
-func encodeParamWithSimpleStyle( //nolint:revive
+func encodeParamWithSimpleStyle(
 	items ParameterItems,
 	explode bool,
 ) string {

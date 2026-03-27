@@ -43,6 +43,7 @@ type ProxyHandler interface {
 	Stream(
 		ctx context.Context,
 		request *Request,
+		writer http.ResponseWriter,
 		options *ProxyHandleOptions,
 	) (*http.Response, error)
 }

@@ -105,7 +105,7 @@ func (conf BaseParameter) GetStyleAndExplode() (oaschema.ParameterEncodingStyle,
 type ParamKeys []ParamKey
 
 // Format prints parameter keys with format.
-func (ks ParamKeys) Format(root string, isDeepObject bool) string { //nolint:revive
+func (ks ParamKeys) Format(root string, isDeepObject bool) string {
 	lenKeys := len(ks)
 	if lenKeys == 0 {
 		return root

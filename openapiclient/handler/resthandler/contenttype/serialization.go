@@ -15,7 +15,6 @@
 package contenttype
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 
@@ -24,32 +23,33 @@ import (
 )
 
 // Encode encodes the data by content type.
-func Encode(contentType string, body any) (io.Reader, error) {
-	var bodyBytes []byte
-
-	var err error
-
+func Encode(contentType string, body any) ([]byte, error) {
 	switch {
 	case oaschema.IsContentTypeJSON(contentType):
-		bodyBytes, err = json.Marshal(body)
+		return json.Marshal(body)
 	case oaschema.IsContentTypeXML(contentType):
-		bodyBytes, err = EncodeXML(body)
+		return EncodeXML(body)
 	case oaschema.IsContentTypeText(contentType):
-		bodyBytes, err = EncodeText(body)
+		return EncodeText(body)
 	default:
 		// Encode binary by default.
-		bodyBytes, err = EncodeBinary(body)
+		return EncodeBinary(body)
 	}
+}
 
-	if err != nil {
-		return nil, &goutils.ErrorDetail{
-			Code:    oaschema.ErrCodeEncodeBodyError,
-			Detail:  "failed to encode request body: " + err.Error(),
-			Pointer: "/body",
-		}
+// Write encodes the data by content type and writes it to the stream.
+func Write(writer io.Writer, contentType string, body any) (int, error) {
+	switch {
+	case oaschema.IsContentTypeJSON(contentType):
+		return -1, json.NewEncoder(writer).Encode(body)
+	case oaschema.IsContentTypeXML(contentType):
+		return WriteXML(writer, body)
+	case oaschema.IsContentTypeText(contentType):
+		return WriteText(writer, body)
+	default:
+		// Encode binary by default.
+		return WriteBinary(writer, body)
 	}
-
-	return bytes.NewBuffer(bodyBytes), nil
 }
 
 // Decode decodes the data by content type to arbitrary value.

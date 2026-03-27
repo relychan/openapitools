@@ -15,6 +15,7 @@
 package resthandler
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/url"
@@ -172,7 +173,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 			return nil, err
 		}
 
-		req.SetBody(newBodyBytes)
+		req.SetBody(bytes.NewReader(newBodyBytes))
 	}
 
 	return req, nil

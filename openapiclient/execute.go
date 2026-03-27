@@ -30,9 +30,12 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// Do routes and proxies the request to the remote server.
-func (pc *ProxyClient) Do(request *http.Request) (*http.Response, error) {
-	ctx, span := tracer.Start(request.Context(), "proxy_http_request")
+// Stream routes the request to the remote server. The response will be transformed and written into the stream.
+func (pc *ProxyClient) Stream(
+	request *http.Request,
+	w http.ResponseWriter,
+) (*http.Response, error) {
+	ctx, span := tracer.Start(request.Context(), "stream_request")
 	defer span.End()
 
 	req, err := NewRequest(request)
@@ -48,7 +51,7 @@ func (pc *ProxyClient) Do(request *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 
-	response, err := route.Method.Handler.Stream(ctx, req, options)
+	response, err := route.Method.Handler.Stream(ctx, req, w, options)
 	if err != nil {
 		return response, pc.handleError(span, err, options.Path)
 	}
@@ -90,7 +93,8 @@ func (pc *ProxyClient) prepareRequest(
 		semconv.URLOriginal(request.URL.String()),
 	)
 
-	if pc.metadata.Settings != nil && pc.metadata.Settings.Expose != nil && !*pc.metadata.Settings.Expose {
+	if pc.metadata.Settings != nil && pc.metadata.Settings.Expose != nil &&
+		!*pc.metadata.Settings.Expose {
 		// This API isn't exposed. Returns HTTP 404
 		return nil, nil, goutils.RFC9457Error{
 			Status:   http.StatusNotFound,
@@ -101,7 +105,8 @@ func (pc *ProxyClient) prepareRequest(
 
 	requestPath := request.URL.Path
 
-	if pc.metadata.Settings != nil && pc.metadata.Settings.BasePath != "" && request.URL.Path != "" {
+	if pc.metadata.Settings != nil && pc.metadata.Settings.BasePath != "" &&
+		request.URL.Path != "" {
 		// The URL path may omit the slash character
 		basePath := pc.metadata.Settings.BasePath
 		if requestPath[0] != '/' {

@@ -16,6 +16,7 @@ package graphqlhandler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -654,7 +655,7 @@ func TestTransformResponse(t *testing.T) {
 			Body:       io.NopCloser(bytes.NewReader(bodyBytes)),
 		}
 
-		newResp, respBody, attrs, err := handler.transformResponse(resp)
+		newResp, respBody, attrs, err := handler.transformResponse(context.TODO(), resp)
 		assert.NoError(t, err)
 		assert.True(t, newResp != nil)
 		assert.Equal(t, responseBody, respBody)
@@ -669,7 +670,7 @@ func TestTransformResponse(t *testing.T) {
 			Body:       io.NopCloser(bytes.NewReader([]byte("invalid json"))),
 		}
 
-		_, _, _, err := handler.transformResponse(resp)
+		_, _, _, err := handler.transformResponse(context.TODO(), resp)
 		assert.True(t, err != nil)
 		assert.ErrorContains(t, err, "failed to decode graphql response")
 	})
@@ -696,7 +697,7 @@ func TestTransformResponse(t *testing.T) {
 			Body:       io.NopCloser(bytes.NewReader(bodyBytes)),
 		}
 
-		newResp, respBody, attrs, err := handler.transformResponse(resp)
+		newResp, respBody, attrs, err := handler.transformResponse(context.TODO(), resp)
 		assert.NoError(t, err)
 		assert.Equal(t, 400, newResp.StatusCode)
 		assert.Equal(t, responseBody, respBody)
@@ -725,7 +726,7 @@ func TestTransformResponse(t *testing.T) {
 			Body:       io.NopCloser(bytes.NewReader(bodyBytes)),
 		}
 
-		newResp, respBody, attrs, err := handler.transformResponse(resp)
+		newResp, respBody, attrs, err := handler.transformResponse(context.TODO(), resp)
 		assert.NoError(t, err)
 		assert.Equal(t, 200, newResp.StatusCode)
 		assert.Equal(t, responseBody, respBody)

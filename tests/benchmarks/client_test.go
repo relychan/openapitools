@@ -19,10 +19,10 @@ import (
 // goarch: arm64
 // pkg: github.com/relychan/openapitools/tests/benchmarks
 // cpu: Apple M3 Pro
-// BenchmarkProxyClient/raw_http_get-11         	   20493	     54281 ns/op	    9905 B/op	     119 allocs/op
-// BenchmarkProxyClient/rest_get-11             	   23437	     50921 ns/op	   11873 B/op	     145 allocs/op
+// BenchmarkProxyClient/http_client_get-11         	   20493	     54281 ns/op	    9905 B/op	     119 allocs/op
+// BenchmarkProxyClient/rest_get-11             	   22260	     53863 ns/op	   12265 B/op	     153 allocs/op
 // BenchmarkProxyClient/raw_http_graphql-11            15169	     66341 ns/op	   12068 B/op	     146 allocs/op
-// BenchmarkProxyClient/graphql-11              	   19174	     64425 ns/op	   16926 B/op	     211 allocs/op
+// BenchmarkProxyClient/graphql-11              	   19612	     61281 ns/op	   17273 B/op	     218 allocs/op
 func BenchmarkProxyClient(b *testing.B) {
 	// Start server in a different process
 	// go run ./tests/benchmarks/server
@@ -37,7 +37,7 @@ func BenchmarkProxyClient(b *testing.B) {
 		panic(err)
 	}
 
-	b.Run("raw_http_get", func(b *testing.B) {
+	b.Run("http_client_get", func(b *testing.B) {
 		c := gohttpc.NewClient()
 
 		for b.Loop() {
@@ -49,7 +49,7 @@ func BenchmarkProxyClient(b *testing.B) {
 		}
 	})
 
-	b.Run("rest_get", func(b *testing.B) {
+	b.Run("proxy_rest_get", func(b *testing.B) {
 		for b.Loop() {
 			_, _, err := client.Execute(context.Background(), &proxyhandler.Request{
 				Method: http.MethodGet,
@@ -63,7 +63,7 @@ func BenchmarkProxyClient(b *testing.B) {
 		}
 	})
 
-	b.Run("raw_http_graphql", func(b *testing.B) {
+	b.Run("http_client_graphql", func(b *testing.B) {
 		c := gohttpc.NewClient()
 		bodyBytes, err := json.Marshal(map[string]any{
 			"query": "query GetUsers { users { id }}",
@@ -85,7 +85,7 @@ func BenchmarkProxyClient(b *testing.B) {
 		}
 	})
 
-	b.Run("graphql", func(b *testing.B) {
+	b.Run("proxy_client_graphql", func(b *testing.B) {
 		for b.Loop() {
 			_, _, err := client.Execute(context.Background(), &proxyhandler.Request{
 				Method: http.MethodGet,

@@ -1,3 +1,4 @@
+// Package main defines a mock server for benchmarking.
 package main
 
 import (

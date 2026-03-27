@@ -17,6 +17,7 @@ package contenttype
 import (
 	"encoding"
 	"encoding/json"
+	"io"
 
 	"go.yaml.in/yaml/v4"
 )
@@ -42,5 +43,45 @@ func EncodeBinary(body any) ([]byte, error) {
 		}
 
 		return bodyBytes, nil
+	}
+}
+
+// WriteBinary encodes the arbitrary value to bytes for binary content type and writes it into the write stream.
+func WriteBinary(writer io.Writer, body any) (int, error) {
+	switch value := body.(type) {
+	case []byte:
+		return writer.Write(value)
+	case encoding.BinaryMarshaler:
+		if value == nil {
+			return 0, nil
+		}
+
+		result, err := value.MarshalBinary()
+		if err != nil {
+			return 0, err
+		}
+
+		return writer.Write(result)
+	case yaml.Marshaler:
+		if value == nil {
+			return 0, nil
+		}
+
+		dumper, err := yaml.NewDumper(writer)
+		if err != nil {
+			return 0, err
+		}
+
+		err = dumper.Dump(dumper)
+		if err != nil {
+			return 0, err
+		}
+
+		return -1, dumper.Close()
+	default:
+		// Encode value as JSON string
+		err := json.NewEncoder(writer).Encode(body)
+
+		return -1, err
 	}
 }

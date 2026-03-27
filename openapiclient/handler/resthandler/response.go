@@ -17,6 +17,7 @@ package resthandler
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -31,59 +32,179 @@ import (
 
 func (re *RESTfulHandler) transformResponse(
 	ctx context.Context,
+	logger *slog.Logger,
 	resp *http.Response,
-	isDebug bool,
-) (any, []slog.Attr, error) {
-	_, span := tracer.Start(ctx, "transform_response")
+	writer http.ResponseWriter,
+) (any, error) {
+	ctx, span := tracer.Start(ctx, "transform_response", trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
 
-	contentType := resp.Header.Get(httpheader.ContentType)
+	contentTypeFrom := resp.Header.Get(httpheader.ContentType)
 
-	span.SetAttributes(attribute.String("content_type", contentType))
+	span.SetAttributes(attribute.String("content_type.original", contentTypeFrom))
 
-	responseBody, err := contenttype.Decode(contentType, resp.Body)
+	originalBody, err := contenttype.Decode(contentTypeFrom, resp.Body)
 	if err != nil {
-		return nil, nil, recordResponseTransformError(span, err)
+		return nil, re.postTransformedResponse(
+			ctx,
+			span,
+			logger,
+			contentTypeFrom,
+			nil,
+			nil,
+			err,
+		)
 	}
 
-	respLogAttrs := make([]slog.Attr, 0, 3)
+	transformedBody, err := re.customResponse.Body.Transform(originalBody)
+	if writer == nil {
+		return transformedBody, re.postTransformedResponse(
+			ctx,
+			span,
+			logger,
+			contentTypeFrom,
+			originalBody,
+			transformedBody,
+			err,
+		)
+	}
 
-	if isDebug {
-		respLogAttrs = append(
-			respLogAttrs,
-			slog.Any("original_body", responseBody),
-			slog.String("original_content_type", contentType),
+	// encode the body back to the response stream.
+	contentTypeTo := re.responseContentType
+	if contentTypeTo == "" {
+		contentTypeTo = contentTypeFrom
+	}
+
+	_, err = contenttype.Write(writer, contentTypeTo, transformedBody)
+
+	return transformedBody, re.postTransformedResponse(
+		ctx,
+		span,
+		logger,
+		contentTypeFrom,
+		originalBody,
+		transformedBody,
+		err,
+	)
+}
+
+func (*RESTfulHandler) postTransformedResponse(
+	ctx context.Context,
+	span trace.Span,
+	logger *slog.Logger,
+	originalContentType string,
+	originalBody,
+	transformedBody any,
+	err error,
+) error {
+	isDebug := logger.Enabled(ctx, slog.LevelDebug)
+	if isDebug && err == nil {
+		span.SetStatus(codes.Ok, "")
+
+		return nil
+	}
+
+	logAttrs := make([]slog.Attr, 0, 3)
+	logAttrs = append(
+		logAttrs,
+		slog.String("original_content_type", originalContentType),
+	)
+
+	if originalBody != nil {
+		logAttrs = append(
+			logAttrs,
+			slog.Any("original_body", originalBody),
 		)
 
-		encodedBody, err := json.Marshal(responseBody)
+		encodedBody, err := json.Marshal(originalBody)
 		if err == nil {
-			span.SetAttributes(attribute.String("original_body", string(encodedBody)))
+			span.SetAttributes(attribute.String("body.original", string(encodedBody)))
 		}
 	}
 
-	transformedBody, err := re.customResponse.Body.Transform(responseBody)
-	if err != nil {
-		return resp, respLogAttrs, recordResponseTransformError(span, err)
-	}
-
-	if isDebug {
-		respLogAttrs = append(respLogAttrs, slog.Any("body", transformedBody))
+	if transformedBody != nil {
+		logAttrs = append(logAttrs, slog.Any("body", transformedBody))
 
 		encodedBody, err := json.Marshal(transformedBody)
 		if err == nil {
-			span.SetAttributes(attribute.String("transformed_body", string(encodedBody)))
+			span.SetAttributes(attribute.String("body", string(encodedBody)))
 		}
 	}
 
-	return transformedBody, respLogAttrs, nil
-}
+	if err == nil {
+		logger.LogAttrs(ctx, slog.LevelDebug, "transformed successfully", logAttrs...)
+		span.SetStatus(codes.Ok, "")
 
-func recordResponseTransformError(span trace.Span, err error) error {
+		return nil
+	}
+
 	span.SetStatus(codes.Error, err.Error())
 	span.RecordError(err)
+
+	logger.LogAttrs(ctx, slog.LevelError, err.Error(), logAttrs...)
 
 	return &goutils.ErrorDetail{
 		Detail: err.Error(),
 		Code:   oaschema.ErrCodeResponseTransformError,
 	}
+}
+
+func (*RESTfulHandler) resolveRawResponse(
+	ctx context.Context,
+	response *http.Response,
+	writer http.ResponseWriter,
+) (any, error) {
+	_, span := tracer.Start(ctx, "write_response", trace.WithSpanKind(trace.SpanKindInternal))
+	defer span.End()
+
+	if response.Body == nil {
+		span.SetStatus(codes.Ok, "empty response body")
+
+		return nil, nil
+	}
+
+	goutils.CatchWarnErrorFunc(response.Body.Close)
+
+	if writer != nil {
+		writer.WriteHeader(response.StatusCode)
+
+		_, err := io.Copy(writer, response.Body)
+		if err != nil {
+			respErr := goutils.NewServerError(goutils.ErrorDetail{
+				Code:   oaschema.ErrCodeResponseDecodeBodyError,
+				Detail: err.Error(),
+			})
+
+			respErr.Detail = "failed to write response body"
+
+			span.SetStatus(codes.Error, respErr.Detail)
+			span.RecordError(err)
+
+			return nil, err
+		}
+
+		span.SetStatus(codes.Ok, "streamed response successfully")
+
+		return nil, nil
+	}
+
+	decodedBody, err := contenttype.Decode(
+		response.Header.Get(httpheader.ContentType),
+		response.Body,
+	)
+	if err != nil {
+		respErr := goutils.NewServerError(goutils.ErrorDetail{
+			Code:   oaschema.ErrCodeResponseDecodeBodyError,
+			Detail: err.Error(),
+		})
+
+		respErr.Detail = "failed to decode response body"
+
+		span.SetStatus(codes.Error, respErr.Detail)
+		span.RecordError(err)
+
+		return nil, err
+	}
+
+	return decodedBody, nil
 }

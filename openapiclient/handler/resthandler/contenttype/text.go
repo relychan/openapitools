@@ -15,8 +15,10 @@
 package contenttype
 
 import (
+	"bytes"
 	"encoding"
 	"encoding/json"
+	"io"
 
 	"github.com/relychan/goutils"
 	"go.yaml.in/yaml/v4"
@@ -24,29 +26,53 @@ import (
 
 // EncodeText encodes the arbitrary value to text for text/xxx content type.
 func EncodeText(body any) ([]byte, error) {
+	buf := new(bytes.Buffer)
+
+	_, err := WriteText(buf, body)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+// WriteText encodes the arbitrary value to text for text/xxx content type and write it into the stream.
+func WriteText(writer io.Writer, body any) (int, error) {
 	scalarValue, ok := goutils.FormatScalar(body)
 	if ok {
-		return []byte(scalarValue), nil
+		return writer.Write([]byte(scalarValue))
 	}
 
 	switch value := body.(type) {
 	case []byte:
-		return value, nil
+		return writer.Write(value)
 	case encoding.TextMarshaler:
 		if value == nil {
-			return []byte{}, nil
+			return 0, nil
 		}
 
-		return value.MarshalText()
+		result, err := value.MarshalText()
+		if err != nil {
+			return 0, err
+		}
+
+		return writer.Write(result)
 	case yaml.Marshaler:
-		return yaml.Dump(body)
+		dumper, err := yaml.NewDumper(writer)
+		if err != nil {
+			return 0, err
+		}
+
+		err = dumper.Dump(body)
+		if err != nil {
+			return 0, err
+		}
+
+		return -1, dumper.Close()
 	default:
 		// Encode value as JSON string
-		bodyBytes, err := json.Marshal(body)
-		if err != nil {
-			return nil, err
-		}
+		err := json.NewEncoder(writer).Encode(body)
 
-		return bodyBytes, nil
+		return -1, err
 	}
 }

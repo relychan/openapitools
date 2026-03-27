@@ -164,7 +164,7 @@ func (fue *formURLEncoder) buildParams(rootKey string, params parameter.Paramete
 
 // Set delimited-separated array values for simple params.
 // For example: /users?id=3|4|5.
-func (fue *formURLEncoder) setParamDelimitedStyle( //nolint:revive
+func (fue *formURLEncoder) setParamDelimitedStyle(
 	rootKey string,
 	params parameter.ParameterItems,
 	separator byte,

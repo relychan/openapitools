@@ -18,20 +18,15 @@ package resthandler
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
-	"slices"
 
 	"github.com/hasura/gotel"
 	"github.com/hasura/gotel/otelutils"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gohttpc"
-	"github.com/relychan/goutils"
-	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 	"go.opentelemetry.io/otel/trace"
@@ -127,25 +122,7 @@ func (re *RESTfulHandler) Handle(
 	request *proxyhandler.Request,
 	options *proxyhandler.ProxyHandleOptions,
 ) (*http.Response, any, error) {
-	response, responseBody, err := re.handleRequest(ctx, request, options)
-	if err != nil || responseBody == nil {
-		return response, responseBody, err
-	}
-
-	reader, ok := responseBody.(io.Reader)
-	if !ok {
-		return response, responseBody, nil
-	}
-
-	decodedBody, err := contenttype.Decode(response.Header.Get(httpheader.ContentType), reader)
-	if err != nil {
-		respErr := goutils.NewServerError()
-		respErr.Detail = err.Error()
-
-		return response, nil, err
-	}
-
-	return response, decodedBody, nil
+	return re.handleRequest(ctx, request, nil, options)
 }
 
 // Stream resolves the HTTP request and proxies that request to the remote server.
@@ -153,49 +130,21 @@ func (re *RESTfulHandler) Handle(
 func (re *RESTfulHandler) Stream(
 	ctx context.Context,
 	request *proxyhandler.Request,
+	writer http.ResponseWriter,
 	options *proxyhandler.ProxyHandleOptions,
 ) (*http.Response, error) {
-	response, responseBody, err := re.handleRequest(ctx, request, options)
-	if err != nil || responseBody == nil {
-		return response, err
-	}
+	response, _, err := re.handleRequest(ctx, request, writer, options)
 
-	switch reader := responseBody.(type) {
-	case io.ReadCloser:
-		response.Body = reader
-
-		return response, nil
-	case io.Reader:
-		response.Body = io.NopCloser(reader)
-
-		return response, nil
-	default:
-		contentType := re.responseContentType
-		if contentType == "" {
-			contentType = response.Header.Get(httpheader.ContentType)
-		}
-
-		respReader, err := contenttype.Encode(contentType, responseBody)
-		if err != nil {
-			return nil, &goutils.ErrorDetail{
-				Detail: err.Error(),
-				Code:   oaschema.ErrCodeWriteResponseError,
-			}
-		}
-
-		response.Body = io.NopCloser(respReader)
-
-		return response, nil
-	}
+	return response, err
 }
 
 func (re *RESTfulHandler) handleRequest(
 	ctx context.Context,
 	request *proxyhandler.Request,
+	writer http.ResponseWriter,
 	options *proxyhandler.ProxyHandleOptions,
 ) (*http.Response, any, error) {
 	logger := otelutils.GetLogger(ctx)
-	isDebug := logger.Enabled(ctx, slog.LevelDebug)
 	span := trace.SpanFromContext(ctx)
 
 	span.SetAttributes(
@@ -239,6 +188,8 @@ func (re *RESTfulHandler) handleRequest(
 
 	if re.customResponse == nil || re.customResponse.IsZero() ||
 		(resp.StatusCode < 200 || resp.StatusCode >= 300) {
+		respBody, err := re.resolveRawResponse(ctx, resp, writer)
+
 		re.printRequestLog(
 			ctx,
 			span,
@@ -246,13 +197,13 @@ func (re *RESTfulHandler) handleRequest(
 			request,
 			req,
 			resp,
-			nil,
+			err,
 		)
 
-		return resp, resp.Body, nil
+		return resp, respBody, err
 	}
 
-	transformedBody, responseAttrs, err := re.transformResponse(ctx, resp, isDebug)
+	transformedBody, err := re.transformResponse(ctx, logger, resp, writer)
 	re.printRequestLog(
 		ctx,
 		span,
@@ -261,7 +212,6 @@ func (re *RESTfulHandler) handleRequest(
 		req,
 		resp,
 		err,
-		responseAttrs...,
 	)
 
 	return resp, transformedBody, err
@@ -275,7 +225,6 @@ func (*RESTfulHandler) printRequestLog(
 	request *gohttpc.RequestWithClient,
 	response *http.Response,
 	err error,
-	responseAttrs ...slog.Attr,
 ) {
 	isDebug := logger.Enabled(ctx, slog.LevelDebug)
 
@@ -314,21 +263,15 @@ func (*RESTfulHandler) printRequestLog(
 	)
 
 	if response != nil {
-		responseAttrs = slices.Grow(responseAttrs, 2)
 		respHeaders := otelutils.ExtractTelemetryHeaders(response.Header)
 
-		responseAttrs := append(
-			responseAttrs,
+		attrs = append(attrs, slog.GroupAttrs(
+			"response",
 			slog.Int("status", response.StatusCode),
 			otelutils.NewHeaderMatrixLogGroupAttrs(
 				"headers",
 				respHeaders,
 			),
-		)
-
-		attrs = append(attrs, slog.GroupAttrs(
-			"response",
-			responseAttrs...,
 		))
 
 		otelutils.SetSpanHeaderMatrixAttributes(span, "http.response.header", respHeaders)

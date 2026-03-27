@@ -20,14 +20,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/hasura/gotel"
-	"github.com/hasura/gotel/otelutils"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/goutils"
@@ -36,9 +32,12 @@ import (
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/vektah/gqlparser/ast"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.yaml.in/yaml/v4"
 )
+
+var tracer = gotel.NewTracer("openapitools/graphqlhandler")
 
 // GraphQLHandler implements the ProxyHandler interface for GraphQL proxy.
 type GraphQLHandler struct {
@@ -134,7 +133,7 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 ) (*http.Response, any, error) {
 	span := trace.SpanFromContext(ctx)
 
-	graphqlPayload := GraphQLRequestBody{
+	graphqlPayload := &GraphQLRequestBody{
 		Query:         ge.query,
 		OperationName: ge.operationName,
 	}
@@ -145,8 +144,6 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 		attribute.String("graphql.query", ge.query),
 	)
 
-	logAttrs := make([]slog.Attr, 0, 13)
-
 	requestData, err := proxyhandler.NewRequestTemplateData(
 		request,
 		options.ParamValues,
@@ -154,11 +151,11 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 	if err != nil {
 		ge.printLog(
 			ctx,
-			request, "failed to decode body",
-			append(
-				logAttrs,
-				slog.String("error", err.Error()),
-			),
+			request,
+			graphqlPayload,
+			nil,
+			err,
+			nil,
 		)
 
 		return nil, nil, err
@@ -170,11 +167,11 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 	if err != nil {
 		ge.printLog(
 			ctx,
-			request, "failed to evaluate variables",
-			append(
-				logAttrs,
-				slog.String("error", err.Error()),
-			),
+			request,
+			graphqlPayload,
+			nil,
+			err,
+			nil,
 		)
 
 		return nil, nil, err
@@ -186,24 +183,15 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 	if err != nil {
 		ge.printLog(
 			ctx,
-			request, "failed to evaluate extensions",
-			append(
-				logAttrs,
-				slog.String("error", err.Error()),
-			),
+			request,
+			graphqlPayload,
+			nil,
+			err,
+			nil,
 		)
 
 		return nil, nil, err
 	}
-
-	logAttrs = append(logAttrs,
-		slog.GroupAttrs(
-			"request_graphql",
-			slog.String("query", graphqlPayload.Query),
-			slog.Any("variables", graphqlPayload.Variables),
-			slog.Any("extensions", graphqlPayload.Extensions),
-		),
-	)
 
 	req := options.NewRequest(http.MethodPost, ge.url)
 	reqHeader := req.Header()
@@ -214,12 +202,12 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 			respErr := fmt.Errorf("failed to evaluate custom header %s: %w", key, err)
 
 			ge.printLog(
-				ctx, request,
-				"invalid header",
-				append(
-					logAttrs,
-					slog.String("error", respErr.Error()),
-				),
+				ctx,
+				request,
+				graphqlPayload,
+				nil,
+				err,
+				nil,
 			)
 
 			return nil, nil, respErr
@@ -240,12 +228,12 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 	err = enc.Encode(graphqlPayload)
 	if err != nil {
 		ge.printLog(
-			ctx, request,
-			"failed to encode graphql payload",
-			append(
-				logAttrs,
-				slog.String("error", err.Error()),
-			),
+			ctx,
+			request,
+			graphqlPayload,
+			nil,
+			err,
+			nil,
 		)
 
 		return nil, nil, err
@@ -256,51 +244,42 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 	resp, err := req.Execute(ctx)
 	if err != nil {
 		ge.printLog(
-			ctx, request,
-			"failed to execute request",
-			append(
-				logAttrs,
-				slog.String("error", err.Error()),
-			),
+			ctx,
+			request,
+			graphqlPayload,
+			resp,
+			err,
+			nil,
 		)
 
 		return resp, nil, err
 	}
 
-	logAttrs = append(logAttrs, slog.Int("response_status", resp.StatusCode))
-
-	span.SetAttributes(attribute.Int("http.response.original_status_code", resp.StatusCode))
+	span.SetAttributes(attribute.Int("http.response.original_status", resp.StatusCode))
 
 	if resp.Body == nil {
 		ge.printLog(
-			ctx, request,
-			"invalid response",
-			append(
-				logAttrs,
-				slog.String("error", ErrGraphQLResponseRequired.Error()),
-			),
+			ctx,
+			request,
+			graphqlPayload,
+			resp,
+			ErrGraphQLResponseRequired,
+			nil,
 		)
 
-		return resp, nil, err
+		return resp, nil, ErrGraphQLResponseRequired
 	}
 
-	newResp, respBody, respLogAttrs, err := ge.transformResponse(resp)
-	logAttrs = append(logAttrs, respLogAttrs...)
+	newResp, respBody, respLogAttrs, err := ge.transformResponse(ctx, resp)
 
-	if err != nil {
-		ge.printLog(
-			ctx, request,
-			"failed to transform response",
-			append(
-				logAttrs,
-				slog.String("error", err.Error()),
-			),
-		)
-
-		return resp, nil, err
-	}
-
-	ge.printLog(ctx, request, resp.Status, logAttrs)
+	ge.printLog(
+		ctx,
+		request,
+		graphqlPayload,
+		resp,
+		err,
+		respLogAttrs,
+	)
 
 	return newResp, respBody, err
 }
@@ -310,6 +289,7 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 func (ge *GraphQLHandler) Stream(
 	ctx context.Context,
 	request *proxyhandler.Request,
+	writer http.ResponseWriter,
 	options *proxyhandler.ProxyHandleOptions,
 ) (*http.Response, error) {
 	resp, data, err := ge.Handle(ctx, request, options)
@@ -317,9 +297,7 @@ func (ge *GraphQLHandler) Stream(
 		return resp, err
 	}
 
-	buf := new(bytes.Buffer)
-
-	err = json.NewEncoder(buf).Encode(data)
+	err = json.NewEncoder(writer).Encode(data)
 	if err != nil {
 		return nil, &goutils.ErrorDetail{
 			Detail: err.Error(),
@@ -327,29 +305,33 @@ func (ge *GraphQLHandler) Stream(
 		}
 	}
 
-	resp.Body = io.NopCloser(buf)
-
 	return resp, nil
 }
 
 func (ge *GraphQLHandler) transformResponse( //nolint:revive
+	ctx context.Context,
 	resp *http.Response,
 ) (*http.Response, any, []slog.Attr, error) {
+	_, span := tracer.Start(ctx, "transform_response", trace.WithSpanKind(trace.SpanKindInternal))
+	defer span.End()
+
 	defer goutils.CatchWarnErrorFunc(resp.Body.Close)
 
 	var responseBody map[string]any
 
 	err := json.NewDecoder(resp.Body).Decode(&responseBody)
 	if err != nil {
+		span.SetStatus(codes.Error, "failed to decode response body")
+		span.RecordError(err)
+
 		return resp, nil, nil, fmt.Errorf("failed to decode graphql response: %w", err)
 	}
 
 	if ge.customResponse == nil {
+		span.SetStatus(codes.Ok, "")
+
 		return resp, responseBody, nil, err
 	}
-
-	responseLogAttrs := make([]slog.Attr, 0, 3)
-	responseLogAttrs = append(responseLogAttrs, slog.Any("original_body", responseBody))
 
 	if ge.customResponse.HTTPErrorCode != nil {
 		errorBody, hasError := responseBody["errors"]
@@ -359,21 +341,30 @@ func (ge *GraphQLHandler) transformResponse( //nolint:revive
 		}
 	}
 
+	responseLogAttrs := make([]slog.Attr, 0, 4)
 	responseLogAttrs = append(
 		responseLogAttrs,
+		slog.Any("original_body", responseBody),
 		slog.Int("status_code_final", resp.StatusCode),
 	)
 
 	if ge.customResponse.Body == nil || ge.customResponse.Body.IsZero() {
+		span.SetStatus(codes.Ok, "")
+
 		return resp, responseBody, responseLogAttrs, nil
 	}
 
 	transformedBody, err := ge.customResponse.Body.Transform(responseBody)
 	if err != nil {
+		span.SetStatus(codes.Error, "failed to transform response body")
+		span.RecordError(err)
+
 		return resp, responseBody, responseLogAttrs, err
 	}
 
 	responseLogAttrs = append(responseLogAttrs, slog.Any("response_body", transformedBody))
+
+	span.SetStatus(codes.Ok, "")
 
 	return resp, transformedBody, responseLogAttrs, err
 }
@@ -482,82 +473,64 @@ func (ge *GraphQLHandler) resolveRequestExtensions(
 func (ge *GraphQLHandler) printLog(
 	ctx context.Context,
 	request *proxyhandler.Request,
-	message string,
-	attrs []slog.Attr,
+	graphqlPayload *GraphQLRequestBody,
+	response *http.Response,
+	err error,
+	respLogAttrs []slog.Attr,
 ) {
 	logger := gotel.GetLogger(ctx)
+	isDebug := logger.Enabled(ctx, slog.LevelDebug)
 
-	if !logger.Enabled(ctx, slog.LevelDebug) {
+	if !isDebug && err == nil {
 		return
 	}
 
+	requestLogAttrs := make([]slog.Attr, 0, 5)
+	requestLogAttrs = append(
+		requestLogAttrs,
+		slog.String("url", request.URL.String()),
+		slog.String("operation_name", ge.operationName),
+		slog.String("operation_type", string(ge.operation)),
+		slog.String("query", graphqlPayload.Query),
+	)
+
+	if isDebug {
+		requestLogAttrs = append(requestLogAttrs, slog.Any("variables", graphqlPayload.Variables))
+
+		if len(graphqlPayload.Extensions) > 0 {
+			requestLogAttrs = append(
+				requestLogAttrs,
+				slog.Any("extensions", graphqlPayload.Extensions),
+			)
+		}
+	}
+
+	attrs := make([]slog.Attr, 0, 4)
 	attrs = append(
 		attrs,
 		slog.String("type", "proxy-handler"),
 		slog.String("handler_type", "graphql"),
-		slog.String("operation_name", ge.operationName),
-		slog.String("operation_type", string(ge.operation)),
-		slog.String("request_url", request.URL.String()),
-		slog.Any("variables", ge.variables),
-		otelutils.NewHeaderMatrixLogGroupAttrs(
-			"request_headers",
-			otelutils.ExtractTelemetryHeaders(request.Header),
-		),
+		slog.GroupAttrs("request", requestLogAttrs...),
 	)
 
-	logger.LogAttrs(ctx, slog.LevelDebug, message, attrs...)
-}
+	var message string
 
-func convertVariableTypeFromString(varDef *ast.VariableDefinition, value string) (any, error) {
-	if varDef.Type == nil {
-		// unknown type. Returns the original value.
-		return value, nil
+	if response != nil {
+		message = response.Status
+		respLogAttrs = append(
+			respLogAttrs,
+			slog.Int("status", response.StatusCode),
+		)
+
+		attrs = append(attrs, slog.GroupAttrs("response", respLogAttrs...))
 	}
 
-	switch strings.ToLower(varDef.Type.NamedType) {
-	case "bool", "boolean":
-		return strconv.ParseBool(value)
-	case "int", "int8", "int16", "int32", "int64":
-		return strconv.ParseInt(value, 10, 64)
-	case "uint", "uint8", "uint16", "uint32", "uint64":
-		return strconv.ParseUint(value, 10, 64)
-	case "number", "decimal", "float", "float32", "float64", "double":
-		return strconv.ParseFloat(value, 64)
-	default:
-		// unknown type. Returns the original value.
-		return value, nil
-	}
-}
+	logLevel := slog.LevelDebug
 
-func convertVariableTypeFromUnknownValue(varDef *ast.VariableDefinition, value any) (any, error) {
-	if varDef.Type == nil || value == nil {
-		// unknown type. Returns the original value.
-		return value, nil
+	if err != nil {
+		logLevel = slog.LevelError
+		message = err.Error()
 	}
 
-	if str, ok := value.(string); ok {
-		return convertVariableTypeFromString(varDef, str)
-	}
-
-	if strPtr, ok := value.(*string); ok {
-		if strPtr == nil {
-			return nil, nil
-		}
-
-		return convertVariableTypeFromString(varDef, *strPtr)
-	}
-
-	switch strings.ToLower(varDef.Type.NamedType) {
-	case "bool", "boolean":
-		return goutils.DecodeNullableBoolean(value)
-	case "int", "int8", "int16", "int32", "int64":
-		return goutils.DecodeNullableNumber[int64](value)
-	case "uint", "uint8", "uint16", "uint32", "uint64":
-		return goutils.DecodeNullableNumber[uint64](value)
-	case "number", "decimal", "float", "float32", "float64", "double":
-		return goutils.DecodeNullableNumber[float64](value)
-	default:
-		// unknown type. Returns the original value.
-		return value, nil
-	}
+	logger.LogAttrs(ctx, logLevel, message, attrs...)
 }
