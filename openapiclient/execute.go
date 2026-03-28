@@ -136,7 +136,7 @@ func (pc *ProxyClient) prepareRequest(
 	options := &proxyhandler.ProxyHandleOptions{
 		Settings:    pc.metadata.Settings,
 		ParamValues: route.ParamValues,
-		NewRequest:  pc.newRequestFunc(route),
+		NewRequest:  pc.newRequestFunc(request, route),
 		Path:        requestPath,
 	}
 
@@ -166,7 +166,10 @@ func (*ProxyClient) handleError(
 	}
 }
 
-func (pc *ProxyClient) newRequestFunc(route *internal.Route) proxyhandler.NewRequestFunc {
+func (pc *ProxyClient) newRequestFunc(
+	request *proxyhandler.Request,
+	route *internal.Route,
+) proxyhandler.NewRequestFunc {
 	return func(method string, url string) *gohttpc.RequestWithClient {
 		req := pc.lbClient.R(method, url)
 		reqHeader := req.Header()
@@ -180,9 +183,11 @@ func (pc *ProxyClient) newRequestFunc(route *internal.Route) proxyhandler.NewReq
 			reqHeader.Set(key, value)
 		}
 
-		if pc.metadata.Settings != nil && pc.metadata.Settings.ForwardHeaders != nil {
+		if len(request.Header) > 0 &&
+			pc.metadata.Settings != nil &&
+			pc.metadata.Settings.ForwardHeaders != nil {
 			for _, key := range pc.metadata.Settings.ForwardHeaders.Request {
-				value := reqHeader.Get(key)
+				value := request.Header.Get(key)
 				if value != "" {
 					reqHeader.Set(key, value)
 				}

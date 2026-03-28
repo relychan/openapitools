@@ -32,7 +32,8 @@ import (
 
 // ProxyClient helps manage and execute REST and GraphQL APIs from the API document.
 type ProxyClient struct {
-	clientOptions  *gohttpc.ClientOptions
+	clientOptions
+
 	lbClient       *loadbalancer.LoadBalancerClient
 	metadata       *oaschema.OpenAPIResourceDefinition
 	node           *internal.Node
@@ -44,16 +45,20 @@ type ProxyClient struct {
 func NewProxyClient(
 	ctx context.Context,
 	metadata *oaschema.OpenAPIResourceDefinition,
-	clientOptions *gohttpc.ClientOptions,
+	options ...ClientOption,
 ) (*ProxyClient, error) {
+	clientOptions := clientOptions{
+		ClientOptions: gohttpc.NewClientOptions(),
+	}
+
+	for _, opt := range options {
+		opt(&clientOptions)
+	}
+
 	client := &ProxyClient{
 		metadata:       metadata,
 		clientOptions:  clientOptions,
 		defaultHeaders: map[string]string{},
-	}
-
-	if client.clientOptions == nil {
-		client.clientOptions = gohttpc.NewClientOptions()
 	}
 
 	err := client.init(ctx)
@@ -71,8 +76,8 @@ func (pc *ProxyClient) Metadata() *oaschema.OpenAPIResourceDefinition {
 
 // Close method performs cleanup and closure activities on the client instance.
 func (pc *ProxyClient) Close() error {
-	if pc.clientOptions != nil && pc.clientOptions.HTTPClient != nil {
-		pc.clientOptions.HTTPClient.CloseIdleConnections()
+	if pc.HTTPClient != nil {
+		pc.HTTPClient.CloseIdleConnections()
 	}
 
 	if pc.lbClient != nil {
@@ -105,7 +110,7 @@ func (pc *ProxyClient) init(ctx context.Context) error {
 
 	pc.authenticators, err = proxyhandler.NewOpenAPIv3Authenticator(
 		spec,
-		pc.clientOptions.GetEnvFunc(),
+		pc.GetEnvFunc(),
 	)
 	if err != nil {
 		return err
@@ -126,7 +131,7 @@ func (pc *ProxyClient) initDefaultHeaders() error {
 		return nil
 	}
 
-	getEnv := pc.clientOptions.GetEnvFunc()
+	getEnv := pc.GetEnvFunc()
 
 	for key, envValue := range pc.metadata.Settings.Headers {
 		value, err := envValue.GetCustom(getEnv)
@@ -193,7 +198,7 @@ func (pc *ProxyClient) initServer(
 	server *highv3.Server,
 	healthCheckBuilder *loadbalancer.HTTPHealthCheckPolicyBuilder,
 ) (*loadbalancer.Host, error) {
-	getEnv := pc.clientOptions.GetEnvFunc()
+	getEnv := pc.GetEnvFunc()
 
 	serverURL, err := parseServerURL(server, getEnv)
 	if err != nil {
@@ -205,7 +210,7 @@ func (pc *ProxyClient) initServer(
 	}
 
 	host, err := loadbalancer.NewHost(
-		pc.clientOptions.HTTPClient,
+		pc.HTTPClient,
 		serverURL,
 		loadbalancer.WithHTTPHealthCheckPolicyBuilder(healthCheckBuilder),
 	)
@@ -266,20 +271,20 @@ func (pc *ProxyClient) initHTTPClient() error {
 
 	if pc.metadata.Settings != nil && pc.metadata.Settings.HTTP != nil {
 		httpConfig = pc.metadata.Settings.HTTP
-	} else if pc.clientOptions.HTTPClient == nil {
+	} else if pc.HTTPClient == nil {
 		httpConfig = new(httpconfig.HTTPClientConfig)
 	}
 
 	if httpConfig != nil {
 		httpClient, err := httpconfig.NewHTTPClientFromConfig(
 			httpConfig,
-			pc.clientOptions,
+			pc.ClientOptions,
 		)
 		if err != nil {
 			return err
 		}
 
-		pc.clientOptions.HTTPClient = httpClient
+		pc.HTTPClient = httpClient
 	}
 
 	return nil

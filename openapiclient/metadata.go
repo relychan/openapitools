@@ -19,7 +19,6 @@ import (
 
 	"github.com/hasura/goenvconf"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
-	"github.com/relychan/gohttpc"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/internal"
 )
@@ -27,7 +26,7 @@ import (
 // BuildMetadataTree builds the metadata tree from the API document.
 func BuildMetadataTree(
 	document *highv3.Document,
-	clientOptions *gohttpc.ClientOptions,
+	clientOptions clientOptions,
 ) (*internal.Node, error) {
 	rootNode := new(internal.Node)
 
@@ -39,7 +38,7 @@ func BuildMetadataTree(
 		GetEnv: goenvconf.GetOSEnv,
 	}
 
-	if clientOptions != nil && clientOptions.GetEnv != nil {
+	if clientOptions.GetEnv != nil {
 		options.GetEnv = clientOptions.GetEnv
 	}
 

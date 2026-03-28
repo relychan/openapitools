@@ -16,10 +16,15 @@ package openapiclient
 
 import (
 	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 
-	"github.com/relychan/gohttpc"
+	"github.com/hasura/gotel/otelutils"
 	"github.com/relychan/goutils"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
@@ -29,31 +34,37 @@ import (
 func TestProxyClient_RESTful(t *testing.T) {
 	configPath := "../tests/testdata/jsonplaceholder.yaml"
 
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+
 	config, err := goutils.ReadJSONOrYAMLFile[oaschema.OpenAPIResourceDefinition](context.TODO(), configPath)
 	assert.NoError(t, err)
 
-	client, err := NewProxyClient(context.TODO(), config, gohttpc.NewClientOptions())
+	client, err := NewProxyClient(context.TODO(), config)
 	assert.NoError(t, err)
+
+	ctx := otelutils.NewContextWithLogger(context.TODO(), logger)
 
 	testCases := []struct {
 		Name         string
-		Request      proxyhandler.Request
+		Request      *http.Request
 		StatusCode   int
 		ResponseBody any
 	}{
-		// {
-		// 	Name: "getAlbums",
-		// 	Request: proxyhandler.Request{
-		// 		URL: &url.URL{
-		// 			Path: "/api/v1/albums",
-		// 		},
-		// 		Method: "GET",
-		// 	},
-		// 	StatusCode: 200,
-		// },
+		{
+			Name: "getAlbums",
+			Request: &http.Request{
+				URL: &url.URL{
+					Path: "/api/v1/albums",
+				},
+				Method: "GET",
+			},
+			StatusCode: 200,
+		},
 		{
 			Name: "getPostByID",
-			Request: proxyhandler.Request{
+			Request: &http.Request{
 				URL: &url.URL{
 					Path: "/api/v1/posts/1",
 				},
@@ -70,8 +81,98 @@ func TestProxyClient_RESTful(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.Name, func(t *testing.T) {
-			response, result, err := client.Execute(context.TODO(), &tc.Request)
+		t.Run(tc.Name+"_execute", func(t *testing.T) {
+			request, err := NewRequest(tc.Request)
+			assert.NoError(t, err)
+			response, respBody, err := client.Execute(context.TODO(), request)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.StatusCode, response.StatusCode)
+
+			if tc.ResponseBody != nil {
+				assert.Equal(t, tc.ResponseBody, respBody)
+			}
+		})
+
+		t.Run(tc.Name+"_stream", func(t *testing.T) {
+			writer := httptest.NewRecorder()
+			request := tc.Request.WithContext(ctx)
+			response, err := client.Stream(request, writer)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.StatusCode, response.StatusCode)
+
+			if tc.ResponseBody != nil {
+				var respBody any
+				err := json.Unmarshal(writer.Body.Bytes(), &respBody)
+				assert.NoError(t, err)
+				assert.Equal(t, tc.ResponseBody, respBody)
+			}
+		})
+	}
+
+	t.Run("not_found", func(t *testing.T) {
+		_, _, err := client.Execute(ctx, &proxyhandler.Request{
+			URL: &url.URL{
+				Path: "/not-found",
+			},
+		})
+		assert.Error(t, err, "not found")
+	})
+}
+
+func TestRESTHandler_GraphQLServer(t *testing.T) {
+	configPath := "../tests/testdata/rickandmortyapi.yaml"
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+
+	config, err := goutils.ReadJSONOrYAMLFile[oaschema.OpenAPIResourceDefinition](context.TODO(), configPath)
+	assert.NoError(t, err)
+
+	client, err := NewProxyClient(context.TODO(), config)
+	assert.NoError(t, err)
+
+	ctx := otelutils.NewContextWithLogger(context.TODO(), logger)
+
+	testCases := []struct {
+		Name         string
+		Request      proxyhandler.Request
+		StatusCode   int
+		ResponseBody any
+	}{
+		{
+			Name: "getCharacters",
+			Request: proxyhandler.Request{
+				URL: &url.URL{
+					Path: "/characters",
+				},
+				Method: "GET",
+			},
+			StatusCode: 200,
+		},
+		{
+			Name: "getCharacterByID",
+			Request: proxyhandler.Request{
+				URL: &url.URL{
+					Path: "/characters/1",
+				},
+				Method: "GET",
+			},
+			StatusCode: 200,
+			ResponseBody: map[string]any{
+				"data": map[string]any{
+					"character": map[string]any{
+						"id":   "1",
+						"name": "Rick Sanchez",
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.Name+"_execute", func(t *testing.T) {
+			response, result, err := client.Execute(ctx, &tc.Request)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.StatusCode, response.StatusCode)
 
@@ -79,128 +180,23 @@ func TestProxyClient_RESTful(t *testing.T) {
 				assert.Equal(t, tc.ResponseBody, result)
 			}
 		})
+
+		t.Run(tc.Name+"_stream", func(t *testing.T) {
+			writer := httptest.NewRecorder()
+			response, err := client.Stream(&http.Request{
+				URL:    tc.Request.URL,
+				Method: tc.Request.Method,
+				Header: tc.Request.Header,
+			}, writer)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.StatusCode, response.StatusCode)
+
+			if tc.ResponseBody != nil {
+				var respBody any
+				err := json.Unmarshal(writer.Body.Bytes(), &respBody)
+				assert.NoError(t, err)
+				assert.Equal(t, tc.ResponseBody, respBody)
+			}
+		})
 	}
-}
-
-// func TestRESTHandler_GraphQLServer(t *testing.T) {
-// 	server, shutdown := initTestServer(t, "../testdata/rickandmortyapi/config.yaml")
-// 	defer func() {
-// 		server.Close()
-// 		shutdown()
-// 	}()
-
-// 	testCases := []struct {
-// 		Name         string
-// 		Body         ddnrouter.PreRoutePluginRequestBody
-// 		StatusCode   int
-// 		ResponseBody any
-// 	}{
-// 		{
-// 			Name: "getCharacters",
-// 			Body: ddnrouter.PreRoutePluginRequestBody{
-// 				Path:   server.URL + "/characters",
-// 				Method: "GET",
-// 			},
-// 			StatusCode: 200,
-// 		},
-// 		{
-// 			Name: "getCharacterByID",
-// 			Body: ddnrouter.PreRoutePluginRequestBody{
-// 				Path:   server.URL + "/characters/1",
-// 				Method: "GET",
-// 			},
-// 			StatusCode: 200,
-// 			ResponseBody: map[string]any{
-// 				"data": map[string]any{
-// 					"character": map[string]any{
-// 						"id":   "1",
-// 						"name": "Rick Sanchez",
-// 					},
-// 				},
-// 			},
-// 		},
-// 	}
-
-// 	for _, tc := range testCases {
-// 		t.Run(tc.Name, func(t *testing.T) {
-// 			runSuccessRequest(t, tc.Body, tc.StatusCode, tc.ResponseBody)
-// 			runUnauthorizedRequest(t, tc.Body, tc.StatusCode, tc.ResponseBody)
-// 		})
-// 	}
-// }
-
-// func TestRESTHandler_NotFoundPath(t *testing.T) {
-// 	server, shutdown := initTestServer(t, testPlaceholderConfig)
-// 	defer func() {
-// 		server.Close()
-// 		shutdown()
-// 	}()
-
-// 	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/v1/nonexistent", nil)
-// 	assert.NilError(t, err)
-
-// 	req.Header.Set("hasura-m-auth", "test-secret")
-
-// 	resp, err := http.DefaultClient.Do(req)
-// 	assert.NilError(t, err)
-// 	defer resp.Body.Close()
-
-// 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
-// }
-
-// func TestRESTHandler_WithPathParams(t *testing.T) {
-// 	server, shutdown := initTestServer(t, testPlaceholderConfig)
-// 	defer func() {
-// 		server.Close()
-// 		shutdown()
-// 	}()
-
-// 	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/v1/posts/1", nil)
-// 	assert.NilError(t, err)
-
-// 	req.Header.Set("hasura-m-auth", "test-secret")
-
-// 	resp, err := http.DefaultClient.Do(req)
-// 	assert.NilError(t, err)
-// 	defer resp.Body.Close()
-
-// 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-// 	var result map[string]any
-// 	err = json.NewDecoder(resp.Body).Decode(&result)
-// 	assert.NilError(t, err)
-// 	assert.Equal(t, float64(1), result["id"])
-// }
-
-// func TestRESTHandler_GetAlbums(t *testing.T) {
-// 	server, shutdown := initTestServer(t, testPlaceholderConfig)
-// 	defer func() {
-// 		server.Close()
-// 		shutdown()
-// 	}()
-
-// 	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/v1/albums", nil)
-// 	assert.NilError(t, err)
-
-// 	req.Header.Set("hasura-m-auth", "test-secret")
-
-// 	resp, err := http.DefaultClient.Do(req)
-// 	assert.NilError(t, err)
-// 	defer resp.Body.Close()
-
-// 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-// 	var result []map[string]any
-// 	err = json.NewDecoder(resp.Body).Decode(&result)
-// 	assert.NilError(t, err)
-// 	assert.Assert(t, len(result) > 0)
-// }
-
-func mustParseURL(input string) *url.URL {
-	result, err := url.Parse(input)
-	if err != nil {
-		panic(err)
-	}
-
-	return result
 }

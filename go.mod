@@ -3,6 +3,7 @@ module github.com/relychan/openapitools
 go 1.26
 
 require (
+	github.com/failsafe-go/failsafe-go v0.9.6
 	github.com/hasura/goenvconf v0.6.2
 	github.com/hasura/gotel v0.7.2
 	github.com/pb33f/libopenapi v0.34.3
@@ -29,7 +30,6 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/failsafe-go/failsafe-go v0.9.6 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect

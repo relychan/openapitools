@@ -163,7 +163,7 @@ func (*RESTfulHandler) resolveRawResponse(
 		return nil, nil
 	}
 
-	goutils.CatchWarnErrorFunc(response.Body.Close)
+	defer goutils.CatchWarnErrorFunc(response.Body.Close)
 
 	if writer != nil {
 		writer.WriteHeader(response.StatusCode)
