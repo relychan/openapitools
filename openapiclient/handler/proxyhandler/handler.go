@@ -89,6 +89,16 @@ type Request struct {
 	body any
 }
 
+// NewRequest creates a new [Request] instance.
+func NewRequest(method string, uri *url.URL, header http.Header, body any) *Request {
+	return &Request{
+		method: method,
+		url:    uri,
+		header: header,
+		body:   body,
+	}
+}
+
 // Method returns the method of the request.
 func (r *Request) Method() string {
 	return r.method
@@ -127,14 +137,4 @@ func (r *Request) Body() any {
 // SetBody sets the body of the request.
 func (r *Request) SetBody(value any) {
 	r.body = value
-}
-
-// NewRequest creates a new [Request] instance.
-func NewRequest(method string, uri *url.URL, header http.Header, body any) *Request {
-	return &Request{
-		method: method,
-		url:    uri,
-		header: header,
-		body:   body,
-	}
 }
