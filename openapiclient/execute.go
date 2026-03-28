@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/relychan/gohttpc"
@@ -35,10 +36,17 @@ func (pc *ProxyClient) Stream(
 	request *http.Request,
 	w http.ResponseWriter,
 ) (*http.Response, error) {
-	ctx, span := tracer.Start(request.Context(), "stream_request")
+	spanName := pc.buildSpanName("Stream", request.URL)
+
+	ctx, span := tracer.Start(request.Context(), spanName)
 	defer span.End()
 
-	req, err := NewRequest(request)
+	span.SetAttributes(
+		semconv.HTTPRequestMethodKey.String(request.Method),
+		semconv.URLOriginal(request.URL.String()),
+	)
+
+	req, err := newRequest(request)
 	if err != nil {
 		span.SetStatus(codes.Error, "failed to decode request body")
 		span.RecordError(err)
@@ -64,10 +72,28 @@ func (pc *ProxyClient) Stream(
 // Execute routes and proxies the request to the remote server.
 func (pc *ProxyClient) Execute(
 	ctx context.Context,
-	request *proxyhandler.Request,
+	method string,
+	requestPath string,
+	header http.Header,
+	body any,
 ) (*http.Response, any, error) {
-	ctx, span := tracer.Start(ctx, "proxy_request")
+	requestURL, err := goutils.ParsePathOrHTTPURL(requestPath)
+	if err != nil {
+		respErr := goutils.NewBadRequestError()
+		respErr.Detail = err.Error()
+
+		return nil, nil, respErr
+	}
+
+	ctx, span := tracer.Start(ctx, pc.buildSpanName("Proxy", requestURL))
 	defer span.End()
+
+	span.SetAttributes(
+		semconv.HTTPRequestMethodKey.String(method),
+		semconv.URLOriginal(requestPath),
+	)
+
+	request := proxyhandler.NewRequest(method, requestURL, header, body)
 
 	route, options, err := pc.prepareRequest(span, request)
 	if err != nil {
@@ -88,25 +114,26 @@ func (pc *ProxyClient) prepareRequest(
 	span trace.Span,
 	request *proxyhandler.Request,
 ) (*internal.Route, *proxyhandler.ProxyHandleOptions, error) {
-	span.SetAttributes(
-		semconv.HTTPRequestMethodKey.String(request.Method),
-		semconv.URLOriginal(request.URL.String()),
-	)
+	if pc.CustomAttributesFunc != nil {
+		span.SetAttributes(pc.CustomAttributesFunc(request)...)
+	}
+
+	requestURL := request.GetURL()
+	requestPath := requestURL.Path
 
 	if pc.metadata.Settings != nil && pc.metadata.Settings.Expose != nil &&
 		!*pc.metadata.Settings.Expose {
+		span.SetStatus(codes.Error, "metadata is not exposed")
+
 		// This API isn't exposed. Returns HTTP 404
-		return nil, nil, goutils.RFC9457Error{
-			Status:   http.StatusNotFound,
-			Title:    "Resource Not Found",
-			Instance: request.URL.Path,
-		}
+		err := goutils.NewNotFoundError()
+		err.Instance = requestPath
+
+		return nil, nil, err
 	}
 
-	requestPath := request.URL.Path
-
 	if pc.metadata.Settings != nil && pc.metadata.Settings.BasePath != "" &&
-		request.URL.Path != "" {
+		requestURL.Path != "" {
 		// The URL path may omit the slash character
 		basePath := pc.metadata.Settings.BasePath
 		if requestPath[0] != '/' {
@@ -118,15 +145,14 @@ func (pc *ProxyClient) prepareRequest(
 
 	span.SetAttributes(semconv.URLPath(requestPath))
 
-	route := pc.node.FindRoute(requestPath, request.Method)
+	route := pc.node.FindRoute(requestPath, request.Method())
 	if route == nil {
 		span.SetStatus(codes.Error, "request path or method does not exist")
 
-		return nil, nil, goutils.RFC9457Error{
-			Status:   http.StatusNotFound,
-			Title:    "Resource Not Found",
-			Instance: requestPath,
-		}
+		err := goutils.NewNotFoundError()
+		err.Instance = requestPath
+
+		return nil, nil, err
 	}
 
 	span.SetAttributes(
@@ -183,11 +209,13 @@ func (pc *ProxyClient) newRequestFunc(
 			reqHeader.Set(key, value)
 		}
 
-		if len(request.Header) > 0 &&
+		headers := request.Header()
+
+		if len(headers) > 0 &&
 			pc.metadata.Settings != nil &&
 			pc.metadata.Settings.ForwardHeaders != nil {
 			for _, key := range pc.metadata.Settings.ForwardHeaders.Request {
-				value := request.Header.Get(key)
+				value := headers.Get(key)
 				if value != "" {
 					reqHeader.Set(key, value)
 				}
@@ -196,4 +224,12 @@ func (pc *ProxyClient) newRequestFunc(
 
 		return req
 	}
+}
+
+func (pc *ProxyClient) buildSpanName(prefix string, requestURL *url.URL) string {
+	if pc.TraceHighCardinalityPath {
+		return prefix + " " + requestURL.String()
+	}
+
+	return prefix
 }

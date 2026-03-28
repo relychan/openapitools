@@ -71,7 +71,7 @@ func NewRequestTemplateData(
 ) (*RequestTemplateData, error) {
 	requestHeaders := map[string]string{}
 
-	for key, header := range request.Header {
+	for key, header := range request.header {
 		if len(header) == 0 {
 			continue
 		}
@@ -85,7 +85,7 @@ func NewRequestTemplateData(
 		Body:    request.Body,
 	}
 
-	rawQuery := strings.TrimSpace(request.URL.RawQuery)
+	rawQuery := strings.TrimSpace(request.url.RawQuery)
 	if rawQuery == "" {
 		requestData.QueryParams = url.Values{}
 	} else {

@@ -150,9 +150,9 @@ func (re *RESTfulHandler) handleRequest(
 	span.SetAttributes(
 		attribute.KeyValue{
 			Key:   semconv.HTTPRequestMethodKey,
-			Value: attribute.StringValue(request.Method),
+			Value: attribute.StringValue(request.Method()),
 		},
-		semconv.URLPath(request.URL.Path),
+		semconv.URLPath(request.GetURL().Path),
 		attribute.String("proxy.type", string(re.Type())),
 	)
 
@@ -242,12 +242,12 @@ func (*RESTfulHandler) printRequestLog(
 		)
 	}
 
-	requestHeaders := otelutils.ExtractTelemetryHeaders(originalRequest.Header)
+	requestHeaders := otelutils.ExtractTelemetryHeaders(originalRequest.Header())
 	otelutils.SetSpanHeaderMatrixAttributes(span, "http.request.header", requestHeaders)
 
 	requestAttrs = append(requestAttrs,
-		slog.String("original_path", originalRequest.URL.Path),
-		slog.String("original_method", originalRequest.Method),
+		slog.String("original_path", originalRequest.GetURL().Path),
+		slog.String("original_method", originalRequest.Method()),
 		otelutils.NewHeaderMatrixLogGroupAttrs(
 			"headers",
 			requestHeaders,

@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/hasura/gotel/otelutils"
 	"github.com/relychan/goutils"
@@ -41,7 +42,12 @@ func TestProxyClient_RESTful(t *testing.T) {
 	config, err := goutils.ReadJSONOrYAMLFile[oaschema.OpenAPIResourceDefinition](context.TODO(), configPath)
 	assert.NoError(t, err)
 
-	client, err := NewProxyClient(context.TODO(), config)
+	client, err := NewProxyClient(
+		context.TODO(),
+		config,
+		nil,
+		WithTimeout(time.Minute),
+	)
 	assert.NoError(t, err)
 
 	ctx := otelutils.NewContextWithLogger(context.TODO(), logger)
@@ -82,9 +88,13 @@ func TestProxyClient_RESTful(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name+"_execute", func(t *testing.T) {
-			request, err := NewRequest(tc.Request)
-			assert.NoError(t, err)
-			response, respBody, err := client.Execute(context.TODO(), request)
+			response, respBody, err := client.Execute(
+				context.TODO(),
+				tc.Request.Method,
+				tc.Request.URL.String(),
+				tc.Request.Header,
+				nil,
+			)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.StatusCode, response.StatusCode)
 
@@ -110,11 +120,7 @@ func TestProxyClient_RESTful(t *testing.T) {
 	}
 
 	t.Run("not_found", func(t *testing.T) {
-		_, _, err := client.Execute(ctx, &proxyhandler.Request{
-			URL: &url.URL{
-				Path: "/not-found",
-			},
-		})
+		_, _, err := client.Execute(ctx, "GET", "/not-found", nil, nil)
 		assert.Error(t, err, "not found")
 	})
 }
@@ -136,28 +142,22 @@ func TestRESTHandler_GraphQLServer(t *testing.T) {
 
 	testCases := []struct {
 		Name         string
-		Request      proxyhandler.Request
+		Request      *proxyhandler.Request
 		StatusCode   int
 		ResponseBody any
 	}{
 		{
 			Name: "getCharacters",
-			Request: proxyhandler.Request{
-				URL: &url.URL{
-					Path: "/characters",
-				},
-				Method: "GET",
-			},
+			Request: proxyhandler.NewRequest("GET", &url.URL{
+				Path: "/characters",
+			}, nil, nil),
 			StatusCode: 200,
 		},
 		{
 			Name: "getCharacterByID",
-			Request: proxyhandler.Request{
-				URL: &url.URL{
-					Path: "/characters/1",
-				},
-				Method: "GET",
-			},
+			Request: proxyhandler.NewRequest("GET", &url.URL{
+				Path: "/characters/1",
+			}, nil, nil),
 			StatusCode: 200,
 			ResponseBody: map[string]any{
 				"data": map[string]any{
@@ -172,7 +172,13 @@ func TestRESTHandler_GraphQLServer(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name+"_execute", func(t *testing.T) {
-			response, result, err := client.Execute(ctx, &tc.Request)
+			response, result, err := client.Execute(
+				ctx,
+				tc.Request.Method(),
+				tc.Request.URL(),
+				tc.Request.Header(),
+				tc.Request.Body(),
+			)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.StatusCode, response.StatusCode)
 
@@ -184,9 +190,9 @@ func TestRESTHandler_GraphQLServer(t *testing.T) {
 		t.Run(tc.Name+"_stream", func(t *testing.T) {
 			writer := httptest.NewRecorder()
 			response, err := client.Stream(&http.Request{
-				URL:    tc.Request.URL,
-				Method: tc.Request.Method,
-				Header: tc.Request.Header,
+				URL:    tc.Request.GetURL(),
+				Method: tc.Request.Method(),
+				Header: tc.Request.Header(),
 			}, writer)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.StatusCode, response.StatusCode)

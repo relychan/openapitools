@@ -5,14 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/url"
 	"testing"
 
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient"
-	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 )
 
 // goos: darwin
@@ -20,9 +18,9 @@ import (
 // pkg: github.com/relychan/openapitools/tests/benchmarks
 // cpu: Apple M3 Pro
 // BenchmarkProxyClient/http_client_get-11         	   20493	     54281 ns/op	    9905 B/op	     119 allocs/op
-// BenchmarkProxyClient/rest_get-11             	   22260	     53863 ns/op	   12265 B/op	     153 allocs/op
-// BenchmarkProxyClient/raw_http_graphql-11            15169	     66341 ns/op	   12068 B/op	     146 allocs/op
-// BenchmarkProxyClient/graphql-11              	   19612	     61281 ns/op	   17273 B/op	     218 allocs/op
+// BenchmarkProxyClient/proxy_rest_get-11          	   23418	     51370 ns/op	   12251 B/op	     152 allocs/op
+// BenchmarkProxyClient/http_client_graphql-11         15169	     66341 ns/op	   12068 B/op	     146 allocs/op
+// BenchmarkProxyClient/proxy_client_graphql-11    	   20186	     59455 ns/op	   17211 B/op	     218 allocs/op
 func BenchmarkProxyClient(b *testing.B) {
 	// Start server in a different process
 	// go run ./tests/benchmarks/server
@@ -32,7 +30,7 @@ func BenchmarkProxyClient(b *testing.B) {
 		panic(err)
 	}
 
-	client, err := openapiclient.NewProxyClient(context.TODO(), oasDef, nil)
+	client, err := openapiclient.NewProxyClient(context.TODO(), oasDef)
 	if err != nil {
 		panic(err)
 	}
@@ -51,12 +49,7 @@ func BenchmarkProxyClient(b *testing.B) {
 
 	b.Run("proxy_rest_get", func(b *testing.B) {
 		for b.Loop() {
-			_, _, err := client.Execute(context.Background(), &proxyhandler.Request{
-				Method: http.MethodGet,
-				URL: &url.URL{
-					Path: "/mock",
-				},
-			})
+			_, _, err := client.Execute(context.Background(), http.MethodGet, "/mock", nil, nil)
 			if err != nil {
 				panic(err)
 			}
@@ -87,12 +80,7 @@ func BenchmarkProxyClient(b *testing.B) {
 
 	b.Run("proxy_client_graphql", func(b *testing.B) {
 		for b.Loop() {
-			_, _, err := client.Execute(context.Background(), &proxyhandler.Request{
-				Method: http.MethodGet,
-				URL: &url.URL{
-					Path: "/users",
-				},
-			})
+			_, _, err := client.Execute(context.Background(), http.MethodGet, "/users", nil, nil)
 			if err != nil {
 				panic(err)
 			}

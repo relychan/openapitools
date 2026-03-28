@@ -488,7 +488,7 @@ func (ge *GraphQLHandler) printLog(
 	requestLogAttrs := make([]slog.Attr, 0, 5)
 	requestLogAttrs = append(
 		requestLogAttrs,
-		slog.String("url", request.URL.String()),
+		slog.String("url", request.URL()),
 		slog.String("operation_name", ge.operationName),
 		slog.String("operation_type", string(ge.operation)),
 		slog.String("query", graphqlPayload.Query),

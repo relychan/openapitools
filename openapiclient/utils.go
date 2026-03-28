@@ -29,13 +29,9 @@ import (
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
 )
 
-// NewRequest creates a new proxy request from an HTTP request.
-func NewRequest(request *http.Request) (*proxyhandler.Request, error) {
-	req := &proxyhandler.Request{
-		Method: request.Method,
-		URL:    request.URL,
-		Header: request.Header,
-	}
+// newRequest creates a new proxy request from an HTTP request.
+func newRequest(request *http.Request) (*proxyhandler.Request, error) {
+	req := proxyhandler.NewRequest(request.Method, request.URL, request.Header, nil)
 
 	if request.Body == nil || request.Body == http.NoBody {
 		return req, nil
@@ -51,7 +47,7 @@ func NewRequest(request *http.Request) (*proxyhandler.Request, error) {
 		return nil, respErr
 	}
 
-	req.Body = decodedBody
+	req.SetBody(decodedBody)
 
 	return req, nil
 }

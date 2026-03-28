@@ -1,7 +1,6 @@
 package openapiclient
 
 import (
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -64,13 +63,6 @@ func WithRetry(retry retrypolicy.RetryPolicy[*http.Response]) ClientOption {
 func WithTimeout(timeout time.Duration) ClientOption {
 	return func(co *clientOptions) {
 		co.Timeout = timeout
-	}
-}
-
-// WithLogLevel creates an option to set the level for printing logs.
-func WithLogLevel(level slog.Level) ClientOption {
-	return func(co *clientOptions) {
-		co.LogLevel = level
 	}
 }
 

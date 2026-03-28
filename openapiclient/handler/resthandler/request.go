@@ -36,10 +36,10 @@ func (re *RESTfulHandler) prepareRequest(
 	options *proxyhandler.ProxyHandleOptions,
 ) (*gohttpc.RequestWithClient, error) {
 	if re.customRequest == nil || re.customRequest.IsZero() {
-		req := options.NewRequest(request.Method, options.Path)
+		req := options.NewRequest(request.Method(), options.Path)
 
 		// Proxies the raw request to the remote service if the body is a reader.
-		reader, ok := request.Body.(io.Reader)
+		reader, ok := request.Body().(io.Reader)
 		if ok && reader != nil {
 			req.SetBody(reader)
 		}
@@ -55,7 +55,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	options *proxyhandler.ProxyHandleOptions,
 ) (*gohttpc.RequestWithClient, error) {
 	requestPath := options.Path
-	method := request.Method
+	method := request.Method()
 
 	if re.customRequest.URL != "" {
 		requestPath = re.customRequest.URL
@@ -123,7 +123,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 
 	// Forward all query params if forwardAllQueryParams is true
 	// or null and there is no query param in the parameters list.
-	if request.URL.RawQuery != "" &&
+	if request.GetURL().RawQuery != "" &&
 		(!hasQueryParam && re.customRequest.ForwardAllQueryParams == nil) ||
 		(re.customRequest.ForwardAllQueryParams != nil && *re.customRequest.ForwardAllQueryParams) {
 		for key, values := range requestData.QueryParams {
@@ -148,7 +148,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 		req.SetURL(resolvedRequestPath)
 	}
 
-	newBody := request.Body
+	newBody := request.Body()
 
 	if re.customRequest.Body != nil {
 		newBody, err = re.customRequest.Body.Transform(rawRequestData)
@@ -185,7 +185,7 @@ func (re *RESTfulHandler) getDestinedContentType(request *proxyhandler.Request) 
 		return re.requestContentType
 	}
 
-	contentType := request.Header.Get(httpheader.ContentType)
+	contentType := request.Header().Get(httpheader.ContentType)
 	if contentType != "" {
 		return contentType
 	}

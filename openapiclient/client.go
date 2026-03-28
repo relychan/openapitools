@@ -52,6 +52,10 @@ func NewProxyClient(
 	}
 
 	for _, opt := range options {
+		if opt == nil {
+			continue
+		}
+
 		opt(&clientOptions)
 	}
 

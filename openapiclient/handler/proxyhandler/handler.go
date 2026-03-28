@@ -81,11 +81,61 @@ type ProxyHandleOptions struct {
 // Request represents an HTTP request to be proxying.
 type Request struct {
 	// Method specifies the HTTP method (GET, POST, PUT, etc.).
-	Method string
+	method string
 	// URL specifies either the URI being proxied.
-	URL *url.URL
+	url *url.URL
 	// Header contains the request header fields.
-	Header http.Header
+	header http.Header
 	// Body is the request's body.
-	Body any
+	body any
+}
+
+// Method returns the method of the request.
+func (r *Request) Method() string {
+	return r.method
+}
+
+// SetMethod sets a new method to the request.
+func (r *Request) SetMethod(method string) {
+	r.method = method
+}
+
+// URL returns the URL string of the request.
+func (r *Request) URL() string {
+	return r.url.String()
+}
+
+// GetURL returns the URL of the request.
+func (r *Request) GetURL() *url.URL {
+	return r.url
+}
+
+// SetURL sets the URL to the request.
+func (r *Request) SetURL(u *url.URL) {
+	r.url = u
+}
+
+// Header returns the headers of the request.
+func (r *Request) Header() http.Header {
+	return r.header
+}
+
+// Body returns the body of the request.
+func (r *Request) Body() any {
+	return r.body
+}
+
+// SetBody sets the body of the request.
+func (r *Request) SetBody(value any) {
+	r.body = value
+}
+
+// NewRequest creates a new [Request] instance.
+func NewRequest(method string, url *url.URL, header http.Header, body any) *Request {
+	return &Request{
+		method: method,
+		url:    url,
+		header: header,
+		body:   body,
+	}
 }
