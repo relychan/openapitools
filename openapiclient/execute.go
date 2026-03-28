@@ -61,7 +61,7 @@ func (pc *ProxyClient) Stream(
 
 	response, err := route.Method.Handler.Stream(ctx, req, w, options)
 	if err != nil {
-		return response, pc.handleError(span, err, options.Path)
+		return response, pc.handleError(span, err, request.URL.Path)
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -102,7 +102,7 @@ func (pc *ProxyClient) Execute(
 
 	response, responseBody, err := route.Method.Handler.Handle(ctx, request, options)
 	if err != nil {
-		return nil, nil, pc.handleError(span, err, options.Path)
+		return nil, nil, pc.handleError(span, err, requestPath)
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -119,7 +119,7 @@ func (pc *ProxyClient) prepareRequest(
 	}
 
 	requestURL := request.GetURL()
-	requestPath := requestURL.Path
+	originalPath := requestURL.Path
 
 	if pc.metadata.Settings != nil && pc.metadata.Settings.Expose != nil &&
 		!*pc.metadata.Settings.Expose {
@@ -127,33 +127,35 @@ func (pc *ProxyClient) prepareRequest(
 
 		// This API isn't exposed. Returns HTTP 404
 		err := goutils.NewNotFoundError()
-		err.Instance = requestPath
+		err.Instance = requestURL.Path
 
 		return nil, nil, err
 	}
 
-	if pc.metadata.Settings != nil && pc.metadata.Settings.BasePath != "" &&
+	if pc.metadata.Settings != nil &&
+		pc.metadata.Settings.BasePath != "" &&
+		pc.metadata.Settings.BasePath != "/" &&
 		requestURL.Path != "" {
 		// The URL path may omit the slash character
 		basePath := pc.metadata.Settings.BasePath
-		if requestPath[0] != '/' {
+		if requestURL.Path[0] != '/' {
 			basePath = basePath[1:]
 		}
 
-		requestPath = strings.TrimPrefix(requestPath, basePath)
+		requestURL.Path = strings.TrimPrefix(requestURL.Path, basePath)
 	}
 
-	span.SetAttributes(semconv.URLPath(requestPath))
-
-	route := pc.node.FindRoute(requestPath, request.Method())
+	route := pc.node.FindRoute(requestURL.Path, request.Method())
 	if route == nil {
 		span.SetStatus(codes.Error, "request path or method does not exist")
 
 		err := goutils.NewNotFoundError()
-		err.Instance = requestPath
+		err.Instance = originalPath
 
 		return nil, nil, err
 	}
+
+	span.SetAttributes(semconv.URLPath(requestURL.Path))
 
 	span.SetAttributes(
 		attribute.String("http.request.proxy.type", string(route.Method.Handler.Type())),
@@ -163,7 +165,6 @@ func (pc *ProxyClient) prepareRequest(
 		Settings:    pc.metadata.Settings,
 		ParamValues: route.ParamValues,
 		NewRequest:  pc.newRequestFunc(request, route),
-		Path:        requestPath,
 	}
 
 	return route, options, nil

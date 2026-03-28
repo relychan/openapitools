@@ -74,7 +74,6 @@ type NewRequestFunc func(method string, uri string) *gohttpc.RequestWithClient
 type ProxyHandleOptions struct {
 	NewRequest  NewRequestFunc
 	Settings    *oaschema.OpenAPIResourceSettings
-	Path        string
 	ParamValues map[string]string
 }
 
@@ -131,10 +130,10 @@ func (r *Request) SetBody(value any) {
 }
 
 // NewRequest creates a new [Request] instance.
-func NewRequest(method string, url *url.URL, header http.Header, body any) *Request {
+func NewRequest(method string, uri *url.URL, header http.Header, body any) *Request {
 	return &Request{
 		method: method,
-		url:    url,
+		url:    uri,
 		header: header,
 		body:   body,
 	}
