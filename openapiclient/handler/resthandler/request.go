@@ -142,7 +142,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 		requestURL, err := goutils.ParsePathOrHTTPURL(resolvedRequestPath)
 		if err != nil {
 			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
-				Code:   oaschema.ErrCodeRequestTransformError,
+				Code:   oaschema.ErrCodeInvalidRequestURL,
 				Detail: err.Error(),
 			})
 			respErr.Detail = "failed to parse request URL"

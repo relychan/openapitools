@@ -252,8 +252,8 @@ func (ge *GraphQLHandler) prepareRequest(
 			request,
 			graphqlPayload,
 			nil,
-			err,
 			nil,
+			err,
 		)
 
 		return nil, err
@@ -268,8 +268,8 @@ func (ge *GraphQLHandler) prepareRequest(
 			request,
 			graphqlPayload,
 			nil,
-			err,
 			nil,
+			err,
 		)
 
 		return nil, err
@@ -288,8 +288,8 @@ func (ge *GraphQLHandler) prepareRequest(
 				request,
 				graphqlPayload,
 				nil,
-				err,
 				nil,
+				err,
 			)
 
 			return nil, respErr
@@ -314,8 +314,8 @@ func (ge *GraphQLHandler) prepareRequest(
 			request,
 			graphqlPayload,
 			nil,
-			err,
 			nil,
+			err,
 		)
 
 		return nil, err

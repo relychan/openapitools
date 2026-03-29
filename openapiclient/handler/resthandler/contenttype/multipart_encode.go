@@ -164,6 +164,7 @@ func (mfe *multipartFormEncoder) evalRootValueReflection(reflectValue reflect.Va
 					Detail: "invalid multipart form body. Expected the object key as a string, got: " +
 						key.Kind().
 							String(),
+					Code: oaschema.ErrCodeMultipartFormEncodeError,
 				}
 			}
 

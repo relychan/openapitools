@@ -122,7 +122,7 @@ func newGraphQLResponseEncodeError(request *proxyhandler.Request, code string, e
 		Detail: err.Error(),
 		Code:   code,
 	})
-	respErr.Detail = "failed to encode graphql response"
+	respErr.Detail = "failed to process graphql response"
 	respErr.Instance = request.GetURL().Path
 
 	return respErr
