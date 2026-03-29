@@ -16,8 +16,6 @@ package contenttype
 
 import (
 	"bytes"
-	"errors"
-	"fmt"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -27,11 +25,6 @@ import (
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
-)
-
-var (
-	errInvalidFormDataValue = errors.New("invalid multipart form body")
-	errRequestBodyRequired  = errors.New("request body is required")
 )
 
 type multipartFormEncoder struct {
@@ -72,7 +65,9 @@ func EncodeMultipartForm(
 
 func (mfe *multipartFormEncoder) Encode(rootValue any) error {
 	if rootValue == nil {
-		return errRequestBodyRequired
+		return &goutils.ErrorDetail{
+			Detail: "request body is required",
+		}
 	}
 
 	switch rootVal := rootValue.(type) {
@@ -112,11 +107,10 @@ func (mfe *multipartFormEncoder) Encode(rootValue any) error {
 		*complex128,
 		*time.Time,
 		*time.Duration:
-		return fmt.Errorf(
-			"%w. Expected object, got: %s",
-			errInvalidFormDataValue,
-			reflect.TypeOf(rootValue).Kind(),
-		)
+		return &goutils.ErrorDetail{
+			Detail: "invalid multipart form body. Expected object, got: " +
+				reflect.TypeOf(rootValue).Kind().String(),
+		}
 	case map[string]any:
 		for key, val := range rootVal {
 			err := mfe.evalValue(key, val)
@@ -165,7 +159,11 @@ func (mfe *multipartFormEncoder) evalRootValueReflection(reflectValue reflect.Va
 		for _, key := range keys {
 			keyStr, ok := goutils.FormatScalarReflection(key)
 			if !ok {
-				return errInvalidFormDataValue
+				return &goutils.ErrorDetail{
+					Detail: "invalid multipart form body. Expected the object key as a string, got: " +
+						key.Kind().
+							String(),
+				}
 			}
 
 			contentType, headers := mfe.evalEncoding(keyStr)

@@ -17,9 +17,6 @@ package contenttype
 import (
 	"encoding/xml"
 	"io"
-
-	"github.com/relychan/goutils"
-	"github.com/relychan/openapitools/oaschema"
 )
 
 // DecodeXML decodes an arbitrary XML from a reader stream.
@@ -29,10 +26,7 @@ func DecodeXML(r io.Reader) (any, error) {
 	for {
 		token, err := decoder.Token()
 		if err != nil {
-			return nil, &goutils.ErrorDetail{
-				Detail: err.Error(),
-				Code:   oaschema.ErrCodeMalformedXML,
-			}
+			return nil, err
 		}
 
 		if token == nil {
@@ -44,10 +38,7 @@ func DecodeXML(r io.Reader) (any, error) {
 
 			err := evalXMLTree(decoder, xmlTree)
 			if err != nil {
-				return nil, &goutils.ErrorDetail{
-					Detail: err.Error(),
-					Code:   oaschema.ErrCodeMalformedXML,
-				}
+				return nil, err
 			}
 
 			result := decodeArbitraryXMLBlock(xmlTree)

@@ -17,6 +17,7 @@ package resthandler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -143,10 +144,18 @@ func (*RESTfulHandler) postTransformedResponse(
 
 	logger.LogAttrs(ctx, slog.LevelError, err.Error(), logAttrs...)
 
-	return &goutils.ErrorDetail{
-		Detail: err.Error(),
-		Code:   oaschema.ErrCodeResponseTransformError,
+	errorDetail, ok := errors.AsType[*goutils.ErrorDetail](err)
+	if !ok {
+		errorDetail = &goutils.ErrorDetail{
+			Detail: err.Error(),
+			Code:   oaschema.ErrCodeResponseTransformError,
+		}
 	}
+
+	respErr := goutils.NewServerError(*errorDetail)
+	respErr.Instance = "failed to transform response"
+
+	return respErr
 }
 
 func (*RESTfulHandler) resolveRawResponse(

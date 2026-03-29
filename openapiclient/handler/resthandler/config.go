@@ -15,7 +15,6 @@
 package resthandler
 
 import (
-	"errors"
 	"mime"
 	"net/http"
 	"strconv"
@@ -31,8 +30,6 @@ import (
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
 )
-
-var errInvalidRequestPath = errors.New("invalid request path")
 
 // ProxyActionTypeREST represents a constant value for REST proxy action.
 const ProxyActionTypeREST proxyhandler.ProxyActionType = "rest"

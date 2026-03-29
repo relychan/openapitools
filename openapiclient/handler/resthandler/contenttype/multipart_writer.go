@@ -47,12 +47,18 @@ func (w *MultipartWriter) WriteDataURI(
 ) error {
 	b64, err := goutils.DecodeString(value)
 	if err != nil {
-		return err
+		return &goutils.ErrorDetail{
+			Detail:  err.Error(),
+			Pointer: "/" + name,
+		}
 	}
 
 	dataURI, err := DecodeDataURI(b64)
 	if err != nil {
-		return err
+		return &goutils.ErrorDetail{
+			Detail:  err.Error(),
+			Pointer: "/" + name,
+		}
 	}
 
 	if dataURI.MediaType == "" {
@@ -84,19 +90,31 @@ func (w *MultipartWriter) WriteBinary(
 
 	p, err := w.CreatePart(h)
 	if err != nil {
-		return err
+		return &goutils.ErrorDetail{
+			Detail:  err.Error(),
+			Pointer: "/" + name,
+		}
 	}
 
 	_, err = p.Write(value)
+	if err != nil {
+		return &goutils.ErrorDetail{
+			Detail:  err.Error(),
+			Pointer: "/" + name,
+		}
+	}
 
-	return err
+	return nil
 }
 
 // WriteJSON calls CreateFormField and then writes the given value with json encoding.
 func (w *MultipartWriter) WriteJSON(fieldName string, value any, headers http.Header) error {
 	bs, err := json.Marshal(value)
 	if err != nil {
-		return err
+		return &goutils.ErrorDetail{
+			Detail:  err.Error(),
+			Pointer: "/" + fieldName,
+		}
 	}
 
 	h := createFieldMIMEHeader(fieldName, headers)
@@ -104,12 +122,21 @@ func (w *MultipartWriter) WriteJSON(fieldName string, value any, headers http.He
 
 	p, err := w.CreatePart(h)
 	if err != nil {
-		return err
+		return &goutils.ErrorDetail{
+			Detail:  err.Error(),
+			Pointer: "/" + fieldName,
+		}
 	}
 
 	_, err = p.Write(bs)
+	if err != nil {
+		return &goutils.ErrorDetail{
+			Detail:  err.Error(),
+			Pointer: "/" + fieldName,
+		}
+	}
 
-	return err
+	return nil
 }
 
 // WriteXML calls CreateFormField and then writes the given value with XML encoding.
@@ -121,12 +148,21 @@ func (w *MultipartWriter) WriteXML(fieldName string, value any, headers http.Hea
 
 	p, err := w.CreatePart(h)
 	if err != nil {
-		return err
+		return &goutils.ErrorDetail{
+			Detail:  err.Error(),
+			Pointer: "/" + fieldName,
+		}
 	}
 
 	_, err = WriteXML(p, value)
+	if err != nil {
+		return &goutils.ErrorDetail{
+			Detail:  err.Error(),
+			Pointer: "/" + fieldName,
+		}
+	}
 
-	return err
+	return nil
 }
 
 // WriteField calls CreateFormField and then writes the given value.
@@ -138,12 +174,21 @@ func (w *MultipartWriter) WriteField(fieldName, value string, headers http.Heade
 
 	p, err := w.CreatePart(h)
 	if err != nil {
-		return err
+		return &goutils.ErrorDetail{
+			Detail:  err.Error(),
+			Pointer: "/" + fieldName,
+		}
 	}
 
 	_, err = p.Write([]byte(value))
+	if err != nil {
+		return &goutils.ErrorDetail{
+			Detail:  err.Error(),
+			Pointer: "/" + fieldName,
+		}
+	}
 
-	return err
+	return nil
 }
 
 func createFieldMIMEHeader(fieldName string, headers http.Header) textproto.MIMEHeader {
