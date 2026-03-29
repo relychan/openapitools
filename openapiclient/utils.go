@@ -52,7 +52,7 @@ func newRequest(request *http.Request) (*proxyhandler.Request, error) {
 		}
 
 		respErr := goutils.NewBadRequestError(*errorDetail)
-		respErr.Instance = "failed to decode request"
+		respErr.Detail = "failed to decode request"
 
 		return nil, respErr
 	}

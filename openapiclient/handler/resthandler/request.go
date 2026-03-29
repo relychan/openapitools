@@ -81,7 +81,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 		return nil, err
 	}
 
-	req := options.NewRequest(method, "")
+	req := options.NewRequest(method, resolvedRequestPath)
 
 	for _, param := range re.customRequest.Parameters {
 		switch param.In {
@@ -112,7 +112,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 					Detail:    err.Error(),
 					Parameter: param.Name,
 				})
-				respErr.Detail = "failed to transform request header"
+				respErr.Detail = "failed to transform request query parameter"
 
 				return nil, respErr
 			}
@@ -151,8 +151,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 		}
 
 		requestURL.RawQuery = parameter.EncodeQueryValuesUnescape(queryValues)
-	} else {
-		req.SetURL(resolvedRequestPath)
+		req.SetURL(requestURL.String())
 	}
 
 	newBody := request.Body()
@@ -190,7 +189,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 			respErr := goutils.NewBadRequestError(*errDetail)
 			respErr.Detail = "failed to encode transformed request body"
 
-			return nil, err
+			return nil, respErr
 		}
 
 		req.SetBody(bytes.NewReader(newBodyBytes))
@@ -240,7 +239,7 @@ func (re *RESTfulHandler) evaluateRequestPath(
 					})
 					respErr.Detail = "failed to evaluate variable"
 
-					return "", err
+					return "", respErr
 				}
 
 				return goutils.ToString(value), nil

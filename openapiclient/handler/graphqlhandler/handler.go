@@ -153,8 +153,8 @@ func (ge *GraphQLHandler) Handle(
 			request,
 			graphqlPayload,
 			nil,
-			err,
 			nil,
+			err,
 		)
 
 		return nil, nil, err
@@ -167,8 +167,8 @@ func (ge *GraphQLHandler) Handle(
 			request,
 			graphqlPayload,
 			resp,
-			err,
 			nil,
+			err,
 		)
 
 		return resp, nil, err
@@ -187,13 +187,12 @@ func (ge *GraphQLHandler) Handle(
 			request,
 			graphqlPayload,
 			resp,
-			errorDetail,
 			nil,
+			&errorDetail,
 		)
 
 		respErr := goutils.NewServerError(errorDetail)
 		respErr.Detail = "failed to encode graphql response"
-		respErr.Instance = request.GetURL().String()
 
 		return resp, nil, respErr
 	}
@@ -246,7 +245,7 @@ func (ge *GraphQLHandler) prepareRequest(
 
 	rawRequestData := requestData.ToMap()
 
-	variables, err := ge.resolveRequestVariables(request, requestData, rawRequestData)
+	variables, err := ge.resolveRequestVariables(requestData, rawRequestData)
 	if err != nil {
 		ge.printLog(
 			ctx,
@@ -262,7 +261,7 @@ func (ge *GraphQLHandler) prepareRequest(
 
 	graphqlPayload.Variables = variables
 
-	graphqlPayload.Extensions, err = ge.resolveRequestExtensions(request, rawRequestData)
+	graphqlPayload.Extensions, err = ge.resolveRequestExtensions(rawRequestData)
 	if err != nil {
 		ge.printLog(
 			ctx,
@@ -389,7 +388,6 @@ func (ge *GraphQLHandler) transformResponse(
 }
 
 func (ge *GraphQLHandler) resolveRequestVariables(
-	request *proxyhandler.Request,
 	requestData *proxyhandler.RequestTemplateData,
 	rawRequestData map[string]any,
 ) (map[string]any, error) {
@@ -413,7 +411,6 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 					Pointer: "/variables/" + varDef.Variable,
 				})
 				respErr.Detail = "failed to select value of variable"
-				respErr.Instance = request.GetURL().Path
 
 				return nil, respErr
 			}
@@ -426,7 +423,6 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 						Pointer: "/variables/" + varDef.Variable,
 					})
 					respErr.Detail = "failed to evaluate value of variable"
-					respErr.Instance = request.GetURL().Path
 
 					return nil, respErr
 				}
@@ -454,7 +450,6 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 					Pointer: "/variables/" + varDef.Variable,
 				})
 				respErr.Detail = "failed to evaluate the type of variable"
-				respErr.Instance = request.GetURL().Path
 
 				return nil, respErr
 			}
@@ -473,7 +468,6 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 					Pointer: "/variables/" + varDef.Variable,
 				})
 				respErr.Detail = "failed to evaluate the type of variable"
-				respErr.Instance = request.GetURL().Path
 
 				return nil, respErr
 			}
@@ -486,7 +480,6 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 }
 
 func (ge *GraphQLHandler) resolveRequestExtensions(
-	request *proxyhandler.Request,
 	rawRequestData map[string]any,
 ) (map[string]any, error) {
 	results := make(map[string]any)
@@ -499,7 +492,6 @@ func (ge *GraphQLHandler) resolveRequestExtensions(
 				Pointer: "/extensions/" + key,
 			})
 			respErr.Detail = "failed to select value of extension"
-			respErr.Instance = request.GetURL().Path
 
 			return nil, respErr
 		}
@@ -570,11 +562,6 @@ func (ge *GraphQLHandler) printLog(
 	if response != nil {
 		message = response.Status
 		respHeaders := otelutils.ExtractTelemetryHeaders(response.Header)
-
-		attrs = append(attrs, slog.GroupAttrs(
-			"response",
-			slog.Int("status", response.StatusCode),
-		))
 
 		otelutils.SetSpanHeaderMatrixAttributes(span, "http.response.header", respHeaders)
 

@@ -67,6 +67,7 @@ func (mfe *multipartFormEncoder) Encode(rootValue any) error {
 	if rootValue == nil {
 		return &goutils.ErrorDetail{
 			Detail: "request body is required",
+			Code:   oaschema.ErrCodeMultipartFormEncodeError,
 		}
 	}
 

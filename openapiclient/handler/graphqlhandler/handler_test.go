@@ -32,10 +32,6 @@ import (
 )
 
 func TestTransformRequest(t *testing.T) {
-	request := proxyhandler.NewRequest(http.MethodGet, &url.URL{
-		Path: "/test",
-	}, nil, nil)
-
 	testCases := []struct {
 		Name         string
 		Handler      GraphQLHandler
@@ -148,7 +144,7 @@ func TestTransformRequest(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			result, err := tc.Handler.resolveRequestVariables(request, &tc.TemplateData, tc.TemplateData.ToMap())
+			result, err := tc.Handler.resolveRequestVariables(&tc.TemplateData, tc.TemplateData.ToMap())
 			assert.NoError(t, err)
 			assert.Equal(t, tc.Expected, result)
 		})
@@ -185,10 +181,6 @@ func TestRequestTemplateData_ToMap(t *testing.T) {
 }
 
 func TestResolveRequestExtensions(t *testing.T) {
-	request := proxyhandler.NewRequest(http.MethodGet, &url.URL{
-		Path: "/test",
-	}, nil, nil)
-
 	testCases := []struct {
 		name         string
 		handler      GraphQLHandler
@@ -239,7 +231,7 @@ func TestResolveRequestExtensions(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := tc.handler.resolveRequestExtensions(request, tc.templateData.ToMap())
+			result, err := tc.handler.resolveRequestExtensions(tc.templateData.ToMap())
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expected, result)
 		})
@@ -744,10 +736,6 @@ func TestTransformResponse(t *testing.T) {
 
 // TestResolveRequestVariablesWithTypes tests variable resolution with type conversion
 func TestResolveRequestVariablesWithTypes(t *testing.T) {
-	request := proxyhandler.NewRequest(http.MethodGet, &url.URL{
-		Path: "/test",
-	}, nil, nil)
-
 	t.Run("param_with_int_type", func(t *testing.T) {
 		handler := GraphQLHandler{
 			variableDefinitions: ast.VariableDefinitionList{
@@ -765,7 +753,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			},
 		}
 
-		result, err := handler.resolveRequestVariables(request, &templateData, templateData.ToMap())
+		result, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.NoError(t, err)
 		assert.Equal(t, map[string]any{"limit": int64(10)}, result)
 	})
@@ -787,7 +775,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			},
 		}
 
-		result, err := handler.resolveRequestVariables(request, &templateData, templateData.ToMap())
+		result, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.NoError(t, err)
 		assert.Equal(t, map[string]any{"active": true}, result)
 	})
@@ -813,7 +801,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			},
 		}
 
-		result, err := handler.resolveRequestVariables(request, &templateData, templateData.ToMap())
+		result, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.NoError(t, err)
 		assert.Equal(t, map[string]any{"price": float64(19.99)}, result)
 	})
@@ -837,7 +825,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			Body: map[string]any{},
 		}
 
-		result, err := handler.resolveRequestVariables(request, &templateData, templateData.ToMap())
+		result, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.NoError(t, err)
 		assert.Equal(t, map[string]any{"optional": nil}, result)
 	})
@@ -859,7 +847,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			},
 		}
 
-		_, err := handler.resolveRequestVariables(request, &templateData, templateData.ToMap())
+		_, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.True(t, err != nil)
 		assert.ErrorContains(t, err, "failed to evaluate the type of variable")
 	})
@@ -881,7 +869,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			},
 		}
 
-		_, err := handler.resolveRequestVariables(request, &templateData, templateData.ToMap())
+		_, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.True(t, err != nil)
 		assert.ErrorContains(t, err, "failed to evaluate the type of variable")
 	})
@@ -907,7 +895,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			},
 		}
 
-		_, err := handler.resolveRequestVariables(request, &templateData, templateData.ToMap())
+		_, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.True(t, err != nil)
 		assert.ErrorContains(t, err, "failed to evaluate value of variable")
 	})

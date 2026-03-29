@@ -58,6 +58,8 @@ const (
 	ErrCodeMalformedXML = "malformed_xml"
 	// ErrCodeXMLEncodeError represents a code for a XML encoding error.
 	ErrCodeXMLEncodeError = "xml_encode_error"
+	// ErrCodeMultipartFormEncodeError represents a code for a multipart form encoding error.
+	ErrCodeMultipartFormEncodeError = "multipart_encode_error"
 	// ErrCodeRequestTransformError represents a code for a request transformation error.
 	ErrCodeRequestTransformError = "request_transform_error"
 	// ErrCodeResponseTransformError represents a code for a response transformation error.

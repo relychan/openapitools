@@ -153,7 +153,7 @@ func (*RESTfulHandler) postTransformedResponse(
 	}
 
 	respErr := goutils.NewServerError(*errorDetail)
-	respErr.Instance = "failed to transform response"
+	respErr.Detail = "failed to transform response"
 
 	return respErr
 }
