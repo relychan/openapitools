@@ -79,7 +79,7 @@ func TestGetHeadersFromSchema(t *testing.T) {
 				"X-Trace-Id": []string{"trace-001"},
 				"X-Span-Id":  []string{"span-001"},
 			},
-			schema:   []string{"X-Trace-Id", "X-Span-Id", "X-Missing"},
+			schema: []string{"X-Trace-Id", "X-Span-Id", "X-Missing"},
 			expected: http.Header{
 				"X-Trace-Id": []string{"trace-001"},
 				"X-Span-Id":  []string{"span-001"},
