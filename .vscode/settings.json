@@ -1,0 +1,5 @@
+{
+    "yaml.schemas": {
+        "file:///Users/hgiasac/projects/relychan/src/openapitools/jsonschema/openapitools.schema.json": "file:///Users/hgiasac/projects/relychan/src/openapitools/tests/testdata/jsonplaceholder.yaml"
+    }
+}

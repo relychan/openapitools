@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=../../jsonschema/openapitools.schema.json
+settings:
+  basePath: "/api/v1"
+  headers: {}
+  forwardHeaders:
+    request: []
+    response: []
+  http:
+    retry:
+      maxAttempts: 3
+spec:
+  openapi: "3.2.0"
+  servers:
+    - url: https://jsonplaceholder.typicode.com
+  components:
+    securitySchemes:
+      apiKey:
+        type: http
+        scheme: bearer
+  paths:
+    /albums:
+      get:
+        operationId: getAlbums
+        description: "Get albums"
+    /albums-count:
+      post:
+        operationId: countAlbums
+        description: "Count number of albums"
+        x-rely-proxy-action:
+          type: rest
+          request:
+            url: /albums
+            method: GET
+          response:
+            body:
+              type: jmespath
+              template:
+                type: object
+                properties:
+                  count:
+                    type: field
+                    path: length(@)
+
+    /posts/{id}:
+      get:
+        operationId: getPostById
+        description: "Get post by ID"
+        x-rely-proxy-action:
+          type: rest
