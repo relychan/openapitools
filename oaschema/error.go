@@ -70,4 +70,6 @@ const (
 	ErrCodeProxyRESTfulResponseConfig = "invalid_restful_response_config"
 	// ErrCodeInvalidServerURL represents a code for invalid server URL errors.
 	ErrCodeInvalidServerURL = "invalid_server_url"
+	// ErrCodeGraphQLResponseEmpty represents a code for empty graphql response.
+	ErrCodeGraphQLResponseEmpty = "graphql_response_empty"
 )

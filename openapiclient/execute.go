@@ -33,20 +33,20 @@ import (
 
 // Stream routes the request to the remote server. The response will be transformed and written into the stream.
 func (pc *ProxyClient) Stream(
-	request *http.Request,
 	w http.ResponseWriter,
+	r *http.Request,
 ) (*http.Response, error) {
-	spanName := pc.buildSpanName("Stream", request.URL)
+	spanName := pc.buildSpanName("Stream", r.URL)
 
-	ctx, span := tracer.Start(request.Context(), spanName)
+	ctx, span := tracer.Start(r.Context(), spanName)
 	defer span.End()
 
 	span.SetAttributes(
-		semconv.HTTPRequestMethodKey.String(request.Method),
-		semconv.URLOriginal(request.URL.String()),
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.URLOriginal(r.URL.String()),
 	)
 
-	req, err := newRequest(request)
+	req, err := newRequest(r)
 	if err != nil {
 		span.SetStatus(codes.Error, "failed to decode request body")
 		span.RecordError(err)
@@ -61,7 +61,7 @@ func (pc *ProxyClient) Stream(
 
 	response, err := route.Method.Handler.Stream(ctx, req, w, options)
 	if err != nil {
-		return response, pc.handleError(span, err, request.URL.Path)
+		return response, pc.handleError(span, err, r.URL.Path)
 	}
 
 	span.SetStatus(codes.Ok, "")

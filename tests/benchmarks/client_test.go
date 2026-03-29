@@ -17,13 +17,13 @@ import (
 // goarch: arm64
 // pkg: github.com/relychan/openapitools/tests/benchmarks
 // cpu: Apple M3 Pro
-// BenchmarkProxyClient/http_client_get-11         	   20493	     54281 ns/op	    9905 B/op	     119 allocs/op
-// BenchmarkProxyClient/proxy_rest_get-11          	   23418	     51370 ns/op	   12251 B/op	     152 allocs/op
+// BenchmarkProxyClient/http_client_get-11         	   28198	     38380 ns/op	    8363 B/op	     111 allocs/op
+// BenchmarkProxyClient/proxy_rest_get-11          	   30836	     38331 ns/op	   10572 B/op	     141 allocs/op
 // BenchmarkProxyClient/http_client_graphql-11         15169	     66341 ns/op	   12068 B/op	     146 allocs/op
-// BenchmarkProxyClient/proxy_client_graphql-11    	   20186	     59455 ns/op	   17211 B/op	     218 allocs/op
+// BenchmarkProxyClient/proxy_client_graphql-11    	   25801	     46002 ns/op	   15497 B/op	     208 allocs/op
 func BenchmarkProxyClient(b *testing.B) {
 	// Start server in a different process
-	// go run ./tests/benchmarks/server
+	// cd ./tests/benchmarks/server && go run .
 
 	oasDef, err := goutils.ReadJSONOrYAMLFile[oaschema.OpenAPIResourceDefinition](context.Background(), "./openapi.yaml")
 	if err != nil {

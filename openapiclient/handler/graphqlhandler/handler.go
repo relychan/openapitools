@@ -24,7 +24,9 @@ import (
 	"net/http"
 
 	"github.com/hasura/gotel"
+	"github.com/hasura/gotel/otelutils"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/relychan/gohttpc"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
@@ -126,7 +128,7 @@ func (*GraphQLHandler) Type() proxyhandler.ProxyActionType {
 }
 
 // Handle resolves the HTTP request and proxies that request to the remote server.
-func (ge *GraphQLHandler) Handle( //nolint:funlen
+func (ge *GraphQLHandler) Handle(
 	ctx context.Context,
 	request *proxyhandler.Request,
 	options *proxyhandler.ProxyHandleOptions,
@@ -144,10 +146,7 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 		attribute.String("graphql.query", ge.query),
 	)
 
-	requestData, err := proxyhandler.NewRequestTemplateData(
-		request,
-		options.ParamValues,
-	)
+	req, err := ge.prepareRequest(ctx, request, graphqlPayload, options)
 	if err != nil {
 		ge.printLog(
 			ctx,
@@ -161,9 +160,93 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 		return nil, nil, err
 	}
 
+	resp, err := req.Execute(ctx)
+	if err != nil {
+		ge.printLog(
+			ctx,
+			request,
+			graphqlPayload,
+			resp,
+			err,
+			nil,
+		)
+
+		return resp, nil, err
+	}
+
+	span.SetAttributes(attribute.Int("http.response.original_status", resp.StatusCode))
+
+	if resp.Body == nil {
+		errorDetail := goutils.ErrorDetail{
+			Detail: "graphql response must be a valid JSON object",
+			Code:   oaschema.ErrCodeGraphQLResponseEmpty,
+		}
+
+		ge.printLog(
+			ctx,
+			request,
+			graphqlPayload,
+			resp,
+			errorDetail,
+			nil,
+		)
+
+		respErr := goutils.NewServerError(errorDetail)
+		respErr.Detail = "failed to encode graphql response"
+		respErr.Instance = request.GetURL().String()
+
+		return resp, nil, respErr
+	}
+
+	newResp, respBody, err := ge.transformResponse(ctx, request, resp)
+
+	ge.printLog(
+		ctx,
+		request,
+		graphqlPayload,
+		resp,
+		respBody,
+		err,
+	)
+
+	return newResp, respBody, err
+}
+
+// Stream resolves the HTTP request and proxies that request to the remote server.
+// The response is a stream.
+func (ge *GraphQLHandler) Stream(
+	ctx context.Context,
+	request *proxyhandler.Request,
+	writer http.ResponseWriter,
+	options *proxyhandler.ProxyHandleOptions,
+) (*http.Response, error) {
+	resp, data, err := ge.Handle(ctx, request, options)
+	if err != nil {
+		return resp, err
+	}
+
+	err = json.NewEncoder(writer).Encode(data)
+	if err != nil {
+		return nil, newGraphQLResponseEncodeError(request, oaschema.ErrCodeWriteResponseError, err)
+	}
+
+	return resp, nil
+}
+
+func (ge *GraphQLHandler) prepareRequest(
+	ctx context.Context,
+	request *proxyhandler.Request,
+	graphqlPayload *GraphQLRequestBody,
+	options *proxyhandler.ProxyHandleOptions,
+) (*gohttpc.RequestWithClient, error) {
+	requestData := proxyhandler.NewRequestTemplateData(
+		request,
+		options.ParamValues,
+	)
+
 	rawRequestData := requestData.ToMap()
 
-	variables, err := ge.resolveRequestVariables(requestData, rawRequestData)
+	variables, err := ge.resolveRequestVariables(request, requestData, rawRequestData)
 	if err != nil {
 		ge.printLog(
 			ctx,
@@ -174,12 +257,12 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 			nil,
 		)
 
-		return nil, nil, err
+		return nil, err
 	}
 
 	graphqlPayload.Variables = variables
 
-	graphqlPayload.Extensions, err = ge.resolveRequestExtensions(rawRequestData)
+	graphqlPayload.Extensions, err = ge.resolveRequestExtensions(request, rawRequestData)
 	if err != nil {
 		ge.printLog(
 			ctx,
@@ -190,7 +273,7 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 			nil,
 		)
 
-		return nil, nil, err
+		return nil, err
 	}
 
 	req := options.NewRequest(http.MethodPost, ge.url)
@@ -210,7 +293,7 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 				nil,
 			)
 
-			return nil, nil, respErr
+			return nil, respErr
 		}
 
 		if value != nil && *value != "" {
@@ -236,82 +319,19 @@ func (ge *GraphQLHandler) Handle( //nolint:funlen
 			nil,
 		)
 
-		return nil, nil, err
+		return nil, err
 	}
 
 	req.SetBody(reader)
 
-	resp, err := req.Execute(ctx)
-	if err != nil {
-		ge.printLog(
-			ctx,
-			request,
-			graphqlPayload,
-			resp,
-			err,
-			nil,
-		)
-
-		return resp, nil, err
-	}
-
-	span.SetAttributes(attribute.Int("http.response.original_status", resp.StatusCode))
-
-	if resp.Body == nil {
-		ge.printLog(
-			ctx,
-			request,
-			graphqlPayload,
-			resp,
-			ErrGraphQLResponseRequired,
-			nil,
-		)
-
-		return resp, nil, ErrGraphQLResponseRequired
-	}
-
-	newResp, respBody, respLogAttrs, err := ge.transformResponse(ctx, resp)
-
-	ge.printLog(
-		ctx,
-		request,
-		graphqlPayload,
-		resp,
-		err,
-		respLogAttrs,
-	)
-
-	return newResp, respBody, err
+	return req, nil
 }
 
-// Stream resolves the HTTP request and proxies that request to the remote server.
-// The response is a stream.
-func (ge *GraphQLHandler) Stream(
+func (ge *GraphQLHandler) transformResponse(
 	ctx context.Context,
 	request *proxyhandler.Request,
-	writer http.ResponseWriter,
-	options *proxyhandler.ProxyHandleOptions,
-) (*http.Response, error) {
-	resp, data, err := ge.Handle(ctx, request, options)
-	if err != nil {
-		return resp, err
-	}
-
-	err = json.NewEncoder(writer).Encode(data)
-	if err != nil {
-		return nil, &goutils.ErrorDetail{
-			Detail: err.Error(),
-			Code:   oaschema.ErrCodeWriteResponseError,
-		}
-	}
-
-	return resp, nil
-}
-
-func (ge *GraphQLHandler) transformResponse( //nolint:revive
-	ctx context.Context,
 	resp *http.Response,
-) (*http.Response, any, []slog.Attr, error) {
+) (*http.Response, any, error) {
 	_, span := tracer.Start(ctx, "transform_response", trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
 
@@ -324,13 +344,17 @@ func (ge *GraphQLHandler) transformResponse( //nolint:revive
 		span.SetStatus(codes.Error, "failed to decode response body")
 		span.RecordError(err)
 
-		return resp, nil, nil, fmt.Errorf("failed to decode graphql response: %w", err)
+		return resp, nil, newGraphQLResponseEncodeError(
+			request,
+			oaschema.ErrCodeResponseTransformError,
+			err,
+		)
 	}
 
 	if ge.customResponse == nil {
 		span.SetStatus(codes.Ok, "")
 
-		return resp, responseBody, nil, err
+		return resp, responseBody, nil
 	}
 
 	if ge.customResponse.HTTPErrorCode != nil {
@@ -341,17 +365,10 @@ func (ge *GraphQLHandler) transformResponse( //nolint:revive
 		}
 	}
 
-	responseLogAttrs := make([]slog.Attr, 0, 4)
-	responseLogAttrs = append(
-		responseLogAttrs,
-		slog.Any("original_body", responseBody),
-		slog.Int("status_code_final", resp.StatusCode),
-	)
-
 	if ge.customResponse.Body == nil || ge.customResponse.Body.IsZero() {
 		span.SetStatus(codes.Ok, "")
 
-		return resp, responseBody, responseLogAttrs, nil
+		return resp, responseBody, nil
 	}
 
 	transformedBody, err := ge.customResponse.Body.Transform(responseBody)
@@ -359,17 +376,20 @@ func (ge *GraphQLHandler) transformResponse( //nolint:revive
 		span.SetStatus(codes.Error, "failed to transform response body")
 		span.RecordError(err)
 
-		return resp, responseBody, responseLogAttrs, err
+		return resp, responseBody, newGraphQLResponseEncodeError(
+			request,
+			oaschema.ErrCodeResponseTransformError,
+			err,
+		)
 	}
-
-	responseLogAttrs = append(responseLogAttrs, slog.Any("response_body", transformedBody))
 
 	span.SetStatus(codes.Ok, "")
 
-	return resp, transformedBody, responseLogAttrs, err
+	return resp, transformedBody, nil
 }
 
 func (ge *GraphQLHandler) resolveRequestVariables(
+	request *proxyhandler.Request,
 	requestData *proxyhandler.RequestTemplateData,
 	rawRequestData map[string]any,
 ) (map[string]any, error) {
@@ -388,21 +408,27 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 		if ok {
 			value, err := variable.Evaluate(rawRequestData)
 			if err != nil {
-				return nil, fmt.Errorf(
-					"failed to select value of variable %s: %w",
-					varDef.Variable,
-					err,
-				)
+				respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+					Detail:  err.Error(),
+					Pointer: "/variables/" + varDef.Variable,
+				})
+				respErr.Detail = "failed to select value of variable"
+				respErr.Instance = request.GetURL().Path
+
+				return nil, respErr
 			}
 
 			if value != nil {
 				typedValue, err := convertVariableTypeFromUnknownValue(varDef, value)
 				if err != nil {
-					return nil, fmt.Errorf(
-						"failed to evaluate value of variable %s: %w",
-						varDef.Variable,
-						err,
-					)
+					respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+						Detail:  err.Error(),
+						Pointer: "/variables/" + varDef.Variable,
+					})
+					respErr.Detail = "failed to evaluate value of variable"
+					respErr.Instance = request.GetURL().Path
+
+					return nil, respErr
 				}
 
 				results[varDef.Variable] = typedValue
@@ -423,11 +449,14 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 		if ok && param != "" {
 			typedParam, err := convertVariableTypeFromString(varDef, param)
 			if err != nil {
-				return nil, fmt.Errorf(
-					"failed to evaluate the type of variable %s: %w",
-					varDef.Variable,
-					err,
-				)
+				respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+					Detail:  err.Error(),
+					Pointer: "/variables/" + varDef.Variable,
+				})
+				respErr.Detail = "failed to evaluate the type of variable"
+				respErr.Instance = request.GetURL().Path
+
+				return nil, respErr
 			}
 
 			results[varDef.Variable] = typedParam
@@ -439,11 +468,14 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 		if queryValue != "" {
 			typedValue, err := convertVariableTypeFromString(varDef, queryValue)
 			if err != nil {
-				return nil, fmt.Errorf(
-					"failed to evaluate the type of variable %s: %w",
-					varDef.Variable,
-					err,
-				)
+				respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+					Detail:  err.Error(),
+					Pointer: "/variables/" + varDef.Variable,
+				})
+				respErr.Detail = "failed to evaluate the type of variable"
+				respErr.Instance = request.GetURL().Path
+
+				return nil, respErr
 			}
 
 			results[varDef.Variable] = typedValue
@@ -454,6 +486,7 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 }
 
 func (ge *GraphQLHandler) resolveRequestExtensions(
+	request *proxyhandler.Request,
 	rawRequestData map[string]any,
 ) (map[string]any, error) {
 	results := make(map[string]any)
@@ -461,7 +494,14 @@ func (ge *GraphQLHandler) resolveRequestExtensions(
 	for key, extension := range ge.extensions {
 		value, err := extension.Evaluate(rawRequestData)
 		if err != nil {
-			return nil, fmt.Errorf("failed to select value of extension %s: %w", key, err)
+			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+				Detail:  err.Error(),
+				Pointer: "/extensions/" + key,
+			})
+			respErr.Detail = "failed to select value of extension"
+			respErr.Instance = request.GetURL().Path
+
+			return nil, respErr
 		}
 
 		results[key] = value
@@ -475,8 +515,8 @@ func (ge *GraphQLHandler) printLog(
 	request *proxyhandler.Request,
 	graphqlPayload *GraphQLRequestBody,
 	response *http.Response,
+	respBody any,
 	err error,
-	respLogAttrs []slog.Attr,
 ) {
 	logger := gotel.GetLogger(ctx)
 	isDebug := logger.Enabled(ctx, slog.LevelDebug)
@@ -485,13 +525,25 @@ func (ge *GraphQLHandler) printLog(
 		return
 	}
 
-	requestLogAttrs := make([]slog.Attr, 0, 5)
+	span := trace.SpanFromContext(ctx)
+
+	requestLogAttrs := make([]slog.Attr, 0, 7)
 	requestLogAttrs = append(
 		requestLogAttrs,
 		slog.String("url", request.URL()),
 		slog.String("operation_name", ge.operationName),
 		slog.String("operation_type", string(ge.operation)),
 		slog.String("query", graphqlPayload.Query),
+	)
+
+	requestHeaders := otelutils.ExtractTelemetryHeaders(request.Header())
+	otelutils.SetSpanHeaderMatrixAttributes(span, "http.request.header", requestHeaders)
+
+	requestLogAttrs = append(requestLogAttrs,
+		otelutils.NewHeaderMatrixLogGroupAttrs(
+			"headers",
+			requestHeaders,
+		),
 	)
 
 	if isDebug {
@@ -517,10 +569,31 @@ func (ge *GraphQLHandler) printLog(
 
 	if response != nil {
 		message = response.Status
+		respHeaders := otelutils.ExtractTelemetryHeaders(response.Header)
+
+		attrs = append(attrs, slog.GroupAttrs(
+			"response",
+			slog.Int("status", response.StatusCode),
+		))
+
+		otelutils.SetSpanHeaderMatrixAttributes(span, "http.response.header", respHeaders)
+
+		respLogAttrs := make([]slog.Attr, 0, 3)
 		respLogAttrs = append(
 			respLogAttrs,
 			slog.Int("status", response.StatusCode),
+			otelutils.NewHeaderMatrixLogGroupAttrs(
+				"headers",
+				respHeaders,
+			),
 		)
+
+		if isDebug {
+			respLogAttrs = append(
+				respLogAttrs,
+				slog.Any("body", respBody),
+			)
+		}
 
 		attrs = append(attrs, slog.GroupAttrs("response", respLogAttrs...))
 	}

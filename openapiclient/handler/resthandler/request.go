@@ -66,14 +66,10 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 		method = re.customRequest.Method
 	}
 
-	requestData, err := proxyhandler.NewRequestTemplateData(
+	requestData := proxyhandler.NewRequestTemplateData(
 		request,
 		options.ParamValues,
 	)
-	if err != nil {
-		return nil, err
-	}
-
 	rawRequestData := requestData.ToMap()
 	hasQueryParam := false
 

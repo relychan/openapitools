@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/relychan/goutils"
+	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/vektah/gqlparser/ast"
 	"github.com/vektah/gqlparser/parser"
 )
@@ -28,7 +29,6 @@ var (
 	ErrProxyActionInvalid           = errors.New("proxy action must exist with the graphql type")
 	ErrGraphQLQueryEmpty            = errors.New("query is required for graphql proxy")
 	ErrGraphQLUnsupportedQueryBatch = errors.New("graphql query batch is not supported")
-	ErrGraphQLResponseRequired      = errors.New("graphql response must be a valid JSON object")
 )
 
 // ValidateGraphQLString parses and validates the GraphQL query string.
@@ -115,4 +115,15 @@ func convertVariableTypeFromUnknownValue(varDef *ast.VariableDefinition, value a
 		// unknown type. Returns the original value.
 		return value, nil
 	}
+}
+
+func newGraphQLResponseEncodeError(request *proxyhandler.Request, code string, err error) error {
+	respErr := goutils.NewServerError(goutils.ErrorDetail{
+		Detail: err.Error(),
+		Code:   code,
+	})
+	respErr.Detail = "failed to encode graphql response"
+	respErr.Instance = request.GetURL().Path
+
+	return respErr
 }
