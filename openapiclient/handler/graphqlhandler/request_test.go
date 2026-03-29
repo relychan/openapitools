@@ -637,6 +637,10 @@ func TestConvertVariableTypeFromUnknownValue(t *testing.T) {
 
 // TestTransformResponse tests the transformResponse function
 func TestTransformResponse(t *testing.T) {
+	request := proxyhandler.NewRequest(http.MethodGet, &url.URL{
+		Path: "/test",
+	}, nil, nil)
+
 	t.Run("valid_response_no_custom_config", func(t *testing.T) {
 		handler := &GraphQLHandler{}
 
@@ -655,11 +659,10 @@ func TestTransformResponse(t *testing.T) {
 			Body:       io.NopCloser(bytes.NewReader(bodyBytes)),
 		}
 
-		newResp, respBody, attrs, err := handler.transformResponse(context.TODO(), resp)
+		newResp, respBody, err := handler.transformResponse(context.TODO(), request, resp)
 		assert.NoError(t, err)
 		assert.True(t, newResp != nil)
 		assert.Equal(t, responseBody, respBody)
-		assert.True(t, attrs == nil)
 	})
 
 	t.Run("invalid_json_response", func(t *testing.T) {
@@ -670,9 +673,8 @@ func TestTransformResponse(t *testing.T) {
 			Body:       io.NopCloser(bytes.NewReader([]byte("invalid json"))),
 		}
 
-		_, _, _, err := handler.transformResponse(context.TODO(), resp)
-		assert.True(t, err != nil)
-		assert.ErrorContains(t, err, "failed to decode graphql response")
+		_, _, err := handler.transformResponse(context.TODO(), request, resp)
+		assert.ErrorContains(t, err, "Server Error")
 	})
 
 	t.Run("response_with_errors_and_custom_error_code", func(t *testing.T) {
@@ -697,11 +699,10 @@ func TestTransformResponse(t *testing.T) {
 			Body:       io.NopCloser(bytes.NewReader(bodyBytes)),
 		}
 
-		newResp, respBody, attrs, err := handler.transformResponse(context.TODO(), resp)
+		newResp, respBody, err := handler.transformResponse(context.TODO(), request, resp)
 		assert.NoError(t, err)
 		assert.Equal(t, 400, newResp.StatusCode)
 		assert.Equal(t, responseBody, respBody)
-		assert.True(t, len(attrs) > 0)
 	})
 
 	t.Run("response_without_errors_keeps_status", func(t *testing.T) {
@@ -726,11 +727,10 @@ func TestTransformResponse(t *testing.T) {
 			Body:       io.NopCloser(bytes.NewReader(bodyBytes)),
 		}
 
-		newResp, respBody, attrs, err := handler.transformResponse(context.TODO(), resp)
+		newResp, respBody, err := handler.transformResponse(context.TODO(), request, resp)
 		assert.NoError(t, err)
 		assert.Equal(t, 200, newResp.StatusCode)
 		assert.Equal(t, responseBody, respBody)
-		assert.True(t, len(attrs) > 0)
 	})
 }
 
@@ -849,7 +849,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 
 		_, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.True(t, err != nil)
-		assert.ErrorContains(t, err, "failed to evaluate the type of variable count")
+		assert.ErrorContains(t, err, "failed to evaluate the type of variable")
 	})
 
 	t.Run("invalid_type_conversion_from_query", func(t *testing.T) {
@@ -871,7 +871,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 
 		_, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.True(t, err != nil)
-		assert.ErrorContains(t, err, "failed to evaluate the type of variable active")
+		assert.ErrorContains(t, err, "failed to evaluate the type of variable")
 	})
 
 	t.Run("invalid_type_conversion_from_custom_variable", func(t *testing.T) {
@@ -897,6 +897,6 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 
 		_, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.True(t, err != nil)
-		assert.ErrorContains(t, err, "failed to evaluate value of variable price")
+		assert.ErrorContains(t, err, "failed to evaluate value of variable")
 	})
 }

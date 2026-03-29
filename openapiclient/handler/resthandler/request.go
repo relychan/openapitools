@@ -16,10 +16,9 @@ package resthandler
 
 import (
 	"bytes"
-	"fmt"
+	"errors"
 	"io"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/relychan/gohttpc"
@@ -66,14 +65,10 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 		method = re.customRequest.Method
 	}
 
-	requestData, err := proxyhandler.NewRequestTemplateData(
+	requestData := proxyhandler.NewRequestTemplateData(
 		request,
 		options.ParamValues,
 	)
-	if err != nil {
-		return nil, err
-	}
-
 	rawRequestData := requestData.ToMap()
 	hasQueryParam := false
 
@@ -86,19 +81,21 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 		return nil, err
 	}
 
-	req := options.NewRequest(method, "")
+	req := options.NewRequest(method, resolvedRequestPath)
 
-	for i, param := range re.customRequest.Parameters {
+	for _, param := range re.customRequest.Parameters {
 		switch param.In {
 		case oaschema.InHeader:
 			rawValue, err := param.Evaluate(rawRequestData)
 			if err != nil {
-				return nil, &goutils.ErrorDetail{
-					Code:    oaschema.ErrCodeRequestTransformError,
-					Detail:  "failed to transform request header: " + err.Error(),
-					Pointer: "/parameters/" + strconv.Itoa(i),
-					Header:  param.Name,
-				}
+				respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+					Code:   oaschema.ErrCodeRequestTransformError,
+					Detail: err.Error(),
+					Header: param.Name,
+				})
+				respErr.Detail = "failed to transform request header"
+
+				return nil, respErr
 			}
 
 			if rawValue != nil {
@@ -110,11 +107,14 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 
 			value, err := param.Evaluate(rawRequestData)
 			if err != nil {
-				return nil, fmt.Errorf(
-					"failed to transform request header %s: %w",
-					param.Name,
-					err,
-				)
+				respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+					Code:      oaschema.ErrCodeRequestTransformError,
+					Detail:    err.Error(),
+					Parameter: param.Name,
+				})
+				respErr.Detail = "failed to transform request query parameter"
+
+				return nil, respErr
 			}
 
 			parameter.SetQueryParam(queryValues, param.BaseParameter, value)
@@ -141,12 +141,17 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	if len(queryValues) > 0 {
 		requestURL, err := goutils.ParsePathOrHTTPURL(resolvedRequestPath)
 		if err != nil {
-			return nil, err
+			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+				Code:   oaschema.ErrCodeInvalidRequestURL,
+				Detail: err.Error(),
+			})
+			respErr.Detail = "failed to parse request URL"
+
+			return nil, respErr
 		}
 
 		requestURL.RawQuery = parameter.EncodeQueryValuesUnescape(queryValues)
-	} else {
-		req.SetURL(resolvedRequestPath)
+		req.SetURL(requestURL.String())
 	}
 
 	newBody := request.Body()
@@ -154,11 +159,13 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	if re.customRequest.Body != nil {
 		newBody, err = re.customRequest.Body.Transform(rawRequestData)
 		if err != nil {
-			return nil, &goutils.ErrorDetail{
-				Code:    oaschema.ErrCodeRequestTransformError,
-				Detail:  "failed to transform request body: " + err.Error(),
-				Pointer: "/body",
-			}
+			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+				Code:   oaschema.ErrCodeRequestTransformError,
+				Detail: err.Error(),
+			})
+			respErr.Detail = "failed to transform request body"
+
+			return nil, respErr
 		}
 	}
 
@@ -171,7 +178,18 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	} else {
 		newBodyBytes, err := contenttype.Encode(contentType, newBody)
 		if err != nil {
-			return nil, err
+			errDetail, ok := errors.AsType[*goutils.ErrorDetail](err)
+			if !ok {
+				errDetail = &goutils.ErrorDetail{
+					Detail: err.Error(),
+					Code:   oaschema.ErrCodeRequestTransformError,
+				}
+			}
+
+			respErr := goutils.NewBadRequestError(*errDetail)
+			respErr.Detail = "failed to encode transformed request body"
+
+			return nil, respErr
 		}
 
 		req.SetBody(bytes.NewReader(newBodyBytes))
@@ -213,12 +231,15 @@ func (re *RESTfulHandler) evaluateRequestPath(
 
 				value, err := param.Evaluate(rawRequestData)
 				if err != nil {
-					return "", fmt.Errorf(
-						"failed to evaluate variable %s in request path %s: %w",
-						key,
-						requestPath,
-						err,
-					)
+					respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+						Detail:    err.Error(),
+						Pointer:   "/" + param.Name,
+						Parameter: key,
+						Code:      oaschema.ErrCodeInvalidRequestURL,
+					})
+					respErr.Detail = "failed to evaluate variable"
+
+					return "", respErr
 				}
 
 				return goutils.ToString(value), nil
@@ -230,11 +251,14 @@ func (re *RESTfulHandler) evaluateRequestPath(
 				return goutils.ToString(value), nil
 			}
 
-			return "", fmt.Errorf(
-				"%w: the parameter `%s` can not be resolved",
-				errInvalidRequestPath,
-				key,
-			)
+			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+				Detail:    "the parameter can not be resolved",
+				Parameter: key,
+				Code:      oaschema.ErrCodeInvalidRequestURL,
+			})
+			respErr.Detail = "failed to evaluate request path"
+
+			return "", respErr
 		})
 	if err != nil {
 		return "", nil, err
@@ -243,7 +267,9 @@ func (re *RESTfulHandler) evaluateRequestPath(
 	return extractQueryValuesFromPath(newRequestPath)
 }
 
-func extractQueryValuesFromPath(newRequestPath string) (string, url.Values, error) {
+func extractQueryValuesFromPath(
+	newRequestPath string,
+) (string, url.Values, error) {
 	u, query, _ := strings.Cut(newRequestPath, "?")
 	if query == "" {
 		return newRequestPath, url.Values{}, nil
@@ -253,11 +279,13 @@ func extractQueryValuesFromPath(newRequestPath string) (string, url.Values, erro
 
 	q, err := url.ParseQuery(query)
 	if err != nil {
-		return "", nil, fmt.Errorf(
-			"invalid query params in request path %s: %w",
-			newRequestPath,
-			err,
-		)
+		respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+			Detail: err.Error(),
+			Code:   oaschema.ErrCodeInvalidRequestURL,
+		})
+		respErr.Detail = "invalid query params"
+
+		return "", nil, respErr
 	}
 
 	if fragment != "" {

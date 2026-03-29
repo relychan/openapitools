@@ -68,7 +68,7 @@ type RequestTemplateData struct {
 func NewRequestTemplateData(
 	request *Request,
 	paramValues map[string]string,
-) (*RequestTemplateData, error) {
+) *RequestTemplateData {
 	requestHeaders := map[string]string{}
 
 	for key, header := range request.header {
@@ -92,7 +92,7 @@ func NewRequestTemplateData(
 		requestData.QueryParams, _ = url.ParseQuery(rawQuery)
 	}
 
-	return requestData, nil
+	return requestData
 }
 
 // ToMap converts the struct to map.

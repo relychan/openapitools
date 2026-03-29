@@ -106,7 +106,7 @@ func TestProxyClient_RESTful(t *testing.T) {
 		t.Run(tc.Name+"_stream", func(t *testing.T) {
 			writer := httptest.NewRecorder()
 			request := tc.Request.WithContext(ctx)
-			response, err := client.Stream(request, writer)
+			response, err := client.Stream(writer, request)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.StatusCode, response.StatusCode)
 
@@ -189,11 +189,11 @@ func TestRESTHandler_GraphQLServer(t *testing.T) {
 
 		t.Run(tc.Name+"_stream", func(t *testing.T) {
 			writer := httptest.NewRecorder()
-			response, err := client.Stream(&http.Request{
+			response, err := client.Stream(writer, &http.Request{
 				URL:    tc.Request.GetURL(),
 				Method: tc.Request.Method(),
 				Header: tc.Request.Header(),
-			}, writer)
+			})
 			assert.NoError(t, err)
 			assert.Equal(t, tc.StatusCode, response.StatusCode)
 

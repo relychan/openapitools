@@ -15,11 +15,16 @@
 package resthandler
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v4"
 )
 
@@ -137,20 +142,49 @@ response:
 	})
 }
 
-func TestEvaluateRequestPath(t *testing.T) {
-	input := RESTfulHandler{
-		customRequest: &customRESTRequest{},
-	}
-	uri, _, err := input.evaluateRequestPath(
-		"https://localhost:8080/users/{id}/posts/{postId}",
-		&proxyhandler.RequestTemplateData{
-			Params: map[string]string{
-				"id":     "1",
-				"postId": "2",
-			},
+func TestHandle_UpstreamError(t *testing.T) {
+	handler := &RESTfulHandler{}
+	req := newRESTRequest(http.MethodGet, "/users/1", nil)
+	opts := newTestHandleOptions("http://127.0.0.1:0") // unreachable
+
+	resp, _, err := handler.Handle(context.Background(), req, opts)
+	assert.Error(t, err)
+	_ = resp
+}
+
+func TestHandle_WithCustomRequestURL(t *testing.T) {
+	var receivedPath string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer server.Close()
+
+	handler := &RESTfulHandler{
+		customRequest: &customRESTRequest{
+			URL:    server.URL + "/overridden/path",
+			Method: http.MethodPost,
 		},
-		map[string]any{},
-	)
-	assert.NoError(t, err)
-	assert.Equal(t, "https://localhost:8080/users/1/posts/2", uri)
+	}
+
+	req := newRESTRequest(http.MethodGet, "/original/path", nil)
+	opts := newTestHandleOptions(server.URL)
+
+	resp, _, err := handler.Handle(context.Background(), req, opts)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "/overridden/path", receivedPath)
+}
+
+func TestStream_UpstreamError(t *testing.T) {
+	handler := &RESTfulHandler{}
+	req := newRESTRequest(http.MethodGet, "/users/2", nil)
+	opts := newTestHandleOptions("http://127.0.0.1:0") // unreachable
+
+	recorder := httptest.NewRecorder()
+	resp, err := handler.Stream(context.Background(), req, recorder, opts)
+	assert.Error(t, err)
+	_ = resp
 }

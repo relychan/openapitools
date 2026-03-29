@@ -58,6 +58,8 @@ const (
 	ErrCodeMalformedXML = "malformed_xml"
 	// ErrCodeXMLEncodeError represents a code for a XML encoding error.
 	ErrCodeXMLEncodeError = "xml_encode_error"
+	// ErrCodeMultipartFormEncodeError represents a code for a multipart form encoding error.
+	ErrCodeMultipartFormEncodeError = "multipart_encode_error"
 	// ErrCodeRequestTransformError represents a code for a request transformation error.
 	ErrCodeRequestTransformError = "request_transform_error"
 	// ErrCodeResponseTransformError represents a code for a response transformation error.
@@ -70,4 +72,8 @@ const (
 	ErrCodeProxyRESTfulResponseConfig = "invalid_restful_response_config"
 	// ErrCodeInvalidServerURL represents a code for invalid server URL errors.
 	ErrCodeInvalidServerURL = "invalid_server_url"
+	// ErrCodeInvalidRequestURL represents a code for invalid request URL errors.
+	ErrCodeInvalidRequestURL = "invalid_request_url"
+	// ErrCodeGraphQLResponseEmpty represents a code for empty graphql response.
+	ErrCodeGraphQLResponseEmpty = "graphql_response_empty"
 )

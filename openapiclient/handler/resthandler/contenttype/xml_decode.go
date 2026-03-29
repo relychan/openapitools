@@ -29,10 +29,7 @@ func DecodeXML(r io.Reader) (any, error) {
 	for {
 		token, err := decoder.Token()
 		if err != nil {
-			return nil, &goutils.ErrorDetail{
-				Detail: err.Error(),
-				Code:   oaschema.ErrCodeMalformedXML,
-			}
+			return nil, newMalformedXMLError(err, "")
 		}
 
 		if token == nil {
@@ -42,12 +39,9 @@ func DecodeXML(r io.Reader) (any, error) {
 		if se, ok := token.(xml.StartElement); ok {
 			xmlTree := newXMLBlock(se)
 
-			err := evalXMLTree(decoder, xmlTree)
+			err := evalXMLTree(decoder, xmlTree, "/"+se.Name.Local)
 			if err != nil {
-				return nil, &goutils.ErrorDetail{
-					Detail: err.Error(),
-					Code:   oaschema.ErrCodeMalformedXML,
-				}
+				return nil, err
 			}
 
 			result := decodeArbitraryXMLBlock(xmlTree)
@@ -113,12 +107,12 @@ func newXMLBlock(start xml.StartElement) *xmlBlock {
 	}
 }
 
-func evalXMLTree(decoder *xml.Decoder, block *xmlBlock) error {
+func evalXMLTree(decoder *xml.Decoder, block *xmlBlock, pointer string) error {
 L:
 	for {
 		nextToken, err := decoder.Token()
 		if err != nil {
-			return err
+			return newMalformedXMLError(err, pointer)
 		}
 
 		if nextToken == nil {
@@ -129,7 +123,7 @@ L:
 		case xml.StartElement:
 			childBlock := newXMLBlock(tok)
 
-			err := evalXMLTree(decoder, childBlock)
+			err := evalXMLTree(decoder, childBlock, pointer+"/"+tok.Name.Local)
 			if err != nil {
 				return err
 			}
@@ -144,4 +138,12 @@ L:
 	}
 
 	return nil
+}
+
+func newMalformedXMLError(err error, pointer string) error {
+	return &goutils.ErrorDetail{
+		Detail:  err.Error(),
+		Code:    oaschema.ErrCodeMalformedXML,
+		Pointer: pointer,
+	}
 }

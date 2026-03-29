@@ -26,6 +26,7 @@ import (
 
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
+	"github.com/relychan/openapitools/oaschema"
 )
 
 // MultipartWriter extends multipart.Writer with helpers.
@@ -47,12 +48,12 @@ func (w *MultipartWriter) WriteDataURI(
 ) error {
 	b64, err := goutils.DecodeString(value)
 	if err != nil {
-		return err
+		return newMultipartWriteError(name, err)
 	}
 
 	dataURI, err := DecodeDataURI(b64)
 	if err != nil {
-		return err
+		return newMultipartWriteError(name, err)
 	}
 
 	if dataURI.MediaType == "" {
@@ -84,19 +85,22 @@ func (w *MultipartWriter) WriteBinary(
 
 	p, err := w.CreatePart(h)
 	if err != nil {
-		return err
+		return newMultipartWriteError(name, err)
 	}
 
 	_, err = p.Write(value)
+	if err != nil {
+		return newMultipartWriteError(name, err)
+	}
 
-	return err
+	return nil
 }
 
 // WriteJSON calls CreateFormField and then writes the given value with json encoding.
 func (w *MultipartWriter) WriteJSON(fieldName string, value any, headers http.Header) error {
 	bs, err := json.Marshal(value)
 	if err != nil {
-		return err
+		return newMultipartWriteError(fieldName, err)
 	}
 
 	h := createFieldMIMEHeader(fieldName, headers)
@@ -104,12 +108,15 @@ func (w *MultipartWriter) WriteJSON(fieldName string, value any, headers http.He
 
 	p, err := w.CreatePart(h)
 	if err != nil {
-		return err
+		return newMultipartWriteError(fieldName, err)
 	}
 
 	_, err = p.Write(bs)
+	if err != nil {
+		return newMultipartWriteError(fieldName, err)
+	}
 
-	return err
+	return nil
 }
 
 // WriteXML calls CreateFormField and then writes the given value with XML encoding.
@@ -121,12 +128,15 @@ func (w *MultipartWriter) WriteXML(fieldName string, value any, headers http.Hea
 
 	p, err := w.CreatePart(h)
 	if err != nil {
-		return err
+		return newMultipartWriteError(fieldName, err)
 	}
 
 	_, err = WriteXML(p, value)
+	if err != nil {
+		return newMultipartWriteError(fieldName, err)
+	}
 
-	return err
+	return nil
 }
 
 // WriteField calls CreateFormField and then writes the given value.
@@ -138,12 +148,15 @@ func (w *MultipartWriter) WriteField(fieldName, value string, headers http.Heade
 
 	p, err := w.CreatePart(h)
 	if err != nil {
-		return err
+		return newMultipartWriteError(fieldName, err)
 	}
 
 	_, err = p.Write([]byte(value))
+	if err != nil {
+		return newMultipartWriteError(fieldName, err)
+	}
 
-	return err
+	return nil
 }
 
 func createFieldMIMEHeader(fieldName string, headers http.Header) textproto.MIMEHeader {
@@ -153,4 +166,12 @@ func createFieldMIMEHeader(fieldName string, headers http.Header) textproto.MIME
 	h.Set(httpheader.ContentDisposition, "form-data; name="+strconv.Quote(fieldName))
 
 	return h
+}
+
+func newMultipartWriteError(name string, err error) error {
+	return &goutils.ErrorDetail{
+		Detail:  err.Error(),
+		Pointer: "/" + name,
+		Code:    oaschema.ErrCodeMultipartFormEncodeError,
+	}
 }
