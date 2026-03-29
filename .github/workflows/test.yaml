@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: ./go.mod
@@ -29,7 +29,7 @@ jobs:
           version: latest
       - name: Test
         run: |
-          go test -v -race -timeout 3m -coverpkg=./... -coverprofile=coverage.out ./...
+          make test
       - name: Go coverage format
         if: ${{ github.event_name == 'pull_request' && github.repository == 'relychan/openapitools' }}
         run: |
