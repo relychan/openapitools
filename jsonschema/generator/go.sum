@@ -68,8 +68,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/pb33f/jsonpath v0.8.2 h1:Ou4C7zjYClBm97dfZjDCjdZGusJoynv/vrtiEKNfj2Y=
 github.com/pb33f/jsonpath v0.8.2/go.mod h1:zBV5LJW4OQOPatmQE2QdKpGQJvhDTlE5IEj6ASaRNTo=
-github.com/pb33f/libopenapi v0.34.3 h1:3D1N56ayc7iOeEnKoy85QDe4tFbg5G1sj2J5UISi4Is=
-github.com/pb33f/libopenapi v0.34.3/go.mod h1:sD2REdvz9QSFY9enfFHBCwwwZ41k/86krTM9qtKEBwQ=
+github.com/pb33f/libopenapi v0.34.4 h1:BWWXA3U4SlsHEvfczk+DJHu2O38ktgKw+zBEYaDZ2uI=
+github.com/pb33f/libopenapi v0.34.4/go.mod h1:MsDdUlQ1CdrIDO5v26JfgBxQs7kcaOUEpMP3EqU6bI4=
 github.com/pb33f/ordered-map/v2 v2.3.1 h1:5319HDO0aw4DA4gzi+zv4FXU9UlSs3xGZ40wcP1nBjY=
 github.com/pb33f/ordered-map/v2 v2.3.1/go.mod h1:qxFQgd0PkVUtOMCkTapqotNgzRhMPL7VvaHKbd1HnmQ=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
@@ -86,8 +86,8 @@ github.com/prometheus/procfs v0.20.1 h1:XwbrGOIplXW/AU3YhIhLODXMJYyC1isLFfYCsTEy
 github.com/prometheus/procfs v0.20.1/go.mod h1:o9EMBZGRyvDrSPH1RqdxhojkuXstoe4UlK79eF5TGGo=
 github.com/relychan/gocompress v0.1.2 h1:IQfmMM/acGOm2YZde0GVK8/2Spl6p6FnHwyBHJj8+Nw=
 github.com/relychan/gocompress v0.1.2/go.mod h1:CjeGuDGHFAT8wNIOGunjJyDbtl13txB7wscu+a2SvLw=
-github.com/relychan/gohttpc v0.0.0-20260324161142-817ec6aa7ee1 h1:UprAjFw0t4mRf4Q1EUibzPG7eg5LJnPYrirkBFZZVgU=
-github.com/relychan/gohttpc v0.0.0-20260324161142-817ec6aa7ee1/go.mod h1:0lR4gK+I3PgeHDX5QRv2HIqgmm2LThGyAEhi80mND/M=
+github.com/relychan/gohttpc v0.0.0-20260328185022-c7b94bb9c0e4 h1:yPAGZ2XldQaTr3SmD9ZRDPyaJ0hTeYR6YsoFySpFogs=
+github.com/relychan/gohttpc v0.0.0-20260328185022-c7b94bb9c0e4/go.mod h1:ltcOgPF1REY4UAuyMUwEQ6DS9yr/6oig9ClrgRyVwM8=
 github.com/relychan/gotransform v0.0.0-20260324093131-a79b1f2fda47 h1:Lh/7aq2eXkQ7ut7j1k95ZyBfPf7vxO9lSExFZr4ZUzI=
 github.com/relychan/gotransform v0.0.0-20260324093131-a79b1f2fda47/go.mod h1:OlyeGsknaHO2SMDwE2P7Of+FcgiObB2HNaYWIRIoa1I=
 github.com/relychan/goutils v0.0.0-20260320085159-a456d46cc0d9 h1:+O99rq2Lu7M+zEAT29BPSWoZ8melaCMF3VoRBC+11YY=

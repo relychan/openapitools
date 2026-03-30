@@ -166,18 +166,19 @@ func (*RESTfulHandler) resolveRawResponse(
 	_, span := tracer.Start(ctx, "write_response", trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
 
-	if response.Body == nil {
+	if response.Body == nil || response.Body == http.NoBody {
 		span.SetStatus(codes.Ok, "empty response body")
 
 		return nil, nil
 	}
 
-	defer goutils.CatchWarnErrorFunc(response.Body.Close)
-
 	if writer != nil {
 		writer.WriteHeader(response.StatusCode)
 
 		_, err := io.Copy(writer, response.Body)
+
+		goutils.CatchWarnErrorFunc(response.Body.Close)
+
 		if err != nil {
 			respErr := goutils.NewServerError(goutils.ErrorDetail{
 				Code:   oaschema.ErrCodeResponseDecodeBodyError,

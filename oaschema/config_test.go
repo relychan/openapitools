@@ -24,10 +24,8 @@ import (
 )
 
 func TestOpenAPIResourceSettings_JSONMarshal(t *testing.T) {
-	expose := true
 	testKey := "test-key"
 	config := OpenAPIResourceSettings{
-		Expose:   &expose,
 		BasePath: "/api/v1",
 		Headers: map[string]goenvconf.EnvString{
 			"X-API-Key": {Value: &testKey},
@@ -40,16 +38,12 @@ func TestOpenAPIResourceSettings_JSONMarshal(t *testing.T) {
 	var result OpenAPIResourceSettings
 	err = json.Unmarshal(data, &result)
 	assert.NoError(t, err)
-	assert.True(t, result.Expose != nil)
-	assert.Equal(t, true, *result.Expose)
 	assert.Equal(t, "/api/v1", result.BasePath)
 	assert.Equal(t, 1, len(result.Headers))
 }
 
 func TestOpenAPIResourceSettings_YAMLMarshal(t *testing.T) {
-	expose := false
 	config := OpenAPIResourceSettings{
-		Expose:   &expose,
 		BasePath: "/api/v2",
 	}
 
@@ -59,8 +53,6 @@ func TestOpenAPIResourceSettings_YAMLMarshal(t *testing.T) {
 	var result OpenAPIResourceSettings
 	err = yaml.Unmarshal(data, &result)
 	assert.NoError(t, err)
-	assert.True(t, result.Expose != nil)
-	assert.Equal(t, false, *result.Expose)
 	assert.Equal(t, "/api/v2", result.BasePath)
 }
 
@@ -74,7 +66,6 @@ func TestOpenAPIResourceSettings_JSONUnmarshal(t *testing.T) {
 		{
 			name: "complete settings",
 			jsonData: `{
-				"expose": true,
 				"basePath": "/api/v1",
 				"forwardHeaders": {
 					"request": ["Authorization", "X-Request-ID"],
@@ -83,8 +74,6 @@ func TestOpenAPIResourceSettings_JSONUnmarshal(t *testing.T) {
 			}`,
 			expectError: false,
 			checkFunc: func(t *testing.T, settings *OpenAPIResourceSettings) {
-				assert.True(t, settings.Expose != nil)
-				assert.Equal(t, true, *settings.Expose)
 				assert.Equal(t, "/api/v1", settings.BasePath)
 				assert.True(t, settings.ForwardHeaders != nil)
 				assert.Equal(t, 2, len(settings.ForwardHeaders.Request))
@@ -116,7 +105,6 @@ func TestOpenAPIResourceSettings_JSONUnmarshal(t *testing.T) {
 			jsonData:    `{}`,
 			expectError: false,
 			checkFunc: func(t *testing.T, settings *OpenAPIResourceSettings) {
-				assert.True(t, settings.Expose == nil)
 				assert.Equal(t, "", settings.BasePath)
 			},
 		},
@@ -148,8 +136,7 @@ func TestOpenAPIResourceSettings_YAMLUnmarshal(t *testing.T) {
 	}{
 		{
 			name: "complete settings",
-			yamlData: `expose: true
-basePath: /api/v1
+			yamlData: `basePath: /api/v1
 forwardHeaders:
   request:
     - Authorization
@@ -158,8 +145,6 @@ forwardHeaders:
     - X-Response-ID`,
 			expectError: false,
 			checkFunc: func(t *testing.T, settings *OpenAPIResourceSettings) {
-				assert.True(t, settings.Expose != nil)
-				assert.Equal(t, true, *settings.Expose)
 				assert.Equal(t, "/api/v1", settings.BasePath)
 				assert.True(t, settings.ForwardHeaders != nil)
 				assert.Equal(t, 2, len(settings.ForwardHeaders.Request))
@@ -171,7 +156,6 @@ forwardHeaders:
 			yamlData:    `{}`,
 			expectError: false,
 			checkFunc: func(t *testing.T, settings *OpenAPIResourceSettings) {
-				assert.True(t, settings.Expose == nil)
 				assert.Equal(t, "", settings.BasePath)
 			},
 		},

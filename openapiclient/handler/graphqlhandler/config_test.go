@@ -52,14 +52,14 @@ func TestProxyCustomGraphQLResponseConfigIsZero(t *testing.T) {
 // TestNewProxyCustomGraphQLResponse tests creating custom GraphQL response
 func TestNewProxyCustomGraphQLResponse(t *testing.T) {
 	t.Run("nil_config", func(t *testing.T) {
-		result, err := NewProxyCustomGraphQLResponse(nil, nil)
+		result, err := newProxyCustomGraphQLResponse(nil, nil)
 		assert.NoError(t, err)
 		assert.True(t, result == nil)
 	})
 
 	t.Run("empty_config", func(t *testing.T) {
 		config := &ProxyCustomGraphQLResponseConfig{}
-		result, err := NewProxyCustomGraphQLResponse(config, nil)
+		result, err := newProxyCustomGraphQLResponse(config, nil)
 		assert.NoError(t, err)
 		assert.True(t, result == nil)
 	})
@@ -69,7 +69,7 @@ func TestNewProxyCustomGraphQLResponse(t *testing.T) {
 		config := &ProxyCustomGraphQLResponseConfig{
 			HTTPErrorCode: &errorCode,
 		}
-		result, err := NewProxyCustomGraphQLResponse(config, nil)
+		result, err := newProxyCustomGraphQLResponse(config, nil)
 		assert.NoError(t, err)
 		assert.True(t, result != nil)
 		assert.Equal(t, 400, *result.HTTPErrorCode)
@@ -80,17 +80,17 @@ func TestNewProxyCustomGraphQLResponse(t *testing.T) {
 func TestProxyCustomGraphQLResponseIsZero(t *testing.T) {
 	testCases := []struct {
 		name     string
-		response ProxyCustomGraphQLResponse
+		response proxyCustomGraphQLResponse
 		expected bool
 	}{
 		{
 			name:     "empty_response",
-			response: ProxyCustomGraphQLResponse{},
+			response: proxyCustomGraphQLResponse{},
 			expected: true,
 		},
 		{
 			name: "with_http_error_code",
-			response: ProxyCustomGraphQLResponse{
+			response: proxyCustomGraphQLResponse{
 				HTTPErrorCode: func() *int { i := 400; return &i }(),
 			},
 			expected: false,

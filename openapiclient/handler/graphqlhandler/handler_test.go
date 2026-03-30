@@ -178,7 +178,7 @@ func TestHandle_WithCustomErrorCode(t *testing.T) {
 		extensions: map[string]jmes.FieldMappingEntry{},
 		headers:    map[string]jmes.FieldMappingEntryString{},
 		url:        server.URL,
-		customResponse: &ProxyCustomGraphQLResponse{
+		customResponse: &proxyCustomGraphQLResponse{
 			HTTPErrorCode: &errorCode,
 		},
 	}
@@ -358,7 +358,7 @@ func TestTransformResponse_WithBodyTransform(t *testing.T) {
 	}
 
 	handler := &GraphQLHandler{
-		customResponse: &ProxyCustomGraphQLResponse{
+		customResponse: &proxyCustomGraphQLResponse{
 			HTTPErrorCode: &errorCode,
 		},
 	}

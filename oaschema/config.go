@@ -23,8 +23,6 @@ import (
 
 // OpenAPIResourceSettings hold settings of the rely proxy.
 type OpenAPIResourceSettings struct {
-	// Whether exposing the API resource. Default is true.
-	Expose *bool `json:"expose,omitempty" yaml:"expose,omitempty"`
 	// Base path of the resource.
 	BasePath string `json:"basePath,omitempty" yaml:"basePath,omitempty"`
 	// Global settings for the HTTP client.

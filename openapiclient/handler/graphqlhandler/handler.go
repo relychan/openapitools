@@ -27,8 +27,10 @@ import (
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
+	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"github.com/vektah/gqlparser/ast"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -47,10 +49,11 @@ type GraphQLHandler struct {
 	operation           ast.Operation
 	variableDefinitions ast.VariableDefinitionList
 	// The configuration to transform request headers.
-	headers        map[string]jmes.FieldMappingEntryString
-	variables      map[string]jmes.FieldMappingEntry
-	extensions     map[string]jmes.FieldMappingEntry
-	customResponse *ProxyCustomGraphQLResponse
+	headers             map[string]jmes.FieldMappingEntryString
+	variables           map[string]jmes.FieldMappingEntry
+	extensions          map[string]jmes.FieldMappingEntry
+	customResponse      *proxyCustomGraphQLResponse
+	responseContentType string
 }
 
 // NewGraphQLHandler creates a GraphQL request from operation.
@@ -60,7 +63,7 @@ func NewGraphQLHandler( //nolint:ireturn,nolintlint
 	options *proxyhandler.NewProxyHandlerOptions,
 ) (proxyhandler.ProxyHandler, error) {
 	if rawProxyAction == nil {
-		return nil, ErrProxyActionInvalid
+		return nil, ErrProxyActionRequired
 	}
 
 	var proxyAction ProxyGraphQLActionConfig
@@ -71,7 +74,7 @@ func NewGraphQLHandler( //nolint:ireturn,nolintlint
 	}
 
 	if proxyAction.Request == nil {
-		return nil, fmt.Errorf("%w: proxy request config is required", ErrProxyActionInvalid)
+		return nil, ErrGraphQLQueryEmpty
 	}
 
 	handler, err := ValidateGraphQLString(proxyAction.Request.Query)
@@ -80,6 +83,18 @@ func NewGraphQLHandler( //nolint:ireturn,nolintlint
 	}
 
 	handler.url = proxyAction.Request.URL
+
+	responseContentType := oaschema.GetResponseContentTypeFromOperation(operation)
+	if responseContentType == "" {
+		handler.responseContentType = httpheader.ContentTypeJSON
+	} else {
+		handler.responseContentType, err = oaschema.ValidateContentType(
+			responseContentType,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	getEnvFunc := options.GetEnvFunc()
 	handler.parameters = oaschema.MergeParameters(options.Parameters, operation.Parameters)
@@ -108,7 +123,7 @@ func NewGraphQLHandler( //nolint:ireturn,nolintlint
 		return nil, fmt.Errorf("failed to initialize custom request extensions config: %w", err)
 	}
 
-	handler.customResponse, err = NewProxyCustomGraphQLResponse(
+	handler.customResponse, err = newProxyCustomGraphQLResponse(
 		proxyAction.Response,
 		getEnvFunc,
 	)
@@ -221,9 +236,11 @@ func (ge *GraphQLHandler) Stream(
 		return resp, err
 	}
 
-	err = json.NewEncoder(writer).Encode(data)
+	writer.Header().Set(httpheader.ContentType, ge.responseContentType)
+
+	_, err = contenttype.Write(writer, ge.responseContentType, data)
 	if err != nil {
-		return nil, newGraphQLResponseEncodeError(request, oaschema.ErrCodeWriteResponseError, err)
+		return resp, newGraphQLResponseEncodeError(request, oaschema.ErrCodeWriteResponseError, err)
 	}
 
 	return resp, nil

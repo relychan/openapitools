@@ -815,10 +815,6 @@
   },
   "OpenAPIResourceSettings": {
    "properties": {
-    "expose": {
-     "type": "boolean",
-     "description": "Whether exposing the API resource. Default is true."
-    },
     "basePath": {
      "type": "string",
      "description": "Base path of the resource."

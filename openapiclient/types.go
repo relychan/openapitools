@@ -23,8 +23,13 @@ import (
 var tracer = gotel.NewTracer("openapitools")
 
 var (
-	errServerURLRequired = errors.New("server url is required")
+	ErrServerURLRequired = errors.New("server url is required")
 	ErrNoAvailableServer = errors.New(
 		"failed to initialize servers. Require at least 1 server has URL",
 	)
 )
+
+type tracingResponseWriter interface {
+	// BytesWritten returns the total number of bytes sent to the client.
+	BytesWritten() int
+}

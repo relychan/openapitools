@@ -15,8 +15,10 @@
 package openapiclient
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"slices"
 	"strings"
@@ -32,7 +34,7 @@ import (
 )
 
 // newRequest creates a new proxy request from an HTTP request.
-func newRequest(request *http.Request) (*proxyhandler.Request, error) {
+func newRequest(writer http.ResponseWriter, request *http.Request) (*proxyhandler.Request, error) {
 	req := proxyhandler.NewRequest(request.Method, request.URL, request.Header, nil)
 
 	if request.Body == nil || request.Body == http.NoBody {
@@ -42,24 +44,55 @@ func newRequest(request *http.Request) (*proxyhandler.Request, error) {
 	contentType := request.Header.Get(httpheader.ContentType)
 
 	decodedBody, err := contenttype.Decode(contentType, request.Body)
-	if err != nil {
-		errorDetail, ok := errors.AsType[*goutils.ErrorDetail](err)
-		if !ok {
-			errorDetail = &goutils.ErrorDetail{
-				Detail: err.Error(),
-				Code:   oaschema.ErrCodeRequestDecodeBodyError,
-			}
-		}
+	if err == nil {
+		req.SetBody(decodedBody)
 
-		respErr := goutils.NewBadRequestError(*errorDetail)
-		respErr.Detail = "failed to decode request"
-
-		return nil, respErr
+		return req, nil
 	}
 
-	req.SetBody(decodedBody)
+	errorDetail, ok := errors.AsType[*goutils.ErrorDetail](err)
+	if !ok {
+		errorDetail = &goutils.ErrorDetail{
+			Detail: err.Error(),
+			Code:   oaschema.ErrCodeRequestDecodeBodyError,
+		}
+	}
 
-	return req, nil
+	respErr := goutils.NewBadRequestError(*errorDetail)
+	respErr.Detail = "failed to decode request"
+
+	if writer != nil {
+		writeErrorResponse(writer, respErr)
+	}
+
+	return nil, respErr
+}
+
+func writeErrorResponse(writer http.ResponseWriter, err *goutils.RFC9457Error) {
+	tracingWriter, ok := writer.(tracingResponseWriter)
+	if ok && tracingWriter.BytesWritten() > 0 {
+		// The writer were already written. Do not write again.
+		return
+	}
+
+	writer.Header().Set(httpheader.ContentType, httpheader.ContentTypeJSON)
+	writer.WriteHeader(err.Status)
+
+	writeErr := json.NewEncoder(writer).Encode(err)
+	if writeErr == nil {
+		return
+	}
+
+	if ok && tracingWriter.BytesWritten() > 0 {
+		// The writer were already written. Do not write again.
+		return
+	}
+
+	_, _ = fmt.Fprintf(
+		writer,
+		`{"title":"Internal Server Error","detail":"%s"}`,
+		html.EscapeString(writeErr.Error()),
+	)
 }
 
 // parse server url from static string or environment variables.

@@ -15,17 +15,14 @@
 package resthandler
 
 import (
-	"mime"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/hasura/goenvconf"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gotransform"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/goutils"
-	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
@@ -212,7 +209,7 @@ func parseRequestContentType(
 		contentType = oaschema.GetDefaultContentType(operation.RequestBody.Content)
 	}
 
-	result, err := ValidateContentType(contentType)
+	result, err := oaschema.ValidateContentType(contentType)
 	if err != nil {
 		return "", &goutils.ErrorDetail{
 			Detail:  err.Error() + " " + contentType,
@@ -224,39 +221,6 @@ func parseRequestContentType(
 	return result, nil
 }
 
-// ValidateContentType validates the content type and prefer the application/json content type
-// if the content type string has many content types.
-func ValidateContentType(contentType string) (string, error) {
-	if contentType == "" {
-		return contentType, nil
-	}
-
-	var result string
-
-	for item := range strings.SplitSeq(contentType, ",") {
-		trimmed := strings.TrimSpace(item)
-
-		parsed, _, err := mime.ParseMediaType(trimmed)
-		if err != nil {
-			continue
-		}
-
-		if parsed == httpheader.ContentTypeJSON {
-			return trimmed, nil
-		}
-
-		if result == "" {
-			result = trimmed
-		}
-	}
-
-	if result != "" {
-		return result, nil
-	}
-
-	return "", oaschema.ErrInvalidContentType
-}
-
 func parseResponseContentType(
 	operation *highv3.Operation,
 	conf *ProxyCustomRESTfulResponseConfig,
@@ -265,29 +229,11 @@ func parseResponseContentType(
 
 	if conf != nil && conf.ContentType != "" {
 		contentType = conf.ContentType
-	} else if operation.Responses != nil {
-		var successResponse *highv3.Response
-
-		for iter := operation.Responses.Codes.First(); iter != nil; iter = iter.Next() {
-			status := iter.Key()
-
-			if status == "200" || status == "201" || status == "204" {
-				successResponse = iter.Value()
-
-				break
-			}
-		}
-
-		if successResponse == nil && operation.Responses.Default != nil {
-			successResponse = operation.Responses.Default
-		}
-
-		if successResponse != nil {
-			contentType = oaschema.GetDefaultContentType(successResponse.Content)
-		}
+	} else {
+		contentType = oaschema.GetResponseContentTypeFromOperation(operation)
 	}
 
-	result, err := ValidateContentType(contentType)
+	result, err := oaschema.ValidateContentType(contentType)
 	if err != nil {
 		return "", &goutils.ErrorDetail{
 			Detail:  err.Error() + " " + contentType,

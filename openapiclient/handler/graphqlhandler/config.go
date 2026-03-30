@@ -71,8 +71,8 @@ func (conf ProxyCustomGraphQLResponseConfig) IsZero() bool {
 		(conf.Body == nil || conf.Body.IsZero())
 }
 
-// ProxyCustomGraphQLResponse represents configurations for the proxy response.
-type ProxyCustomGraphQLResponse struct {
+// proxyCustomGraphQLResponse represents configurations for the proxy response.
+type proxyCustomGraphQLResponse struct {
 	// HTTP error code will be used if the response body has errors.
 	// If not set, forward the HTTP status from the upstream response which is usually 200 OK.
 	HTTPErrorCode *int
@@ -80,16 +80,16 @@ type ProxyCustomGraphQLResponse struct {
 	Body gotransform.TemplateTransformer
 }
 
-// NewProxyCustomGraphQLResponse creates a [ProxyCustomGraphQLResponse] from raw configurations.
-func NewProxyCustomGraphQLResponse(
+// newProxyCustomGraphQLResponse creates a [proxyCustomGraphQLResponse] from raw configurations.
+func newProxyCustomGraphQLResponse(
 	config *ProxyCustomGraphQLResponseConfig,
 	getEnv goenvconf.GetEnvFunc,
-) (*ProxyCustomGraphQLResponse, error) {
+) (*proxyCustomGraphQLResponse, error) {
 	if config == nil || config.IsZero() {
 		return nil, nil
 	}
 
-	result := &ProxyCustomGraphQLResponse{
+	result := &proxyCustomGraphQLResponse{
 		HTTPErrorCode: config.HTTPErrorCode,
 	}
 
@@ -106,7 +106,7 @@ func NewProxyCustomGraphQLResponse(
 }
 
 // IsZero checks if the configuration is empty.
-func (conf ProxyCustomGraphQLResponse) IsZero() bool {
+func (conf proxyCustomGraphQLResponse) IsZero() bool {
 	return conf.HTTPErrorCode == nil &&
 		(conf.Body == nil || conf.Body.IsZero())
 }

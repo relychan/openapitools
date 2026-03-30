@@ -99,10 +99,7 @@ func (ge *GraphQLHandler) prepareRequest(
 
 	reader := new(bytes.Buffer)
 
-	enc := json.NewEncoder(reader)
-	enc.SetEscapeHTML(false)
-
-	err = enc.Encode(graphqlPayload)
+	err = json.NewEncoder(reader).Encode(graphqlPayload)
 	if err != nil {
 		ge.printLog(
 			ctx,
