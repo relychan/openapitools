@@ -153,7 +153,7 @@ func (pc *ProxyClient) initDefaultHeaders() error {
 
 func (pc *ProxyClient) initServers(spec *highv3.Document) error {
 	if len(spec.Servers) == 0 {
-		return errServerURLRequired
+		return ErrServerURLRequired
 	}
 
 	var err error

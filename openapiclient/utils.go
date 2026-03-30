@@ -69,11 +69,22 @@ func newRequest(writer http.ResponseWriter, request *http.Request) (*proxyhandle
 }
 
 func writeErrorResponse(writer http.ResponseWriter, err *goutils.RFC9457Error) {
+	tracingWriter, ok := writer.(tracingResponseWriter)
+	if ok && tracingWriter.BytesWritten() > 0 {
+		// The writer were already written. Do not write again.
+		return
+	}
+
 	writer.Header().Set(httpheader.ContentType, httpheader.ContentTypeJSON)
 	writer.WriteHeader(err.Status)
 
 	writeErr := json.NewEncoder(writer).Encode(err)
 	if writeErr == nil {
+		return
+	}
+
+	if ok && tracingWriter.BytesWritten() > 0 {
+		// The writer were already written. Do not write again.
 		return
 	}
 
