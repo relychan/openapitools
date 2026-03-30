@@ -6,9 +6,9 @@ require (
 	github.com/failsafe-go/failsafe-go v0.9.6
 	github.com/hasura/goenvconf v0.6.2
 	github.com/hasura/gotel v0.7.2
-	github.com/pb33f/libopenapi v0.34.3
+	github.com/pb33f/libopenapi v0.34.4
 	github.com/pb33f/ordered-map/v2 v2.3.1
-	github.com/relychan/gohttpc v0.0.0-20260328183400-0176589b122a
+	github.com/relychan/gohttpc v0.0.0-20260328185022-c7b94bb9c0e4
 	github.com/relychan/gotransform v0.0.0-20260324093131-a79b1f2fda47
 	github.com/relychan/goutils v0.0.0-20260320085159-a456d46cc0d9
 	github.com/stretchr/testify v1.11.1

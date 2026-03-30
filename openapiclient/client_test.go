@@ -27,6 +27,7 @@ import (
 
 	"github.com/hasura/gotel/otelutils"
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/stretchr/testify/assert"
@@ -57,6 +58,7 @@ func TestProxyClient_RESTful(t *testing.T) {
 		Request      *http.Request
 		StatusCode   int
 		ResponseBody any
+		ErrorMessage string
 	}{
 		{
 			Name: "getAlbums",
@@ -67,6 +69,19 @@ func TestProxyClient_RESTful(t *testing.T) {
 				Method: "GET",
 			},
 			StatusCode: 200,
+		},
+		{
+			Name: "countAlbums",
+			Request: &http.Request{
+				URL: &url.URL{
+					Path: "/api/v1/albums-count",
+				},
+				Method: http.MethodPost,
+			},
+			StatusCode: 200,
+			ResponseBody: map[string]any{
+				"count": float64(100),
+			},
 		},
 		{
 			Name: "getPostByID",
@@ -84,6 +99,17 @@ func TestProxyClient_RESTful(t *testing.T) {
 				"body":   "quia et suscipit\nsuscipit recusandae consequuntur expedita et cum\nreprehenderit molestiae ut ut quas totam\nnostrum rerum est autem sunt rem eveniet architecto",
 			},
 		},
+		{
+			Name: "notFound",
+			Request: &http.Request{
+				URL: &url.URL{
+					Path: "/not-found",
+				},
+				Method: "GET",
+			},
+			StatusCode:   404,
+			ErrorMessage: "not found",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -95,8 +121,13 @@ func TestProxyClient_RESTful(t *testing.T) {
 				tc.Request.Header,
 				nil,
 			)
-			assert.NoError(t, err)
-			assert.Equal(t, tc.StatusCode, response.StatusCode)
+
+			if tc.ErrorMessage != "" {
+				assert.ErrorContains(t, err, tc.ErrorMessage)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.StatusCode, response.StatusCode)
+			}
 
 			if tc.ResponseBody != nil {
 				assert.Equal(t, tc.ResponseBody, respBody)
@@ -106,9 +137,16 @@ func TestProxyClient_RESTful(t *testing.T) {
 		t.Run(tc.Name+"_stream", func(t *testing.T) {
 			writer := httptest.NewRecorder()
 			request := tc.Request.WithContext(ctx)
-			response, err := client.Stream(writer, request)
-			assert.NoError(t, err)
-			assert.Equal(t, tc.StatusCode, response.StatusCode)
+			_, err := client.Stream(writer, request)
+
+			if tc.ErrorMessage != "" {
+				assert.ErrorContains(t, err, tc.ErrorMessage)
+				assert.Equal(t, httpheader.ContentTypeJSON, writer.Header().Get(httpheader.ContentType))
+			} else {
+				assert.NoError(t, err)
+			}
+
+			assert.Equal(t, tc.StatusCode, writer.Code)
 
 			if tc.ResponseBody != nil {
 				var respBody any
@@ -118,11 +156,6 @@ func TestProxyClient_RESTful(t *testing.T) {
 			}
 		})
 	}
-
-	t.Run("not_found", func(t *testing.T) {
-		_, _, err := client.Execute(ctx, "GET", "/not-found", nil, nil)
-		assert.Error(t, err, "not found")
-	})
 }
 
 func TestRESTHandler_GraphQLServer(t *testing.T) {
@@ -145,6 +178,7 @@ func TestRESTHandler_GraphQLServer(t *testing.T) {
 		Request      *proxyhandler.Request
 		StatusCode   int
 		ResponseBody any
+		ErrorMessage string
 	}{
 		{
 			Name: "getCharacters",
@@ -168,6 +202,14 @@ func TestRESTHandler_GraphQLServer(t *testing.T) {
 				},
 			},
 		},
+		{
+			Name: "notFound",
+			Request: proxyhandler.NewRequest("GET", &url.URL{
+				Path: "/not-found",
+			}, nil, nil),
+			StatusCode:   404,
+			ErrorMessage: "not found",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -179,8 +221,13 @@ func TestRESTHandler_GraphQLServer(t *testing.T) {
 				tc.Request.Header(),
 				tc.Request.Body(),
 			)
-			assert.NoError(t, err)
-			assert.Equal(t, tc.StatusCode, response.StatusCode)
+
+			if tc.ErrorMessage != "" {
+				assert.ErrorContains(t, err, tc.ErrorMessage)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.StatusCode, response.StatusCode)
+			}
 
 			if tc.ResponseBody != nil {
 				assert.Equal(t, tc.ResponseBody, result)
@@ -189,13 +236,20 @@ func TestRESTHandler_GraphQLServer(t *testing.T) {
 
 		t.Run(tc.Name+"_stream", func(t *testing.T) {
 			writer := httptest.NewRecorder()
-			response, err := client.Stream(writer, &http.Request{
+			_, err := client.Stream(writer, &http.Request{
 				URL:    tc.Request.GetURL(),
 				Method: tc.Request.Method(),
 				Header: tc.Request.Header(),
 			})
-			assert.NoError(t, err)
-			assert.Equal(t, tc.StatusCode, response.StatusCode)
+
+			if tc.ErrorMessage != "" {
+				assert.ErrorContains(t, err, tc.ErrorMessage)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			assert.Equal(t, tc.StatusCode, writer.Code)
+			assert.Equal(t, httpheader.ContentTypeJSON, writer.Header().Get(httpheader.ContentType))
 
 			if tc.ResponseBody != nil {
 				var respBody any

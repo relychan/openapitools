@@ -24,7 +24,6 @@ func genJSONSchema() error {
 
 	buffer := new(bytes.Buffer)
 	enc := json.NewEncoder(buffer)
-	enc.SetEscapeHTML(false)
 	enc.SetIndent("", " ")
 
 	err = enc.Encode(openapiSchema)

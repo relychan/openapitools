@@ -15,6 +15,7 @@
 package oaschema
 
 import (
+	"mime"
 	"slices"
 	"strings"
 
@@ -111,6 +112,68 @@ func GetDefaultContentType(contents *orderedmap.Map[string, *highv3.MediaType]) 
 	}
 
 	return contentType
+}
+
+// GetResponseContentTypeFromOperation gets the successful content type of the operation.
+func GetResponseContentTypeFromOperation(operation *highv3.Operation) string {
+	if operation.Responses == nil {
+		return ""
+	}
+
+	var successResponse *highv3.Response
+
+	for iter := operation.Responses.Codes.First(); iter != nil; iter = iter.Next() {
+		status := iter.Key()
+
+		if status == "200" || status == "201" || status == "204" {
+			successResponse = iter.Value()
+
+			break
+		}
+	}
+
+	if successResponse != nil {
+		return GetDefaultContentType(successResponse.Content)
+	}
+
+	if operation.Responses.Default != nil {
+		return GetDefaultContentType(operation.Responses.Default.Content)
+	}
+
+	return ""
+}
+
+// ValidateContentType validates the content type and prefer the application/json content type
+// if the content type string has many content types.
+func ValidateContentType(contentType string) (string, error) {
+	if contentType == "" {
+		return contentType, nil
+	}
+
+	var result string
+
+	for item := range strings.SplitSeq(contentType, ",") {
+		trimmed := strings.TrimSpace(item)
+
+		parsed, _, err := mime.ParseMediaType(trimmed)
+		if err != nil {
+			continue
+		}
+
+		if parsed == httpheader.ContentTypeJSON {
+			return trimmed, nil
+		}
+
+		if result == "" {
+			result = trimmed
+		}
+	}
+
+	if result != "" {
+		return result, nil
+	}
+
+	return "", ErrInvalidContentType
 }
 
 // IsContentTypeXML checks if the content type is XML.

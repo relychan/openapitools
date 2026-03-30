@@ -245,7 +245,7 @@ func TestNewGraphQLHandler(t *testing.T) {
 		options := &proxyhandler.NewProxyHandlerOptions{}
 
 		handler, err := NewGraphQLHandler(operation, nil, options)
-		assert.ErrorIs(t, err, ErrProxyActionInvalid)
+		assert.ErrorIs(t, err, ErrProxyActionRequired)
 		assert.True(t, handler == nil)
 	})
 
@@ -274,7 +274,7 @@ func TestNewGraphQLHandler(t *testing.T) {
 		_ = yaml.Unmarshal(configData, &rawAction)
 
 		handler, err := NewGraphQLHandler(operation, &rawAction, options)
-		assert.ErrorContains(t, err, "proxy request config is required")
+		assert.ErrorContains(t, err, ErrGraphQLQueryEmpty.Error())
 		assert.True(t, handler == nil)
 	})
 
@@ -680,7 +680,7 @@ func TestTransformResponse(t *testing.T) {
 	t.Run("response_with_errors_and_custom_error_code", func(t *testing.T) {
 		errorCode := 400
 		handler := &GraphQLHandler{
-			customResponse: &ProxyCustomGraphQLResponse{
+			customResponse: &proxyCustomGraphQLResponse{
 				HTTPErrorCode: &errorCode,
 			},
 		}
@@ -708,7 +708,7 @@ func TestTransformResponse(t *testing.T) {
 	t.Run("response_without_errors_keeps_status", func(t *testing.T) {
 		errorCode := 400
 		handler := &GraphQLHandler{
-			customResponse: &ProxyCustomGraphQLResponse{
+			customResponse: &proxyCustomGraphQLResponse{
 				HTTPErrorCode: &errorCode,
 			},
 		}

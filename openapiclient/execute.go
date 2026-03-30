@@ -33,20 +33,20 @@ import (
 
 // Stream routes the request to the remote server. The response will be transformed and written into the stream.
 func (pc *ProxyClient) Stream(
-	w http.ResponseWriter,
-	r *http.Request,
+	writer http.ResponseWriter,
+	request *http.Request,
 ) (*http.Response, error) {
-	spanName := pc.buildSpanName("Stream", r.URL)
+	spanName := pc.buildSpanName("Stream", request.URL)
 
-	ctx, span := tracer.Start(r.Context(), spanName)
+	ctx, span := tracer.Start(request.Context(), spanName)
 	defer span.End()
 
 	span.SetAttributes(
-		semconv.HTTPRequestMethodKey.String(r.Method),
-		semconv.URLOriginal(r.URL.String()),
+		semconv.HTTPRequestMethodKey.String(request.Method),
+		semconv.URLOriginal(request.URL.String()),
 	)
 
-	req, err := newRequest(r)
+	req, err := newRequest(writer, request)
 	if err != nil {
 		span.SetStatus(codes.Error, "failed to decode request body")
 		span.RecordError(err)
@@ -54,14 +54,18 @@ func (pc *ProxyClient) Stream(
 		return nil, err
 	}
 
-	route, options, err := pc.prepareRequest(span, req)
+	route, options, err := pc.prepareRequest(span, writer, req)
 	if err != nil {
 		return nil, err
 	}
 
-	response, err := route.Method.Handler.Stream(ctx, req, w, options)
+	response, err := route.Method.Handler.Stream(ctx, req, writer, options)
 	if err != nil {
-		return response, pc.handleError(span, err, r.URL.Path)
+		respErr := pc.handleError(span, err, request.URL.Path)
+
+		writeErrorResponse(writer, respErr)
+
+		return response, respErr
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -95,7 +99,7 @@ func (pc *ProxyClient) Execute(
 
 	request := proxyhandler.NewRequest(method, requestURL, header, body)
 
-	route, options, err := pc.prepareRequest(span, request)
+	route, options, err := pc.prepareRequest(span, nil, request)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -112,6 +116,7 @@ func (pc *ProxyClient) Execute(
 
 func (pc *ProxyClient) prepareRequest(
 	span trace.Span,
+	writer http.ResponseWriter,
 	request *proxyhandler.Request,
 ) (*internal.Route, *proxyhandler.ProxyHandleOptions, error) {
 	if pc.CustomAttributesFunc != nil {
@@ -120,17 +125,6 @@ func (pc *ProxyClient) prepareRequest(
 
 	requestURL := request.GetURL()
 	originalPath := requestURL.Path
-
-	if pc.metadata.Settings != nil && pc.metadata.Settings.Expose != nil &&
-		!*pc.metadata.Settings.Expose {
-		span.SetStatus(codes.Error, "metadata is not exposed")
-
-		// This API isn't exposed. Returns HTTP 404
-		err := goutils.NewNotFoundError()
-		err.Instance = requestURL.Path
-
-		return nil, nil, err
-	}
 
 	if pc.metadata.Settings != nil &&
 		pc.metadata.Settings.BasePath != "" &&
@@ -151,6 +145,10 @@ func (pc *ProxyClient) prepareRequest(
 
 		err := goutils.NewNotFoundError()
 		err.Instance = originalPath
+
+		if writer != nil {
+			writeErrorResponse(writer, err)
+		}
 
 		return nil, nil, err
 	}
