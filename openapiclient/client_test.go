@@ -21,7 +21,6 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -38,7 +37,6 @@ import (
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,7 +48,7 @@ func TestProxyClient_RESTful(t *testing.T) {
 	}))
 
 	config, err := goutils.ReadJSONOrYAMLFile[oaschema.OpenAPIResourceDefinition](context.TODO(), configPath)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	client, err := NewProxyClient(
 		context.TODO(),
@@ -58,7 +56,7 @@ func TestProxyClient_RESTful(t *testing.T) {
 		nil,
 		WithTimeout(time.Minute),
 	)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	ctx := otelutils.NewContextWithLogger(context.TODO(), logger)
 
@@ -132,14 +130,14 @@ func TestProxyClient_RESTful(t *testing.T) {
 			)
 
 			if tc.ErrorMessage != "" {
-				assert.ErrorContains(t, err, tc.ErrorMessage)
+				require.ErrorContains(t, err, tc.ErrorMessage)
 			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tc.StatusCode, response.StatusCode)
+				require.NoError(t, err)
+				require.Equal(t, tc.StatusCode, response.StatusCode)
 			}
 
 			if tc.ResponseBody != nil {
-				assert.Equal(t, tc.ResponseBody, respBody)
+				require.Equal(t, tc.ResponseBody, respBody)
 			}
 		})
 
@@ -149,19 +147,19 @@ func TestProxyClient_RESTful(t *testing.T) {
 			_, err := client.Stream(writer, request)
 
 			if tc.ErrorMessage != "" {
-				assert.ErrorContains(t, err, tc.ErrorMessage)
-				assert.Equal(t, httpheader.ContentTypeJSON, writer.Header().Get(httpheader.ContentType))
+				require.ErrorContains(t, err, tc.ErrorMessage)
+				require.Equal(t, httpheader.ContentTypeJSON, writer.Header().Get(httpheader.ContentType))
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 
-			assert.Equal(t, tc.StatusCode, writer.Code)
+			require.Equal(t, tc.StatusCode, writer.Code)
 
 			if tc.ResponseBody != nil {
 				var respBody any
 				err := json.Unmarshal(writer.Body.Bytes(), &respBody)
-				assert.NoError(t, err)
-				assert.Equal(t, tc.ResponseBody, respBody)
+				require.NoError(t, err)
+				require.Equal(t, tc.ResponseBody, respBody)
 			}
 		})
 	}
@@ -175,10 +173,10 @@ func TestRESTHandler_GraphQLServer(t *testing.T) {
 	}))
 
 	config, err := goutils.ReadJSONOrYAMLFile[oaschema.OpenAPIResourceDefinition](context.TODO(), configPath)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	client, err := NewProxyClient(context.TODO(), config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	ctx := otelutils.NewContextWithLogger(context.TODO(), logger)
 
@@ -232,14 +230,14 @@ func TestRESTHandler_GraphQLServer(t *testing.T) {
 			)
 
 			if tc.ErrorMessage != "" {
-				assert.ErrorContains(t, err, tc.ErrorMessage)
+				require.ErrorContains(t, err, tc.ErrorMessage)
 			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tc.StatusCode, response.StatusCode)
+				require.NoError(t, err)
+				require.Equal(t, tc.StatusCode, response.StatusCode)
 			}
 
 			if tc.ResponseBody != nil {
-				assert.Equal(t, tc.ResponseBody, result)
+				require.Equal(t, tc.ResponseBody, result)
 			}
 		})
 
@@ -252,19 +250,19 @@ func TestRESTHandler_GraphQLServer(t *testing.T) {
 			})
 
 			if tc.ErrorMessage != "" {
-				assert.ErrorContains(t, err, tc.ErrorMessage)
+				require.ErrorContains(t, err, tc.ErrorMessage)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 
-			assert.Equal(t, tc.StatusCode, writer.Code)
-			assert.Equal(t, httpheader.ContentTypeJSON, writer.Header().Get(httpheader.ContentType))
+			require.Equal(t, tc.StatusCode, writer.Code)
+			require.Equal(t, httpheader.ContentTypeJSON, writer.Header().Get(httpheader.ContentType))
 
 			if tc.ResponseBody != nil {
 				var respBody any
 				err := json.Unmarshal(writer.Body.Bytes(), &respBody)
-				assert.NoError(t, err)
-				assert.Equal(t, tc.ResponseBody, respBody)
+				require.NoError(t, err)
+				require.Equal(t, tc.ResponseBody, respBody)
 			}
 		})
 	}
@@ -297,7 +295,7 @@ func TestProxyClient_Auth(t *testing.T) {
 	}))
 
 	config, err := goutils.ReadJSONOrYAMLFile[oaschema.OpenAPIResourceDefinition](context.TODO(), configPath)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	client, err := NewProxyClient(
 		context.TODO(),
@@ -305,7 +303,9 @@ func TestProxyClient_Auth(t *testing.T) {
 		nil,
 		WithTimeout(time.Minute),
 	)
-	assert.NoError(t, err)
+	require.NoError(t, err)
+
+	defer client.Close()
 
 	ctx := otelutils.NewContextWithLogger(context.TODO(), logger)
 
@@ -500,9 +500,8 @@ func createMockServer(t *testing.T) *mockServerState {
 
 	// load CA certificate file and add it to list of client CAs
 	caCertFile, err := os.ReadFile(filepath.Join(dir, "ca.crt"))
-	if err != nil {
-		log.Fatalf("error reading CA certificate: %v", err)
-	}
+	require.NoError(t, err)
+
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM(caCertFile)
 
@@ -511,6 +510,7 @@ func createMockServer(t *testing.T) *mockServerState {
 		filepath.Join(dir, "server.pem"),
 		filepath.Join(dir, "server.key"),
 	)
+	require.NoError(t, err)
 
 	tlsConfig = &tls.Config{
 		ClientCAs:    caCertPool,

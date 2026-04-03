@@ -66,11 +66,17 @@ func (pc *ProxyClient) Metadata() *oaschema.OpenAPIResourceDefinition {
 
 // Close method performs cleanup and closure activities on the client instance.
 func (pc *ProxyClient) Close() error {
+	var err error
+
 	if pc.lbClient != nil {
-		return pc.lbClient.Close()
+		err = pc.lbClient.Close()
 	}
 
-	return nil
+	if pc.HTTPClient != nil {
+		pc.HTTPClient.CloseIdleConnections()
+	}
+
+	return err
 }
 
 func (pc *ProxyClient) init(ctx context.Context, clientOpts []ClientOption) error {

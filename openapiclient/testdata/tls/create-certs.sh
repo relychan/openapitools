@@ -12,7 +12,6 @@ ADDEXT="subjectAltName = DNS:localhost,IP:127.0.0.1"
 
 function generate_client() {
   CLIENT=$1
-  openssl genrsa -out ${CLIENT}.key 2048
   openssl ecparam -genkey -name secp384r1 -out ${CLIENT}.key
 
   openssl req -new -key ${CLIENT}.key -days ${DAYS} -out ${CLIENT}.csr \
