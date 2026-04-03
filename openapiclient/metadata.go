@@ -26,7 +26,7 @@ import (
 // BuildMetadataTree builds the metadata tree from the API document.
 func BuildMetadataTree(
 	document *highv3.Document,
-	clientOptions clientOptions,
+	getEnv goenvconf.GetEnvFunc,
 ) (*internal.Node, error) {
 	rootNode := new(internal.Node)
 
@@ -35,11 +35,7 @@ func BuildMetadataTree(
 	}
 
 	options := &proxyhandler.InsertRouteOptions{
-		GetEnv: goenvconf.GetOSEnv,
-	}
-
-	if clientOptions.GetEnv != nil {
-		options.GetEnv = clientOptions.GetEnv
+		GetEnv: getEnv,
 	}
 
 	for pathItem := document.Paths.PathItems.Oldest(); pathItem != nil; pathItem = pathItem.Next() {

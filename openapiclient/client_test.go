@@ -16,12 +16,19 @@ package openapiclient
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"log"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -30,11 +37,13 @@ import (
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
+	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProxyClient_RESTful(t *testing.T) {
-	configPath := "../tests/testdata/jsonplaceholder.yaml"
+	configPath := "./testdata/jsonplaceholder.yaml"
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
@@ -159,7 +168,7 @@ func TestProxyClient_RESTful(t *testing.T) {
 }
 
 func TestRESTHandler_GraphQLServer(t *testing.T) {
-	configPath := "../tests/testdata/rickandmortyapi.yaml"
+	configPath := "./testdata/rickandmortyapi.yaml"
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
@@ -259,4 +268,261 @@ func TestRESTHandler_GraphQLServer(t *testing.T) {
 			}
 		})
 	}
+}
+
+// NOTE: Run the script at testdata/tls/create-certs.sh before running TLS tests.
+
+func TestProxyClient_Auth(t *testing.T) {
+	serverContext := createMockServer(t)
+	defer serverContext.Server.Close()
+
+	t.Setenv("SERVER_URL", serverContext.Server.URL)
+	t.Setenv("API_KEY", serverContext.APIKey)
+	t.Setenv("USERNAME", serverContext.Username)
+	t.Setenv("PASSWORD", serverContext.Password)
+	t.Setenv("QUERY_FOO", "bar")
+
+	keyPem, err := os.ReadFile(filepath.Join("testdata/tls/certs", "client.key"))
+	if err != nil {
+		t.Fatalf("failed to load client key: %s", err)
+	}
+
+	keyData := base64.StdEncoding.EncodeToString(keyPem)
+	t.Setenv("TLS_KEY_PEM", string(keyData))
+
+	configPath := "./testdata/test.yaml"
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+
+	config, err := goutils.ReadJSONOrYAMLFile[oaschema.OpenAPIResourceDefinition](context.TODO(), configPath)
+	assert.NoError(t, err)
+
+	client, err := NewProxyClient(
+		context.TODO(),
+		config,
+		nil,
+		WithTimeout(time.Minute),
+	)
+	assert.NoError(t, err)
+
+	ctx := otelutils.NewContextWithLogger(context.TODO(), logger)
+
+	testCases := []struct {
+		Name         string
+		Request      *http.Request
+		StatusCode   int
+		ResponseBody any
+		ErrorMessage string
+	}{
+		{
+			Name: "apiKey",
+			Request: &http.Request{
+				URL: &url.URL{
+					Path: "/auth/api-key",
+				},
+				Method: "GET",
+			},
+			StatusCode:   200,
+			ResponseBody: "OK",
+		},
+		{
+			Name: "basic",
+			Request: &http.Request{
+				URL: &url.URL{
+					Path: "/auth/basic",
+				},
+				Method: "GET",
+			},
+			StatusCode:   200,
+			ResponseBody: "OK",
+		},
+		{
+			Name: "forward-header",
+			Request: &http.Request{
+				URL: &url.URL{
+					Path:     "/auth/forward",
+					RawQuery: "test=true",
+				},
+				Method: "POST",
+				Header: http.Header{
+					"X-Auth-Token": []string{serverContext.APIKey},
+				},
+			},
+			StatusCode:   200,
+			ResponseBody: "OK",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.Name+"_execute", func(t *testing.T) {
+			response, respBody, err := client.Execute(
+				context.TODO(),
+				tc.Request.Method,
+				tc.Request.URL.String(),
+				tc.Request.Header,
+				nil,
+			)
+
+			if tc.ErrorMessage != "" {
+				require.ErrorContains(t, err, tc.ErrorMessage)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.StatusCode, response.StatusCode)
+			}
+
+			if tc.ResponseBody != nil {
+				require.Equal(t, tc.ResponseBody, respBody)
+			}
+		})
+
+		t.Run(tc.Name+"_stream", func(t *testing.T) {
+			writer := httptest.NewRecorder()
+			request := tc.Request.WithContext(ctx)
+			resp, err := client.Stream(writer, request)
+
+			if tc.ErrorMessage != "" {
+				require.ErrorContains(t, err, tc.ErrorMessage)
+				require.Equal(t, httpheader.ContentTypeJSON, writer.Header().Get(httpheader.ContentType))
+			} else {
+				require.NoError(t, err)
+			}
+
+			require.Equal(t, tc.StatusCode, writer.Code)
+
+			if tc.ResponseBody != nil {
+				respBody, err := contenttype.Decode(resp.Header.Get(httpheader.ContentType), writer.Body)
+				require.NoError(t, err)
+				require.Equal(t, tc.ResponseBody, respBody)
+			}
+		})
+	}
+}
+
+type mockServerState struct {
+	Server     *httptest.Server
+	RetryCount int32
+	APIKey     string
+	Username   string
+	Password   string
+
+	counter atomic.Int32
+}
+
+func (mss *mockServerState) Increase() int32 {
+	return mss.counter.Add(1)
+}
+
+func (mss *mockServerState) GetCounter() int32 {
+	return mss.counter.Load()
+}
+
+func createMockServer(t *testing.T) *mockServerState {
+	t.Helper()
+
+	state := mockServerState{
+		APIKey:   rand.Text(),
+		Username: rand.Text(),
+		Password: rand.Text(),
+	}
+
+	mux := http.NewServeMux()
+
+	writeResponse := func(w http.ResponseWriter, body string) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(body))
+	}
+
+	mux.HandleFunc("/auth/api-key", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet, http.MethodPost:
+			counter := state.Increase()
+
+			if counter < 2 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+
+				return
+			}
+
+			apiKey := r.Header.Get("Authorization")
+			expectedValue := "Bearer " + state.APIKey
+			if apiKey != expectedValue {
+				t.Errorf("invalid bearer auth, expected %s, got %s", expectedValue, apiKey)
+				t.FailNow()
+			}
+
+			w.Header().Add("Content-Type", "text/plain")
+			writeResponse(w, "OK")
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+	})
+
+	mux.HandleFunc("/auth/basic", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet, http.MethodPost:
+			expectedValue := "Basic " + base64.StdEncoding.EncodeToString([]byte(state.Username+":"+state.Password))
+			headerValue := r.Header.Get("Authorization")
+
+			if headerValue != expectedValue {
+				t.Errorf("invalid bearer auth, expected %s, got %s", expectedValue, headerValue)
+				t.FailNow()
+			}
+
+			writeResponse(w, "OK")
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+	})
+
+	mux.HandleFunc("/auth/forward", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet, http.MethodPost:
+			tokenValue := r.Header.Get("X-Auth-Token")
+			testHeaderValue := r.Header.Get("X-Test-Header")
+
+			require.Equal(t, state.APIKey, tokenValue, "invalid forwarded auth header")
+			require.Equal(t, "true", testHeaderValue, "invalid X-Test-Header auth header")
+
+			writeResponse(w, "OK")
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+	})
+
+	var tlsConfig *tls.Config
+
+	dir := "testdata/tls/certs"
+
+	// load CA certificate file and add it to list of client CAs
+	caCertFile, err := os.ReadFile(filepath.Join(dir, "ca.crt"))
+	if err != nil {
+		log.Fatalf("error reading CA certificate: %v", err)
+	}
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCertFile)
+
+	// Create the TLS Config with the CA pool and enable Client certificate validation
+	cert, err := tls.LoadX509KeyPair(
+		filepath.Join(dir, "server.pem"),
+		filepath.Join(dir, "server.key"),
+	)
+
+	tlsConfig = &tls.Config{
+		ClientCAs:    caCertPool,
+		Certificates: []tls.Certificate{cert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+	}
+
+	server := httptest.NewUnstartedServer(mux)
+	server.TLS = tlsConfig
+	server.StartTLS()
+
+	state.Server = server
+
+	return &state
 }
