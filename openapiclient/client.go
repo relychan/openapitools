@@ -21,7 +21,6 @@ import (
 
 	"github.com/hasura/goenvconf"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
-	"github.com/relychan/gohttpc"
 	"github.com/relychan/gohttpc/httpconfig"
 	"github.com/relychan/gohttpc/loadbalancer"
 	"github.com/relychan/gohttpc/loadbalancer/roundrobin"
@@ -47,25 +46,12 @@ func NewProxyClient(
 	metadata *oaschema.OpenAPIResourceDefinition,
 	options ...ClientOption,
 ) (*ProxyClient, error) {
-	clientOptions := clientOptions{
-		ClientOptions: gohttpc.NewClientOptions(),
-	}
-
-	for _, opt := range options {
-		if opt == nil {
-			continue
-		}
-
-		opt(&clientOptions)
-	}
-
 	client := &ProxyClient{
 		metadata:       metadata,
-		clientOptions:  clientOptions,
 		defaultHeaders: map[string]string{},
 	}
 
-	err := client.init(ctx)
+	err := client.init(ctx, options)
 	if err != nil {
 		return nil, err
 	}
@@ -80,24 +66,26 @@ func (pc *ProxyClient) Metadata() *oaschema.OpenAPIResourceDefinition {
 
 // Close method performs cleanup and closure activities on the client instance.
 func (pc *ProxyClient) Close() error {
+	var err error
+
+	if pc.lbClient != nil {
+		err = pc.lbClient.Close()
+	}
+
 	if pc.HTTPClient != nil {
 		pc.HTTPClient.CloseIdleConnections()
 	}
 
-	if pc.lbClient != nil {
-		return pc.lbClient.Close()
-	}
-
-	return nil
+	return err
 }
 
-func (pc *ProxyClient) init(ctx context.Context) error {
+func (pc *ProxyClient) init(ctx context.Context, clientOpts []ClientOption) error {
 	spec, err := pc.metadata.Build(ctx)
 	if err != nil {
 		return err
 	}
 
-	err = pc.initHTTPClient()
+	err = pc.initOptions(clientOpts)
 	if err != nil {
 		return err
 	}
@@ -112,15 +100,17 @@ func (pc *ProxyClient) init(ctx context.Context) error {
 		return err
 	}
 
+	getEnv := pc.GetEnvFunc()
+
 	pc.authenticators, err = proxyhandler.NewOpenAPIv3Authenticator(
 		spec,
-		pc.GetEnvFunc(),
+		getEnv,
 	)
 	if err != nil {
 		return err
 	}
 
-	node, err := BuildMetadataTree(spec, pc.clientOptions)
+	node, err := BuildMetadataTree(spec, getEnv)
 	if err != nil {
 		return err
 	}
@@ -270,26 +260,41 @@ func (pc *ProxyClient) initServer(
 	return host, nil
 }
 
-func (pc *ProxyClient) initHTTPClient() error {
+func (pc *ProxyClient) initOptions(options []ClientOption) error {
 	var httpConfig *httpconfig.HTTPClientConfig
 
 	if pc.metadata.Settings != nil && pc.metadata.Settings.HTTP != nil {
 		httpConfig = pc.metadata.Settings.HTTP
-	} else if pc.HTTPClient == nil {
-		httpConfig = new(httpconfig.HTTPClientConfig)
 	}
 
-	if httpConfig != nil {
-		httpClient, err := httpconfig.NewHTTPClientFromConfig(
-			httpConfig,
-			pc.ClientOptions,
+	baseClientOptions, err := httpconfig.NewClientOptionsFromConfig(httpConfig)
+	if err != nil {
+		return err
+	}
+
+	clientOpts := clientOptions{
+		ClientOptions: baseClientOptions,
+	}
+
+	for _, opt := range options {
+		if opt == nil {
+			continue
+		}
+
+		opt(&clientOpts)
+	}
+
+	if clientOpts.HTTPClient == nil {
+		clientOpts.HTTPClient, err = httpconfig.NewHTTPClientFromConfig(
+			&httpconfig.HTTPClientConfig{},
+			clientOpts.ClientOptions,
 		)
 		if err != nil {
 			return err
 		}
-
-		pc.HTTPClient = httpClient
 	}
+
+	pc.clientOptions = clientOpts
 
 	return nil
 }

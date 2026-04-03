@@ -106,7 +106,7 @@ func (pc *ProxyClient) Execute(
 
 	response, responseBody, err := route.Method.Handler.Handle(ctx, request, options)
 	if err != nil {
-		return nil, nil, pc.handleError(span, err, requestPath)
+		return nil, nil, pc.handleError(span, err, requestURL.Path)
 	}
 
 	span.SetStatus(codes.Ok, "")

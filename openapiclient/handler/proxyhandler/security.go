@@ -214,6 +214,10 @@ func newStaticAuthenticator(
 		Scheme: security.Scheme,
 	}
 
+	if tokenLocation.Name == "" && tokenLocation.In == authscheme.InHeader {
+		tokenLocation.Name = httpheader.Authorization
+	}
+
 	err := tokenLocation.Validate()
 	if err != nil {
 		return nil, err

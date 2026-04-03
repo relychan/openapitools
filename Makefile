@@ -4,6 +4,7 @@ format:
 
 .PHONY: test
 test:
+	./openapiclient/testdata/tls/create-certs.sh
 	go test -v -race -timeout 3m -coverpkg=./... -coverprofile=coverage.out ./...
 
 # Install golangci-lint tool to run lint locally

@@ -60,7 +60,7 @@ type BaseParameter struct {
 	// When this is true, parameter values are serialized using reserved expansion.
 	AllowReserved bool `json:"allowReserved,omitempty" yaml:"allowReserved,omitempty"`
 	// The location of the parameter.
-	In oaschema.ParameterLocation `json:"in" yaml:"in" jsonschema:"enum=header,enum=query,enum=cookie,enum=path"`
+	In oaschema.ParameterLocation `json:"in" yaml:"in" jsonschema:"type=string,enum=header,enum=query,enum=cookie,enum=path"`
 	// Describes how the parameter value will be serialized depending on the type of the parameter value.
 	Style *oaschema.ParameterEncodingStyle `json:"style,omitempty" yaml:"style,omitempty" jsonschema:"enum=simple,enum=label,enum=matrix,enum=form,enum=spaceDelimited,enum=pipeDelimited,enum=deepObject"`
 }

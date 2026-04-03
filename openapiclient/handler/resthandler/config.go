@@ -16,7 +16,6 @@ package resthandler
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/hasura/goenvconf"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
@@ -171,7 +170,7 @@ func newCustomRESTRequestFromConfig(
 			return nil, &goutils.ErrorDetail{
 				Detail:  "failed to evaluate the parameter: " + err.Error(),
 				Code:    oaschema.ErrCodeInvalidRESTfulRequestConfig,
-				Pointer: "/parameters/" + strconv.Itoa(i),
+				Pointer: "/parameters/" + param.Name,
 			}
 		}
 
