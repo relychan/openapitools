@@ -223,7 +223,7 @@ func (ge *GraphQLHandler) Stream(
 
 			goutils.CatchWarnErrorFunc(resp.Body.Close)
 
-			return nil, err
+			return resp, err
 		}
 
 		var respBody any

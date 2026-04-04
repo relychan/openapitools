@@ -145,5 +145,6 @@ func newProxyCustomGraphQLResponse(
 // IsZero checks if the configuration is empty.
 func (conf proxyCustomGraphQLResponse) IsZero() bool {
 	return conf.HTTPErrorCode == nil &&
+		len(conf.HTTPErrors) == 0 &&
 		(conf.Body == nil || conf.Body.IsZero())
 }

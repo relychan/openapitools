@@ -161,19 +161,21 @@ func (ge *GraphQLHandler) writeTransformResponse(
 	if status >= http.StatusBadRequest {
 		resp.StatusCode = status
 
-		writer.WriteHeader(status)
 		writer.Header().Set(httpheader.ContentType, httpheader.ContentTypeJSON)
+		writer.WriteHeader(status)
 
 		_, err := writer.Write(rawBody)
 		if err != nil {
 			span.SetStatus(codes.Error, "failed to write graphql error")
 			span.RecordError(err)
+
+			return nil, newGraphQLResponseEncodeError(
+				oaschema.ErrCodeResponseTransformError,
+				err,
+			)
 		}
 
-		return nil, newGraphQLResponseEncodeError(
-			oaschema.ErrCodeResponseTransformError,
-			err,
-		)
+		return nil, nil
 	}
 
 	if ge.customResponse.Body == nil || ge.customResponse.Body.IsZero() {
