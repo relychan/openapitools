@@ -3,17 +3,18 @@ module github.com/relychan/openapitools
 go 1.26
 
 require (
+	github.com/buger/jsonparser v1.1.2
 	github.com/failsafe-go/failsafe-go v0.9.6
 	github.com/hasura/goenvconf v0.7.0
 	github.com/hasura/gotel v0.7.2
 	github.com/jmespath-community/go-jmespath v1.1.2-0.20250228093220-ef5fae83c6c0
-	github.com/pb33f/libopenapi v0.35.0
+	github.com/pb33f/libopenapi v0.35.1
 	github.com/pb33f/ordered-map/v2 v2.3.1
 	github.com/relychan/gohttpc v0.0.0-20260402045657-59c0214cec37
-	github.com/relychan/gotransform v0.0.0-20260324093131-a79b1f2fda47
+	github.com/relychan/gotransform v0.0.0-20260404043754-68a1a1d20d3b
 	github.com/relychan/goutils v0.0.0-20260320085159-a456d46cc0d9
 	github.com/stretchr/testify v1.11.1
-	github.com/vektah/gqlparser v1.3.1
+	github.com/vektah/gqlparser/v2 v2.5.32
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
 	go.yaml.in/yaml/v4 v4.0.0-rc.4.0.20260316011301-aadd5c28b882
@@ -27,7 +28,6 @@ require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
-	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

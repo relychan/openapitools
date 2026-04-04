@@ -20,8 +20,8 @@ import (
 	"strings"
 
 	"github.com/relychan/goutils"
-	"github.com/vektah/gqlparser/ast"
-	"github.com/vektah/gqlparser/parser"
+	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/parser"
 )
 
 var (
