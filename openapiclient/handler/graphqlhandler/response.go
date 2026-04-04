@@ -31,6 +31,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// handleTransformResponse reads the upstream response body, evaluates any GraphQL errors
+// and maps them to HTTP status codes, then applies any configured body transformation.
+// Returns the (possibly transformed) response body or an error.
 func (ge *GraphQLHandler) handleTransformResponse(
 	ctx context.Context,
 	resp *http.Response,
@@ -131,6 +134,9 @@ func (ge *GraphQLHandler) handleTransformResponse(
 	return transformedBody, nil
 }
 
+// writeTransformResponse is the streaming counterpart of handleTransformResponse: it evaluates
+// GraphQL errors, writes error or success payloads directly to the ResponseWriter, and applies
+// any configured body transformation before writing the final content-typed response.
 func (ge *GraphQLHandler) writeTransformResponse(
 	ctx context.Context,
 	resp *http.Response,
@@ -234,6 +240,10 @@ func (ge *GraphQLHandler) writeTransformResponse(
 	return transformedBody, nil
 }
 
+// evaluateGraphQLError reads the response body and inspects the "errors" field.
+// It returns the appropriate HTTP status code (based on httpErrorCode / httpErrors rules),
+// the raw body bytes, and a non-nil ErrorDetail if a parsing failure occurred.
+// A status < 400 with nil error means no actionable GraphQL error was found.
 func (ge *GraphQLHandler) evaluateGraphQLError(
 	resp *http.Response,
 ) (int, []byte, *goutils.ErrorDetail) {

@@ -65,6 +65,9 @@ func ValidateGraphQLString(query string) (*GraphQLHandler, error) {
 	}
 }
 
+// convertVariableTypeFromString coerces a string value to the Go type that matches the
+// declared GraphQL scalar (bool, int*, uint*, float*). Returns the original string for
+// unknown or nil types.
 func convertVariableTypeFromString(varDef *ast.VariableDefinition, value string) (any, error) {
 	if varDef.Type == nil {
 		// unknown type. Returns the original value.
@@ -86,6 +89,9 @@ func convertVariableTypeFromString(varDef *ast.VariableDefinition, value string)
 	}
 }
 
+// convertVariableTypeFromUnknownValue coerces an arbitrary value to the declared GraphQL scalar type.
+// String and *string values are handled via convertVariableTypeFromString; other types use
+// nullable decoders. Returns the original value for unknown or unrecognized types.
 func convertVariableTypeFromUnknownValue(varDef *ast.VariableDefinition, value any) (any, error) {
 	if varDef.Type == nil || value == nil {
 		// unknown type. Returns the original value.

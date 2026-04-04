@@ -32,6 +32,8 @@ import (
 
 const acceptContentTypes = httpheader.ContentTypeJSON + ", application/graphql-response+json"
 
+// handleRequest sets OpenTelemetry span attributes, prepares and executes the HTTP request,
+// and validates the upstream response status and body before returning.
 func (ge *GraphQLHandler) handleRequest(
 	ctx context.Context,
 	request *proxyhandler.Request,
@@ -129,6 +131,8 @@ func (ge *GraphQLHandler) handleRequest(
 	return resp, nil
 }
 
+// prepareRequest evaluates custom headers and variables, sets the Accept header,
+// and delegates to prepareRequestPOST or prepareRequestGET based on the configured method.
 func (ge *GraphQLHandler) prepareRequest(
 	ctx context.Context,
 	request *proxyhandler.Request,
@@ -212,6 +216,8 @@ func (ge *GraphQLHandler) prepareRequest(
 	return ge.prepareRequestGET(ctx, request, req, graphqlPayload)
 }
 
+// prepareRequestGET encodes the GraphQL query, operationName, variables, and extensions
+// as URL query parameters per the GraphQL-over-HTTP GET specification.
 func (ge *GraphQLHandler) prepareRequestGET(
 	ctx context.Context,
 	request *proxyhandler.Request,
@@ -302,6 +308,8 @@ func (ge *GraphQLHandler) prepareRequestGET(
 	return req, nil
 }
 
+// prepareRequestPOST JSON-encodes the GraphQL payload (query, operationName, variables, extensions)
+// and sets it as the request body.
 func (ge *GraphQLHandler) prepareRequestPOST(
 	ctx context.Context,
 	request *proxyhandler.Request,
@@ -338,6 +346,9 @@ func (ge *GraphQLHandler) prepareRequestPOST(
 	return req, nil
 }
 
+// resolveRequestVariables builds the GraphQL variables map by resolving each variable
+// in priority order: proxy config mapping, request body (for "body"), path/query params,
+// then the query string. String values are coerced to the declared GraphQL scalar type.
 func (ge *GraphQLHandler) resolveRequestVariables(
 	requestData *proxyhandler.RequestTemplateData,
 	rawRequestData map[string]any,
@@ -430,6 +441,8 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 	return results, nil
 }
 
+// resolveRequestExtensions evaluates each configured extension entry against the request data
+// and returns the resolved extensions map.
 func (ge *GraphQLHandler) resolveRequestExtensions(
 	rawRequestData map[string]any,
 ) (map[string]any, error) {
