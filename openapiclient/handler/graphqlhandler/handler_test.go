@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/hasura/goenvconf"
+	"github.com/jmespath-community/go-jmespath"
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
@@ -383,6 +384,49 @@ func TestTransformResponse_WithBodyTransform(t *testing.T) {
 	_, err := handler.handleTransformResponse(context.TODO(), resp)
 	assert.ErrorContains(t, err, "Unprocessable Entity")
 	assert.Equal(t, 422, resp.StatusCode)
+}
+
+func TestTransformResponse_WithHTTPStatusMapping(t *testing.T) {
+	var rawAction interface{}
+	_ = rawAction
+
+	// Use NewProxyCustomGraphQLResponse with a body transformer directly is complex
+	// because it requires gotransform.TemplateTransformerConfig.
+	// Test that errors array is detected and status code is overwritten.
+	errorCode := 404
+	responseBody := []byte(`
+{
+  "errors": [
+    {
+      "message": "User not found",
+      "locations": [{ "line": 2, "column": 3 }],
+      "path": ["user"],
+      "extensions": {
+        "code": "NOT_FOUND",
+        "timestamp": "2024-03-27T10:00:00Z"
+      }
+    }
+  ]
+}`)
+
+	handler := &GraphQLHandler{
+		method: "POST",
+		customResponse: &proxyCustomGraphQLResponse{
+			HTTPErrors: map[int]jmespath.JMESPath{
+				404: jmespath.MustCompile(`errors[0].extensions.code == "NOT_FOUND"`),
+			},
+		},
+	}
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader(responseBody)),
+		Header:     http.Header{},
+	}
+
+	_, err := handler.handleTransformResponse(context.TODO(), resp)
+	assert.ErrorContains(t, err, "NOT_FOUND")
+	assert.Equal(t, errorCode, resp.StatusCode)
 }
 
 // TestPrepareRequest_ExtensionEvaluationError verifies that prepareRequest returns an error

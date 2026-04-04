@@ -185,6 +185,8 @@ func (ge *GraphQLHandler) writeTransformResponse(
 	}
 
 	if ge.customResponse.Body == nil || ge.customResponse.Body.IsZero() {
+		writer.Header().Set(httpheader.ContentType, ge.responseContentType)
+
 		_, err := writer.Write(rawBody)
 		if err != nil {
 			span.SetStatus(codes.Error, "failed to write graphql response")
