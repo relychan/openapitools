@@ -18,14 +18,116 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
+	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
+
+const acceptContentTypes = httpheader.ContentTypeJSON + ", application/graphql-response+json"
+
+func (ge *GraphQLHandler) handleRequest(
+	ctx context.Context,
+	request *proxyhandler.Request,
+	graphqlPayload *GraphQLRequestBody,
+	options *proxyhandler.ProxyHandleOptions,
+) (*http.Response, error) {
+	span := trace.SpanFromContext(ctx)
+
+	span.SetAttributes(
+		attribute.String("graphql.operation.name", ge.operationName),
+		attribute.String("graphql.operation.type", string(ge.operation)),
+		attribute.String("graphql.query", ge.query),
+	)
+
+	req, err := ge.prepareRequest(ctx, request, graphqlPayload, options)
+	if err != nil {
+		ge.printLog(
+			ctx,
+			request,
+			graphqlPayload,
+			nil,
+			nil,
+			err,
+		)
+
+		return nil, err
+	}
+
+	resp, err := req.Execute(ctx)
+	if err != nil {
+		ge.printLog(
+			ctx,
+			request,
+			graphqlPayload,
+			resp,
+			nil,
+			err,
+		)
+
+		return resp, err
+	}
+
+	span.SetAttributes(attribute.Int("http.response.original_status", resp.StatusCode))
+
+	if resp.StatusCode >= http.StatusBadRequest {
+		var detail string
+
+		if resp.Body != nil && resp.Body != http.NoBody {
+			msgBytes, err := io.ReadAll(resp.Body)
+
+			goutils.CatchWarnErrorFunc(resp.Body.Close)
+
+			if err != nil {
+				detail = err.Error()
+			} else {
+				detail = string(msgBytes)
+			}
+		}
+
+		err := goutils.NewRFC9457Error(resp.StatusCode, detail)
+
+		ge.printLog(
+			ctx,
+			request,
+			graphqlPayload,
+			resp,
+			nil,
+			err,
+		)
+
+		return resp, err
+	}
+
+	if resp.Body == nil || resp.Body == http.NoBody {
+		errorDetail := goutils.ErrorDetail{
+			Detail: "graphql response must be a valid JSON object",
+			Code:   oaschema.ErrCodeGraphQLResponseEmpty,
+		}
+
+		ge.printLog(
+			ctx,
+			request,
+			graphqlPayload,
+			resp,
+			nil,
+			&errorDetail,
+		)
+
+		respErr := goutils.NewServerError(errorDetail)
+		respErr.Detail = "failed to encode graphql response"
+
+		return resp, respErr
+	}
+
+	return resp, nil
+}
 
 func (ge *GraphQLHandler) prepareRequest(
 	ctx context.Context,
@@ -70,13 +172,17 @@ func (ge *GraphQLHandler) prepareRequest(
 		return nil, err
 	}
 
-	req := options.NewRequest(http.MethodPost, ge.url)
+	req := options.NewRequest(ge.method, ge.url)
 	reqHeader := req.Header()
 
 	for key, header := range ge.headers {
 		value, err := header.EvaluateString(rawRequestData)
 		if err != nil {
-			respErr := fmt.Errorf("failed to evaluate custom header %s: %w", key, err)
+			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+				Detail:  err.Error(),
+				Pointer: "/headers/" + key,
+			})
+			respErr.Detail = "failed to evaluate header"
 
 			ge.printLog(
 				ctx,
@@ -95,12 +201,31 @@ func (ge *GraphQLHandler) prepareRequest(
 		}
 	}
 
-	reqHeader.Set(httpheader.ContentType, httpheader.ContentTypeJSON)
+	reqHeader.Set(httpheader.Accept, acceptContentTypes)
 
-	reader := new(bytes.Buffer)
+	if ge.method == http.MethodPost {
+		reqHeader.Set(httpheader.ContentType, httpheader.ContentTypeJSON)
 
-	err = json.NewEncoder(reader).Encode(graphqlPayload)
+		return ge.prepareRequestPOST(ctx, request, req, graphqlPayload)
+	}
+
+	return ge.prepareRequestGET(ctx, request, req, graphqlPayload)
+}
+
+func (ge *GraphQLHandler) prepareRequestGET(
+	ctx context.Context,
+	request *proxyhandler.Request,
+	req *gohttpc.RequestWithClient,
+	graphqlPayload *GraphQLRequestBody,
+) (*gohttpc.RequestWithClient, error) {
+	reqURL, err := goutils.ParsePathOrHTTPURL(ge.url)
 	if err != nil {
+		respErr := goutils.NewServerError(goutils.ErrorDetail{
+			Detail:  err.Error(),
+			Pointer: "/url",
+		})
+		respErr.Detail = "failed to parse request URL"
+
 		ge.printLog(
 			ctx,
 			request,
@@ -110,7 +235,102 @@ func (ge *GraphQLHandler) prepareRequest(
 			err,
 		)
 
-		return nil, err
+		return nil, respErr
+	}
+
+	// encode GraphQL request fields as URL queries for HTTP GET requests
+	queryValues := reqURL.Query()
+	queryValues.Set("query", ge.query)
+
+	if ge.operationName != "" {
+		queryValues.Set("operationName", ge.operationName)
+	}
+
+	// Each of the variables and extensions parameters, if used, MUST be encoded as a JSON string.
+	if len(graphqlPayload.Variables) > 0 {
+		jsonVariables, err := json.Marshal(graphqlPayload.Variables)
+		if err != nil {
+			respErr := goutils.NewServerError(goutils.ErrorDetail{
+				Detail:  err.Error(),
+				Pointer: "/variables",
+			})
+			respErr.Detail = "failed to encode request variables"
+
+			ge.printLog(
+				ctx,
+				request,
+				graphqlPayload,
+				nil,
+				nil,
+				err,
+			)
+
+			return nil, respErr
+		}
+
+		queryValues.Set("variables", string(jsonVariables))
+	}
+
+	if len(graphqlPayload.Extensions) > 0 {
+		jsonExtensions, err := json.Marshal(graphqlPayload.Extensions)
+		if err != nil {
+			respErr := goutils.NewServerError(goutils.ErrorDetail{
+				Detail:  err.Error(),
+				Pointer: "/extensions",
+			})
+			respErr.Detail = "failed to encode request extensions"
+
+			ge.printLog(
+				ctx,
+				request,
+				graphqlPayload,
+				nil,
+				nil,
+				err,
+			)
+
+			return nil, respErr
+		}
+
+		queryValues.Set("extensions", string(jsonExtensions))
+	}
+
+	reqURL.RawQuery = queryValues.Encode()
+
+	req.SetURL(reqURL.String())
+
+	return req, nil
+}
+
+func (ge *GraphQLHandler) prepareRequestPOST(
+	ctx context.Context,
+	request *proxyhandler.Request,
+	req *gohttpc.RequestWithClient,
+	graphqlPayload *GraphQLRequestBody,
+) (*gohttpc.RequestWithClient, error) {
+	reader := new(bytes.Buffer)
+
+	graphqlPayload.Query = ge.query
+	graphqlPayload.OperationName = ge.operationName
+
+	err := json.NewEncoder(reader).Encode(graphqlPayload)
+	if err != nil {
+		respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+			Detail:  err.Error(),
+			Pointer: "/body",
+		})
+		respErr.Detail = "failed to encode body"
+
+		ge.printLog(
+			ctx,
+			request,
+			graphqlPayload,
+			nil,
+			nil,
+			err,
+		)
+
+		return nil, respErr
 	}
 
 	req.SetBody(reader)

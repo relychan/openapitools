@@ -72,6 +72,7 @@ func TestHandle_Success(t *testing.T) {
 	defer server.Close()
 
 	handler := &GraphQLHandler{
+		method:        "POST",
 		query:         "query { users { id } }",
 		operationName: "",
 		operation:     ast.Query,
@@ -98,6 +99,7 @@ func TestHandle_UpstreamError(t *testing.T) {
 	handler := &GraphQLHandler{
 		query:      "query { users { id } }",
 		operation:  ast.Query,
+		method:     "POST",
 		variables:  map[string]jmes.FieldMappingEntry{},
 		extensions: map[string]jmes.FieldMappingEntry{},
 		headers:    map[string]jmes.FieldMappingEntryString{},
@@ -125,6 +127,7 @@ func TestHandle_NilBody(t *testing.T) {
 	handler := &GraphQLHandler{
 		query:      "query { users { id } }",
 		operation:  ast.Query,
+		method:     "POST",
 		variables:  map[string]jmes.FieldMappingEntry{},
 		extensions: map[string]jmes.FieldMappingEntry{},
 		headers:    map[string]jmes.FieldMappingEntryString{},
@@ -172,6 +175,7 @@ func TestHandle_WithCustomErrorCode(t *testing.T) {
 	defer server.Close()
 
 	handler := &GraphQLHandler{
+		method:     "POST",
 		query:      "query { users { id } }",
 		operation:  ast.Query,
 		variables:  map[string]jmes.FieldMappingEntry{},
@@ -189,7 +193,7 @@ func TestHandle_WithCustomErrorCode(t *testing.T) {
 	}
 
 	resp, _, err := handler.Handle(context.TODO(), newTestRequest(), opts)
-	assert.NoError(t, err)
+	assert.ErrorContains(t, err, "Received errors from the remote server")
 	assert.NotNil(t, resp)
 	assert.Equal(t, 400, resp.StatusCode)
 }
@@ -202,6 +206,7 @@ func TestHandle_VariableResolutionError(t *testing.T) {
 	defer server.Close()
 
 	handler := &GraphQLHandler{
+		method:    "POST",
 		query:     "query GetUser($id: ID!) { user(id: $id) { id } }",
 		operation: ast.Query,
 		variableDefinitions: ast.VariableDefinitionList{
@@ -248,6 +253,7 @@ func TestHandle_WithCustomHeader(t *testing.T) {
 	assert.NoError(t, err)
 
 	handler := &GraphQLHandler{
+		method:     "POST",
 		query:      "query { users { id } }",
 		operation:  ast.Query,
 		variables:  map[string]jmes.FieldMappingEntry{},
@@ -279,6 +285,7 @@ func TestStream_Success(t *testing.T) {
 	defer server.Close()
 
 	handler := &GraphQLHandler{
+		method:     "POST",
 		query:      "query { users { id } }",
 		operation:  ast.Query,
 		variables:  map[string]jmes.FieldMappingEntry{},
@@ -307,6 +314,7 @@ func TestStream_Success(t *testing.T) {
 // TestStream_HandleError verifies that Stream propagates errors from Handle.
 func TestStream_HandleError(t *testing.T) {
 	handler := &GraphQLHandler{
+		method:     "POST",
 		query:      "query { users { id } }",
 		operation:  ast.Query,
 		variables:  map[string]jmes.FieldMappingEntry{},
@@ -328,7 +336,9 @@ func TestStream_HandleError(t *testing.T) {
 
 // TestTransformResponse_NilCustomResponse verifies that transformResponse returns the body as-is when there is no custom response config.
 func TestTransformResponse_NilCustomResponse(t *testing.T) {
-	handler := &GraphQLHandler{}
+	handler := &GraphQLHandler{
+		customResponse: &proxyCustomGraphQLResponse{},
+	}
 
 	body := map[string]any{"data": map[string]any{"id": "1"}}
 	resp := &http.Response{
@@ -337,9 +347,9 @@ func TestTransformResponse_NilCustomResponse(t *testing.T) {
 		Header:     http.Header{},
 	}
 
-	newResp, respBody, err := handler.transformResponse(context.TODO(), newTestRequest(), resp)
+	respBody, err := handler.handleTransformResponse(context.TODO(), resp)
 	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, newResp.StatusCode)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, body, respBody)
 }
 
@@ -358,6 +368,7 @@ func TestTransformResponse_WithBodyTransform(t *testing.T) {
 	}
 
 	handler := &GraphQLHandler{
+		method: "POST",
 		customResponse: &proxyCustomGraphQLResponse{
 			HTTPErrorCode: &errorCode,
 		},
@@ -369,9 +380,9 @@ func TestTransformResponse_WithBodyTransform(t *testing.T) {
 		Header:     http.Header{},
 	}
 
-	newResp, _, err := handler.transformResponse(context.TODO(), newTestRequest(), resp)
-	assert.NoError(t, err)
-	assert.Equal(t, 422, newResp.StatusCode)
+	_, err := handler.handleTransformResponse(context.TODO(), resp)
+	assert.ErrorContains(t, err, "Unprocessable Entity")
+	assert.Equal(t, 422, resp.StatusCode)
 }
 
 // TestPrepareRequest_ExtensionEvaluationError verifies that prepareRequest returns an error
@@ -393,6 +404,7 @@ func TestPrepareRequest_ExtensionEvaluationError(t *testing.T) {
 	assert.NoError(t, err)
 
 	handler := &GraphQLHandler{
+		method:              "POST",
 		query:               "query { users { id } }",
 		operation:           ast.Query,
 		variableDefinitions: ast.VariableDefinitionList{},
@@ -426,6 +438,7 @@ func TestHandle_WithVariablesFromQuery(t *testing.T) {
 	defer server.Close()
 
 	handler := &GraphQLHandler{
+		method:    "POST",
 		query:     "query GetUsers($limit: Int) { users(limit: $limit) { id } }",
 		operation: ast.Query,
 		variableDefinitions: ast.VariableDefinitionList{
@@ -464,6 +477,7 @@ func TestHandle_WithMutation(t *testing.T) {
 	defer server.Close()
 
 	handler := &GraphQLHandler{
+		method:        "POST",
 		query:         "mutation CreateUser($name: String!) { createUser(name: $name) { id } }",
 		operationName: "CreateUser",
 		operation:     ast.Mutation,
@@ -512,6 +526,7 @@ func TestHandle_WithExtensions(t *testing.T) {
 	assert.NoError(t, err)
 
 	handler := &GraphQLHandler{
+		method:     "POST",
 		query:      "query { users { id } }",
 		operation:  ast.Query,
 		variables:  map[string]jmes.FieldMappingEntry{},

@@ -6,6 +6,7 @@ require (
 	github.com/failsafe-go/failsafe-go v0.9.6
 	github.com/hasura/goenvconf v0.7.0
 	github.com/hasura/gotel v0.7.2
+	github.com/jmespath-community/go-jmespath v1.1.2-0.20250228093220-ef5fae83c6c0
 	github.com/pb33f/libopenapi v0.35.0
 	github.com/pb33f/ordered-map/v2 v2.3.1
 	github.com/relychan/gohttpc v0.0.0-20260402045657-59c0214cec37
@@ -36,7 +37,6 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/influxdata/tdigest v0.0.1 // indirect
-	github.com/jmespath-community/go-jmespath v1.1.2-0.20250228093220-ef5fae83c6c0 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect

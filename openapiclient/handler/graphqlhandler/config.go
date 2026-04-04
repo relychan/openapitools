@@ -15,9 +15,13 @@
 package graphqlhandler
 
 import (
+	"strconv"
+
 	"github.com/hasura/goenvconf"
+	"github.com/jmespath-community/go-jmespath"
 	"github.com/relychan/gotransform"
 	"github.com/relychan/gotransform/jmes"
+	"github.com/relychan/goutils"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 )
 
@@ -46,6 +50,8 @@ type ProxyGraphQLActionConfig struct {
 type ProxyGraphQLRequestConfig struct {
 	// Overrides the request URL. Use the original request path if empty.
 	URL string `json:"url,omitempty" yaml:"url,omitempty"`
+	// Indicate the request method. The default method is POST.
+	Method string `json:"method,omitempty" yaml:"method,omitempty" jsonschema:"enum=GET,enum=POST,default=POST"`
 	// The configuration to transform request headers.
 	Headers map[string]jmes.FieldMappingEntryStringConfig `json:"headers,omitempty" yaml:"headers,omitempty"`
 	// GraphQL query to be sent.
@@ -58,9 +64,11 @@ type ProxyGraphQLRequestConfig struct {
 
 // ProxyCustomGraphQLResponseConfig represents configurations for the proxy response.
 type ProxyCustomGraphQLResponseConfig struct {
-	// HTTP error code will be used if the response body has errors.
+	// The default HTTP error code will be used if the response body has errors.
 	// If not set, forward the HTTP status from the upstream response which is usually 200 OK.
 	HTTPErrorCode *int `json:"httpErrorCode,omitempty" yaml:"httpErrorCode,omitempty" jsonschema:"minimum=400,maximum=599,default=400"`
+	// Evaluation rules to map GraphQL errors to desired HTTP status codes.
+	HTTPErrors map[string]string `json:"httpErrors,omitempty" yaml:"httpErrors,omitempty"`
 	// Configurations for transforming response data.
 	Body *gotransform.TemplateTransformerConfig `json:"body,omitempty" yaml:"body,omitempty"`
 }
@@ -68,14 +76,19 @@ type ProxyCustomGraphQLResponseConfig struct {
 // IsZero checks if the configuration is empty.
 func (conf ProxyCustomGraphQLResponseConfig) IsZero() bool {
 	return conf.HTTPErrorCode == nil &&
+		len(conf.HTTPErrors) == 0 &&
 		(conf.Body == nil || conf.Body.IsZero())
 }
+
+type HTTPErrorMappingConfig struct{}
 
 // proxyCustomGraphQLResponse represents configurations for the proxy response.
 type proxyCustomGraphQLResponse struct {
 	// HTTP error code will be used if the response body has errors.
 	// If not set, forward the HTTP status from the upstream response which is usually 200 OK.
 	HTTPErrorCode *int
+	// Evaluation rules to map GraphQL errors to desired HTTP status codes.
+	HTTPErrors map[int]jmespath.JMESPath
 	// Configurations for transforming response body data.
 	Body gotransform.TemplateTransformer
 }
@@ -100,6 +113,30 @@ func newProxyCustomGraphQLResponse(
 		}
 
 		result.Body = transformer
+	}
+
+	if len(config.HTTPErrors) > 0 {
+		result.HTTPErrors = make(map[int]jmespath.JMESPath, len(config.HTTPErrors))
+
+		for key, expr := range config.HTTPErrors {
+			status, err := strconv.Atoi(key)
+			if err != nil {
+				return nil, &goutils.ErrorDetail{
+					Detail:  err.Error(),
+					Pointer: "/response/httpErrors/" + key,
+				}
+			}
+
+			expression, err := jmespath.Compile(expr)
+			if err != nil {
+				return nil, &goutils.ErrorDetail{
+					Detail:  err.Error(),
+					Pointer: "/response/httpErrors/" + key,
+				}
+			}
+
+			result.HTTPErrors[status] = expression
+		}
 	}
 
 	return result, nil

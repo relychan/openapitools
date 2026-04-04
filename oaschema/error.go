@@ -76,4 +76,6 @@ const (
 	ErrCodeInvalidRequestURL = "invalid_request_url"
 	// ErrCodeGraphQLResponseEmpty represents a code for empty graphql response.
 	ErrCodeGraphQLResponseEmpty = "graphql_response_empty"
+	// ErrCodeRemoteServerError represents a code for remote server errors.
+	ErrCodeRemoteServerError = "remote_server_error"
 )

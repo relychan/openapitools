@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -32,8 +33,6 @@ import (
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"github.com/vektah/gqlparser/ast"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.yaml.in/yaml/v4"
 )
@@ -44,6 +43,7 @@ var tracer = gotel.NewTracer("openapitools/graphqlhandler")
 type GraphQLHandler struct {
 	parameters          []*highv3.Parameter
 	url                 string
+	method              string
 	operationName       string
 	query               string
 	operation           ast.Operation
@@ -83,6 +83,13 @@ func NewGraphQLHandler( //nolint:ireturn,nolintlint
 	}
 
 	handler.url = proxyAction.Request.URL
+	handler.method = proxyAction.Request.Method
+
+	if handler.method == "" {
+		handler.method = http.MethodPost
+	} else if handler.method != http.MethodPost && handler.method != http.MethodGet {
+		return nil, ErrInvalidRequestMethod
+	}
 
 	responseContentType := oaschema.GetResponseContentTypeFromOperation(operation)
 	if responseContentType == "" {
@@ -145,53 +152,25 @@ func (ge *GraphQLHandler) Handle(
 	request *proxyhandler.Request,
 	options *proxyhandler.ProxyHandleOptions,
 ) (*http.Response, any, error) {
-	span := trace.SpanFromContext(ctx)
+	graphqlPayload := &GraphQLRequestBody{}
 
-	graphqlPayload := &GraphQLRequestBody{
-		Query:         ge.query,
-		OperationName: ge.operationName,
-	}
-
-	span.SetAttributes(
-		attribute.String("graphql.operation.name", ge.operationName),
-		attribute.String("graphql.operation.type", string(ge.operation)),
-		attribute.String("graphql.query", ge.query),
-	)
-
-	req, err := ge.prepareRequest(ctx, request, graphqlPayload, options)
+	resp, err := ge.handleRequest(ctx, request, graphqlPayload, options)
 	if err != nil {
-		ge.printLog(
-			ctx,
-			request,
-			graphqlPayload,
-			nil,
-			nil,
-			err,
-		)
-
 		return nil, nil, err
 	}
 
-	resp, err := req.Execute(ctx)
-	if err != nil {
-		ge.printLog(
-			ctx,
-			request,
-			graphqlPayload,
-			resp,
-			nil,
-			err,
-		)
+	if ge.customResponse == nil || ge.customResponse.IsZero() {
+		var respBody any
 
-		return resp, nil, err
-	}
+		err := json.NewDecoder(resp.Body).Decode(&respBody)
 
-	span.SetAttributes(attribute.Int("http.response.original_status", resp.StatusCode))
+		goutils.CatchWarnErrorFunc(resp.Body.Close)
 
-	if resp.Body == nil || resp.Body == http.NoBody {
-		errorDetail := goutils.ErrorDetail{
-			Detail: "graphql response must be a valid JSON object",
-			Code:   oaschema.ErrCodeGraphQLResponseEmpty,
+		if err != nil {
+			return resp, nil, newGraphQLResponseEncodeError(
+				oaschema.ErrCodeResponseTransformError,
+				err,
+			)
 		}
 
 		ge.printLog(
@@ -199,17 +178,14 @@ func (ge *GraphQLHandler) Handle(
 			request,
 			graphqlPayload,
 			resp,
-			nil,
-			&errorDetail,
+			respBody,
+			err,
 		)
 
-		respErr := goutils.NewServerError(errorDetail)
-		respErr.Detail = "failed to encode graphql response"
-
-		return resp, nil, respErr
+		return resp, respBody, err
 	}
 
-	newResp, respBody, err := ge.transformResponse(ctx, request, resp)
+	respBody, err := ge.handleTransformResponse(ctx, resp)
 
 	ge.printLog(
 		ctx,
@@ -220,7 +196,7 @@ func (ge *GraphQLHandler) Handle(
 		err,
 	)
 
-	return newResp, respBody, err
+	return resp, respBody, err
 }
 
 // Stream resolves the HTTP request and proxies that request to the remote server.
@@ -231,80 +207,52 @@ func (ge *GraphQLHandler) Stream(
 	writer http.ResponseWriter,
 	options *proxyhandler.ProxyHandleOptions,
 ) (*http.Response, error) {
-	resp, data, err := ge.Handle(ctx, request, options)
+	graphqlPayload := &GraphQLRequestBody{}
+
+	resp, err := ge.handleRequest(ctx, request, graphqlPayload, options)
 	if err != nil {
-		return resp, err
-	}
-
-	writer.Header().Set(httpheader.ContentType, ge.responseContentType)
-
-	_, err = contenttype.Write(writer, ge.responseContentType, data)
-	if err != nil {
-		return resp, newGraphQLResponseEncodeError(request, oaschema.ErrCodeWriteResponseError, err)
-	}
-
-	return resp, nil
-}
-
-func (ge *GraphQLHandler) transformResponse(
-	ctx context.Context,
-	request *proxyhandler.Request,
-	resp *http.Response,
-) (*http.Response, any, error) {
-	_, span := tracer.Start(ctx, "transform_response", trace.WithSpanKind(trace.SpanKindInternal))
-	defer span.End()
-
-	defer goutils.CatchWarnErrorFunc(resp.Body.Close)
-
-	var responseBody map[string]any
-
-	err := json.NewDecoder(resp.Body).Decode(&responseBody)
-	if err != nil {
-		span.SetStatus(codes.Error, "failed to decode response body")
-		span.RecordError(err)
-
-		return resp, nil, newGraphQLResponseEncodeError(
-			request,
-			oaschema.ErrCodeResponseTransformError,
-			err,
-		)
+		return nil, err
 	}
 
 	if ge.customResponse == nil {
-		span.SetStatus(codes.Ok, "")
+		if oaschema.IsContentTypeJSON(ge.responseContentType) {
+			writer.Header().Set(httpheader.ContentType, ge.responseContentType)
 
-		return resp, responseBody, nil
-	}
+			// No custom response. Write response directly for json content type
+			_, err = io.Copy(writer, resp.Body)
 
-	if ge.customResponse.HTTPErrorCode != nil {
-		errorBody, hasError := responseBody["errors"]
-		if hasError && errorBody != nil {
-			// overwrite the error code.
-			resp.StatusCode = *ge.customResponse.HTTPErrorCode
+			goutils.CatchWarnErrorFunc(resp.Body.Close)
+
+			return nil, err
 		}
+
+		var respBody any
+
+		err := json.NewDecoder(resp.Body).Decode(&respBody)
+
+		goutils.CatchWarnErrorFunc(resp.Body.Close)
+
+		if err != nil {
+			return resp, err
+		}
+
+		_, err = contenttype.Write(writer, ge.responseContentType, respBody)
+
+		return resp, err
 	}
 
-	if ge.customResponse.Body == nil || ge.customResponse.Body.IsZero() {
-		span.SetStatus(codes.Ok, "")
+	data, err := ge.writeTransformResponse(ctx, resp, writer)
 
-		return resp, responseBody, nil
-	}
+	ge.printLog(
+		ctx,
+		request,
+		graphqlPayload,
+		resp,
+		data,
+		err,
+	)
 
-	transformedBody, err := ge.customResponse.Body.Transform(responseBody)
-	if err != nil {
-		span.SetStatus(codes.Error, "failed to transform response body")
-		span.RecordError(err)
-
-		return resp, responseBody, newGraphQLResponseEncodeError(
-			request,
-			oaschema.ErrCodeResponseTransformError,
-			err,
-		)
-	}
-
-	span.SetStatus(codes.Ok, "")
-
-	return resp, transformedBody, nil
+	return resp, err
 }
 
 func (ge *GraphQLHandler) printLog(

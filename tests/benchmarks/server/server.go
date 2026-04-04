@@ -30,7 +30,7 @@ func main() {
 
 	mux.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
-		case http.MethodPost:
+		case http.MethodPost, http.MethodGet:
 			body := io.NopCloser(bytes.NewBufferString(`{"data":{"users":[{"id":1}]}}`))
 
 			w.WriteHeader(http.StatusOK)

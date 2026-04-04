@@ -637,12 +637,10 @@ func TestConvertVariableTypeFromUnknownValue(t *testing.T) {
 
 // TestTransformResponse tests the transformResponse function
 func TestTransformResponse(t *testing.T) {
-	request := proxyhandler.NewRequest(http.MethodGet, &url.URL{
-		Path: "/test",
-	}, nil, nil)
-
 	t.Run("valid_response_no_custom_config", func(t *testing.T) {
-		handler := &GraphQLHandler{}
+		handler := &GraphQLHandler{
+			customResponse: &proxyCustomGraphQLResponse{},
+		}
 
 		responseBody := map[string]any{
 			"data": map[string]any{
@@ -659,21 +657,23 @@ func TestTransformResponse(t *testing.T) {
 			Body:       io.NopCloser(bytes.NewReader(bodyBytes)),
 		}
 
-		newResp, respBody, err := handler.transformResponse(context.TODO(), request, resp)
+		respBody, err := handler.handleTransformResponse(context.TODO(), resp)
 		assert.NoError(t, err)
-		assert.True(t, newResp != nil)
+		assert.True(t, resp != nil)
 		assert.Equal(t, responseBody, respBody)
 	})
 
 	t.Run("invalid_json_response", func(t *testing.T) {
-		handler := &GraphQLHandler{}
+		handler := &GraphQLHandler{
+			customResponse: &proxyCustomGraphQLResponse{},
+		}
 
 		resp := &http.Response{
 			StatusCode: 200,
 			Body:       io.NopCloser(bytes.NewReader([]byte("invalid json"))),
 		}
 
-		_, _, err := handler.transformResponse(context.TODO(), request, resp)
+		_, err := handler.handleTransformResponse(context.TODO(), resp)
 		assert.ErrorContains(t, err, "Server Error")
 	})
 
@@ -699,10 +699,9 @@ func TestTransformResponse(t *testing.T) {
 			Body:       io.NopCloser(bytes.NewReader(bodyBytes)),
 		}
 
-		newResp, respBody, err := handler.transformResponse(context.TODO(), request, resp)
-		assert.NoError(t, err)
-		assert.Equal(t, 400, newResp.StatusCode)
-		assert.Equal(t, responseBody, respBody)
+		_, err := handler.handleTransformResponse(context.TODO(), resp)
+		assert.ErrorContains(t, err, "Field not found")
+		assert.Equal(t, 400, resp.StatusCode)
 	})
 
 	t.Run("response_without_errors_keeps_status", func(t *testing.T) {
@@ -727,9 +726,9 @@ func TestTransformResponse(t *testing.T) {
 			Body:       io.NopCloser(bytes.NewReader(bodyBytes)),
 		}
 
-		newResp, respBody, err := handler.transformResponse(context.TODO(), request, resp)
+		respBody, err := handler.handleTransformResponse(context.TODO(), resp)
 		assert.NoError(t, err)
-		assert.Equal(t, 200, newResp.StatusCode)
+		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, responseBody, respBody)
 	})
 }

@@ -12,9 +12,12 @@ spec:
           type: graphql
           request:
             url: /graphql
-            query: |
-              query GetUsers {
-                users {
-                  id
-                }
-              }
+            method: GET
+            query: query GetUsers { users { id }}
+      post:
+        x-rely-proxy-action:
+          type: graphql
+          request:
+            url: /graphql
+            method: POST
+            query: query GetUsers { users { id }}
