@@ -96,12 +96,6 @@ func genOpenAPIResourceSchema() (*jsonschema.Schema, error) {
 	}
 
 	// custom schema types
-	reflectSchema.Definitions["Duration"] = &jsonschema.Schema{
-		Type:        "string",
-		Description: "Duration string",
-		Pattern:     "^((([0-9]+h)?([0-9]+m)?([0-9]+s))|(([0-9]+h)?([0-9]+m))|([0-9]+h))$",
-	}
-
 	reflectSchema.Definitions["Document"] = openApiSpec
 
 	// delete unused definitions
@@ -130,8 +124,12 @@ func genOpenAPIResourceSchema() (*jsonschema.Schema, error) {
 
 	for _, statusCode := range []string{"400", "401", "403", "404", "405", "422", "500", "501"} {
 		httpErrors.Properties.Set(statusCode, &jsonschema.Schema{
-			Type:      "string",
-			MinLength: new(uint64(1)),
+			Type: "array",
+			Items: &jsonschema.Schema{
+				Type:      "string",
+				MinLength: new(uint64(1)),
+			},
+			MinItems: new(uint64(1)),
 		})
 	}
 

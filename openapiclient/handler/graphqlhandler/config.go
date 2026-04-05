@@ -15,6 +15,7 @@
 package graphqlhandler
 
 import (
+	"slices"
 	"strconv"
 
 	"github.com/hasura/goenvconf"
@@ -68,7 +69,7 @@ type ProxyCustomGraphQLResponseConfig struct {
 	// If not set, forward the HTTP status from the upstream response which is usually 200 OK.
 	HTTPErrorCode *int `json:"httpErrorCode,omitempty" yaml:"httpErrorCode,omitempty" jsonschema:"minimum=400,maximum=599,default=400"`
 	// Evaluation rules to map GraphQL errors to desired HTTP status codes.
-	HTTPErrors map[string]string `json:"httpErrors,omitempty" yaml:"httpErrors,omitempty"`
+	HTTPErrors map[string][]string `json:"httpErrors,omitempty" yaml:"httpErrors,omitempty"`
 	// Configurations for transforming response data.
 	Body *gotransform.TemplateTransformerConfig `json:"body,omitempty" yaml:"body,omitempty"`
 }
@@ -82,13 +83,18 @@ func (conf ProxyCustomGraphQLResponseConfig) IsZero() bool {
 
 type HTTPErrorMappingConfig struct{}
 
+type proxyHTTPErrorMapping struct {
+	Status      int
+	Expressions []jmespath.JMESPath
+}
+
 // proxyCustomGraphQLResponse represents configurations for the proxy response.
 type proxyCustomGraphQLResponse struct {
 	// HTTP error code will be used if the response body has errors.
 	// If not set, forward the HTTP status from the upstream response which is usually 200 OK.
 	HTTPErrorCode *int
 	// Evaluation rules to map GraphQL errors to desired HTTP status codes.
-	HTTPErrors map[int]jmespath.JMESPath
+	HTTPErrors []proxyHTTPErrorMapping
 	// Configurations for transforming response body data.
 	Body gotransform.TemplateTransformer
 }
@@ -116,9 +122,11 @@ func newProxyCustomGraphQLResponse(
 	}
 
 	if len(config.HTTPErrors) > 0 {
-		result.HTTPErrors = make(map[int]jmespath.JMESPath, len(config.HTTPErrors))
+		httpErrors := make([]proxyHTTPErrorMapping, 0, len(config.HTTPErrors))
 
-		for key, expr := range config.HTTPErrors {
+		keys := goutils.GetSortedKeys(config.HTTPErrors)
+
+		for i, key := range keys {
 			status, err := strconv.Atoi(key)
 			if err != nil {
 				return nil, &goutils.ErrorDetail{
@@ -127,16 +135,32 @@ func newProxyCustomGraphQLResponse(
 				}
 			}
 
-			expression, err := jmespath.Compile(expr)
-			if err != nil {
-				return nil, &goutils.ErrorDetail{
-					Detail:  err.Error(),
-					Pointer: "/response/httpErrors/" + key,
-				}
+			exprs := config.HTTPErrors[key]
+			if len(exprs) == 0 {
+				continue
 			}
 
-			result.HTTPErrors[status] = expression
+			errorMapping := proxyHTTPErrorMapping{
+				Status:      status,
+				Expressions: make([]jmespath.JMESPath, len(exprs)),
+			}
+
+			for j, expr := range exprs {
+				expression, err := jmespath.Compile(expr)
+				if err != nil {
+					return nil, &goutils.ErrorDetail{
+						Detail:  err.Error(),
+						Pointer: "/response/httpErrors/" + key + "/" + strconv.Itoa(j),
+					}
+				}
+
+				errorMapping.Expressions[j] = expression
+			}
+
+			result.HTTPErrors[i] = errorMapping
 		}
+
+		result.HTTPErrors = slices.Clip(httpErrors)
 	}
 
 	return result, nil

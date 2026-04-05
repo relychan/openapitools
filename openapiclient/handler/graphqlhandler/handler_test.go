@@ -412,8 +412,13 @@ func TestTransformResponse_WithHTTPStatusMapping(t *testing.T) {
 	handler := &GraphQLHandler{
 		method: "POST",
 		customResponse: &proxyCustomGraphQLResponse{
-			HTTPErrors: map[int]jmespath.JMESPath{
-				404: jmespath.MustCompile(`errors[0].extensions.code == "NOT_FOUND"`),
+			HTTPErrors: []proxyHTTPErrorMapping{
+				{
+					Status: 404,
+					Expressions: []jmespath.JMESPath{
+						jmespath.MustCompile(`errors[0].extensions.code == "NOT_FOUND"`),
+					},
+				},
 			},
 		},
 	}
