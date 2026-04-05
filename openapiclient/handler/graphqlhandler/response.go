@@ -312,16 +312,19 @@ func (ge *GraphQLHandler) evaluateGraphQLError(
 		return http.StatusInternalServerError, nil, respErr
 	}
 
-	for status, expr := range ge.customResponse.HTTPErrors {
-		result, err := expr.Search(gqlErrors)
-		if err != nil {
-			continue
-		}
+L:
+	for _, rule := range ge.customResponse.HTTPErrors {
+		for _, expr := range rule.Expressions {
+			result, err := expr.Search(gqlErrors)
+			if err != nil {
+				continue
+			}
 
-		if isEvaluatedError(result) {
-			statusCode = status
+			if isEvaluatedError(result) {
+				statusCode = rule.Status
 
-			break
+				break L
+			}
 		}
 	}
 
