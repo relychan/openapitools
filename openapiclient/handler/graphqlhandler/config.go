@@ -137,7 +137,10 @@ func newProxyCustomGraphQLResponse(
 
 			exprs := config.HTTPErrors[key]
 			if len(exprs) == 0 {
-				continue
+				return nil, &goutils.ErrorDetail{
+					Detail:  "http error mapping must contain at least one expression",
+					Pointer: "/response/httpErrors/" + key,
+				}
 			}
 
 			errorMapping := proxyHTTPErrorMapping{
