@@ -135,12 +135,8 @@ func TestNewProxyCustomGraphQLResponse(t *testing.T) {
 				"500": {"errors[0].message == 'error'"},
 			},
 		}
-		result, err := newProxyCustomGraphQLResponse(config, nil)
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		// 404 entry is skipped because it has no expressions
-		assert.Len(t, result.HTTPErrors, 1)
-		assert.Equal(t, 500, result.HTTPErrors[0].Status)
+		_, err := newProxyCustomGraphQLResponse(config, nil)
+		require.ErrorContains(t, err, "http error mapping must contain at least one expression")
 	})
 
 	t.Run("invalid_http_error_key_not_a_number", func(t *testing.T) {
