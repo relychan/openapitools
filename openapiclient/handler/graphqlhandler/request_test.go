@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/jmespath-community/go-jmespath"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
@@ -53,7 +54,7 @@ func TestTransformRequest(t *testing.T) {
 				},
 				variables: map[string]jmes.FieldMappingEntry{
 					"name": {
-						Path: new("param.name"),
+						Path: jmespath.MustCompile("param.name"),
 					},
 				},
 			},
@@ -79,10 +80,10 @@ func TestTransformRequest(t *testing.T) {
 				},
 				variables: map[string]jmes.FieldMappingEntry{
 					"limit": {
-						Path: new("query.limit[0]"),
+						Path: jmespath.MustCompile("query.limit[0]"),
 					},
 					"offset": {
-						Path: new("query.offset[0]"),
+						Path: jmespath.MustCompile("query.offset[0]"),
 					},
 				},
 			},
@@ -107,7 +108,7 @@ func TestTransformRequest(t *testing.T) {
 				},
 				variables: map[string]jmes.FieldMappingEntry{
 					"status": {
-						Path:    new("param.status"),
+						Path:    jmespath.MustCompile("param.status"),
 						Default: "active",
 					},
 				},
@@ -200,7 +201,7 @@ func TestResolveRequestExtensions(t *testing.T) {
 			handler: GraphQLHandler{
 				extensions: map[string]jmes.FieldMappingEntry{
 					"tracing": {
-						Path: new("headers.x_trace_id"),
+						Path: jmespath.MustCompile("headers.x_trace_id"),
 					},
 				},
 			},
@@ -789,7 +790,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			},
 			variables: map[string]jmes.FieldMappingEntry{
 				"price": {
-					Path: new("body.price"),
+					Path: jmespath.MustCompile("body.price"),
 				},
 			},
 		}
@@ -815,7 +816,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			},
 			variables: map[string]jmes.FieldMappingEntry{
 				"optional": {
-					Path: new("body.optional"),
+					Path: jmespath.MustCompile("body.optional"),
 				},
 			},
 		}
@@ -883,7 +884,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			},
 			variables: map[string]jmes.FieldMappingEntry{
 				"price": {
-					Path: new("body.price"),
+					Path: jmespath.MustCompile("body.price"),
 				},
 			},
 		}

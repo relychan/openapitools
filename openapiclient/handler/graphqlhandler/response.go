@@ -190,7 +190,7 @@ func (ge *GraphQLHandler) writeTransformResponse(
 		_, err := writer.Write(rawBody)
 		if err != nil {
 			span.SetStatus(codes.Error, "failed to write graphql response")
-			span.RecordError(gqlError)
+			span.RecordError(err)
 
 			return nil, newGraphQLResponseEncodeError(
 				oaschema.ErrCodeResponseTransformError,

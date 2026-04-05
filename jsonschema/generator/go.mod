@@ -3,7 +3,7 @@ module github.com/relychan/openapitools/jsonschema/generator
 go 1.26
 
 require (
-	github.com/relychan/goutils v0.0.0-20260320085159-a456d46cc0d9
+	github.com/relychan/goutils v0.0.0-20260404183650-6657ea84ff81
 	github.com/relychan/jsonschema v0.13.1
 	github.com/relychan/openapitools v0.0.0-00010101000000-000000000000
 )
@@ -43,7 +43,7 @@ require (
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/relychan/gocompress v0.1.2 // indirect
 	github.com/relychan/gohttpc v0.0.0-20260402045657-59c0214cec37 // indirect
-	github.com/relychan/gotransform v0.0.0-20260404043754-68a1a1d20d3b // indirect
+	github.com/relychan/gotransform v0.0.0-20260404192235-bcef8d71746d // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.32 // indirect

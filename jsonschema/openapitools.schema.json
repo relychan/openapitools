@@ -291,11 +291,11 @@
    "properties": {
     "path": {
      "type": "string",
-     "description": "JMESPath expression to find a value in the input data"
+     "description": "Path is a JMESPath expression to find a value in the input data."
     },
     "default": {
      "$ref": "#/$defs/EnvAny",
-     "description": "Default value to be used when no value is found"
+     "description": "Default value to be used when no value is found when looking up the value using the path."
     },
     "type": {
      "type": "string",
@@ -1027,12 +1027,10 @@
   "ProxyRESTfulParameterConfig": {
    "properties": {
     "path": {
-     "type": "string",
-     "description": "JMESPath expression to find a value in the input data"
+     "type": "string"
     },
     "default": {
-     "$ref": "#/$defs/EnvAny",
-     "description": "Default value to be used when no value is found"
+     "$ref": "#/$defs/EnvAny"
     },
     "name": {
      "type": "string",
@@ -1254,8 +1252,7 @@
      "type": "object",
      "required": [
       "type",
-      "template",
-      "contentType"
+      "template"
      ],
      "title": "TemplateTransformerGoTemplateConfig",
      "description": "Transform responses using the standard Go template"
