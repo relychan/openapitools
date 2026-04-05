@@ -9,7 +9,6 @@ require (
 	github.com/hasura/gotel v0.7.2
 	github.com/jmespath-community/go-jmespath v1.1.2-0.20250228093220-ef5fae83c6c0
 	github.com/pb33f/libopenapi v0.35.1
-	github.com/pb33f/ordered-map/v2 v2.3.1
 	github.com/relychan/gohttpc v0.0.0-20260402045657-59c0214cec37
 	github.com/relychan/gotransform v0.0.0-20260404192235-bcef8d71746d
 	github.com/relychan/goutils v0.0.0-20260404183650-6657ea84ff81
@@ -42,6 +41,7 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pb33f/jsonpath v0.8.2 // indirect
+	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect

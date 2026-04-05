@@ -873,6 +873,44 @@
    "description": "OpenAPIResourceSettings hold settings of the rely proxy."
   },
   "OverlayActionObject": {
+   "oneOf": [
+    {
+     "properties": {
+      "update": {
+       "description": "If the target selects object nodes, the value of this field MUST be an object with the properties and values to merge with each selected object. If the target selects array nodes, the value of this field MUST be an array to concatenate with each selected array, or an object or primitive value to append to each selected array. If the target selects primitive nodes, the value of this field MUST be a primitive value to replace each selected node. This field has no impact if the remove field of this action object is true or if the copy field contains a value."
+      }
+     },
+     "type": "object",
+     "required": [
+      "update"
+     ]
+    },
+    {
+     "properties": {
+      "copy": {
+       "type": "string",
+       "description": "A JSONPath expression selecting a single node to copy into the target nodes. If the target selects object nodes, the value of this field MUST be an object with the properties and values to merge with each selected object. If the target selects array nodes, the value of this field MUST be an array to concatenate with each selected array, or an object or primitive value to append to each selected array. If the target selects primitive nodes, the value of this field MUST be a primitive value to replace each selected node. This field has no impact if the remove field of this action object is true or if the update field contains a value."
+      }
+     },
+     "type": "object",
+     "required": [
+      "copy"
+     ]
+    },
+    {
+     "properties": {
+      "remove": {
+       "type": "boolean",
+       "const": true,
+       "description": "A boolean value that indicates that each of the target nodes MUST be removed from the the map or array it is contained in. The default value is false."
+      }
+     },
+     "type": "object",
+     "required": [
+      "remove"
+     ]
+    }
+   ],
    "properties": {
     "target": {
      "type": "string",
@@ -882,18 +920,6 @@
     "description": {
      "type": "string",
      "description": "A description of the action."
-    },
-    "update": {
-     "description": "If the target selects object nodes, the value of this field MUST be an object with the properties and values to merge with each selected object. If the target selects array nodes, the value of this field MUST be an array to concatenate with each selected array, or an object or primitive value to append to each selected array. If the target selects primitive nodes, the value of this field MUST be a primitive value to replace each selected node. This field has no impact if the remove field of this action object is true or if the copy field contains a value."
-    },
-    "copy": {
-     "type": "string",
-     "description": "A JSONPath expression selecting a single node to copy into the target nodes. If the target selects object nodes, the value of this field MUST be an object with the properties and values to merge with each selected object. If the target selects array nodes, the value of this field MUST be an array to concatenate with each selected array, or an object or primitive value to append to each selected array. If the target selects primitive nodes, the value of this field MUST be a primitive value to replace each selected node. This field has no impact if the remove field of this action object is true or if the update field contains a value."
-    },
-    "remove": {
-     "type": "boolean",
-     "description": "A boolean value that indicates that each of the target nodes MUST be removed from the the map or array it is contained in. The default value is false.",
-     "default": false
     }
    },
    "type": "object",

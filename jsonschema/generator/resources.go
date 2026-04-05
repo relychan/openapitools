@@ -169,17 +169,23 @@ func newOverlayActionSchema() *jsonschema.Schema {
 		Type:        "string",
 		Description: "A description of the action.",
 	})
-	props.Set("update", &jsonschema.Schema{
+
+	updateProps := jsonschema.NewProperties()
+	updateProps.Set("update", &jsonschema.Schema{
 		Description: "If the target selects object nodes, the value of this field MUST be an object with the properties and values to merge with each selected object. If the target selects array nodes, the value of this field MUST be an array to concatenate with each selected array, or an object or primitive value to append to each selected array. If the target selects primitive nodes, the value of this field MUST be a primitive value to replace each selected node. This field has no impact if the remove field of this action object is true or if the copy field contains a value.",
 	})
-	props.Set("copy", &jsonschema.Schema{
+
+	copyProps := jsonschema.NewProperties()
+	copyProps.Set("copy", &jsonschema.Schema{
 		Type:        "string",
 		Description: "A JSONPath expression selecting a single node to copy into the target nodes. If the target selects object nodes, the value of this field MUST be an object with the properties and values to merge with each selected object. If the target selects array nodes, the value of this field MUST be an array to concatenate with each selected array, or an object or primitive value to append to each selected array. If the target selects primitive nodes, the value of this field MUST be a primitive value to replace each selected node. This field has no impact if the remove field of this action object is true or if the update field contains a value.",
 	})
-	props.Set("remove", &jsonschema.Schema{
+
+	removeProps := jsonschema.NewProperties()
+	removeProps.Set("remove", &jsonschema.Schema{
 		Type:        "boolean",
 		Description: "A boolean value that indicates that each of the target nodes MUST be removed from the the map or array it is contained in. The default value is false.",
-		Default:     false,
+		Const:       true,
 	})
 
 	jsonSchema := &jsonschema.Schema{
@@ -187,6 +193,23 @@ func newOverlayActionSchema() *jsonschema.Schema {
 		Description: "Represents one or more changes to be applied to the target document at the location defined by the target JSONPath expression.",
 		Required:    []string{"target"},
 		Properties:  props,
+		OneOf: []*jsonschema.Schema{
+			{
+				Type:       "object",
+				Required:   []string{"update"},
+				Properties: updateProps,
+			},
+			{
+				Type:       "object",
+				Required:   []string{"copy"},
+				Properties: copyProps,
+			},
+			{
+				Type:       "object",
+				Required:   []string{"remove"},
+				Properties: removeProps,
+			},
+		},
 	}
 
 	return jsonSchema
