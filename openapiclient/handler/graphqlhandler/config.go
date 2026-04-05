@@ -126,7 +126,7 @@ func newProxyCustomGraphQLResponse(
 
 		keys := goutils.GetSortedKeys(config.HTTPErrors)
 
-		for i, key := range keys {
+		for _, key := range keys {
 			status, err := strconv.Atoi(key)
 			if err != nil {
 				return nil, &goutils.ErrorDetail{
@@ -157,7 +157,7 @@ func newProxyCustomGraphQLResponse(
 				errorMapping.Expressions[j] = expression
 			}
 
-			result.HTTPErrors[i] = errorMapping
+			httpErrors = append(httpErrors, errorMapping)
 		}
 
 		result.HTTPErrors = slices.Clip(httpErrors)
