@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jmespath-community/go-jmespath"
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/openapitools/oaschema"
@@ -196,7 +197,7 @@ func TestEvaluateRequestPath_ParamFromCustomParameters(t *testing.T) {
 			Parameters: []ProxyRESTfulParameter{
 				{
 					FieldMappingEntry: jmes.FieldMappingEntry{
-						Path: new("param.userId"),
+						Path: jmespath.MustCompile("param.userId"),
 					},
 					BaseParameter: parameter.BaseParameter{
 						Name: "id",
@@ -280,7 +281,7 @@ func TestTransformRequest_WithHeaderParam(t *testing.T) {
 			Parameters: []ProxyRESTfulParameter{
 				{
 					FieldMappingEntry: jmes.FieldMappingEntry{
-						Path: new("headers.authorization"),
+						Path: jmespath.MustCompile("headers.authorization"),
 					},
 					BaseParameter: parameter.BaseParameter{
 						Name: "Authorization",
@@ -309,7 +310,7 @@ func TestTransformRequest_WithQueryParam(t *testing.T) {
 			Parameters: []ProxyRESTfulParameter{
 				{
 					FieldMappingEntry: jmes.FieldMappingEntry{
-						Path: new("query.limit"),
+						Path: jmespath.MustCompile("query.limit"),
 					},
 					BaseParameter: parameter.BaseParameter{
 						Name: "limit",

@@ -61,9 +61,9 @@ func (pc *ProxyClient) Stream(
 
 	response, err := route.Method.Handler.Stream(ctx, req, writer, options)
 	if err != nil {
-		respErr := pc.handleError(span, err, request.URL.Path)
+		status, respErr := pc.handleError(span, err, request.URL.Path)
 
-		writeErrorResponse(writer, respErr)
+		writeErrorResponse(writer, status, respErr)
 
 		return response, respErr
 	}
@@ -106,7 +106,9 @@ func (pc *ProxyClient) Execute(
 
 	response, responseBody, err := route.Method.Handler.Handle(ctx, request, options)
 	if err != nil {
-		return nil, nil, pc.handleError(span, err, requestURL.Path)
+		_, respError := pc.handleError(span, err, requestURL.Path)
+
+		return nil, nil, respError
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -147,7 +149,7 @@ func (pc *ProxyClient) prepareRequest(
 		err.Instance = originalPath
 
 		if writer != nil {
-			writeErrorResponse(writer, err)
+			writeErrorResponse(writer, err.Status, err)
 		}
 
 		return nil, nil, err
@@ -172,7 +174,7 @@ func (*ProxyClient) handleError(
 	span trace.Span,
 	err error,
 	requestPath string,
-) *goutils.RFC9457Error {
+) (int, error) {
 	span.SetStatus(codes.Error, "proxy failed")
 	span.RecordError(err)
 
@@ -180,15 +182,21 @@ func (*ProxyClient) handleError(
 	if ok {
 		rfc9457Error.Instance = requestPath
 
-		return rfc9457Error
+		return rfc9457Error.Status, rfc9457Error
 	}
 
-	return &goutils.RFC9457Error{
-		Status:   http.StatusInternalServerError,
-		Title:    http.StatusText(http.StatusInternalServerError),
-		Detail:   err.Error(),
-		Instance: requestPath,
+	exError, ok := errors.AsType[*goutils.RFC9457ErrorWithExtensions](err)
+	if ok {
+		exError.Instance = requestPath
+
+		return exError.Status, exError
 	}
+
+	respError := goutils.NewServerError()
+	respError.Detail = err.Error()
+	respError.Instance = requestPath
+
+	return respError.Status, respError
 }
 
 func (pc *ProxyClient) newRequestFunc(

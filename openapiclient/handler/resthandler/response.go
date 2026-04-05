@@ -181,7 +181,7 @@ func (*RESTfulHandler) resolveRawResponse(
 
 		if err != nil {
 			respErr := goutils.NewServerError(goutils.ErrorDetail{
-				Code:   oaschema.ErrCodeResponseDecodeBodyError,
+				Code:   oaschema.ErrCodeWriteResponseError,
 				Detail: err.Error(),
 			})
 

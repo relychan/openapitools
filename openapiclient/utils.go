@@ -62,13 +62,13 @@ func newRequest(writer http.ResponseWriter, request *http.Request) (*proxyhandle
 	respErr.Detail = "failed to decode request"
 
 	if writer != nil {
-		writeErrorResponse(writer, respErr)
+		writeErrorResponse(writer, respErr.Status, respErr)
 	}
 
 	return nil, respErr
 }
 
-func writeErrorResponse(writer http.ResponseWriter, err *goutils.RFC9457Error) {
+func writeErrorResponse(writer http.ResponseWriter, status int, err error) {
 	tracingWriter, ok := writer.(tracingResponseWriter)
 	if ok && tracingWriter.BytesWritten() > 0 {
 		// The writer were already written. Do not write again.
@@ -76,7 +76,7 @@ func writeErrorResponse(writer http.ResponseWriter, err *goutils.RFC9457Error) {
 	}
 
 	writer.Header().Set(httpheader.ContentType, httpheader.ContentTypeJSON)
-	writer.WriteHeader(err.Status)
+	writer.WriteHeader(status)
 
 	writeErr := json.NewEncoder(writer).Encode(err)
 	if writeErr == nil {

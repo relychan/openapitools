@@ -43,6 +43,8 @@ spec:
                   id
                 }
               }
+          response:
+            httpErrorCode: 400
     /characters/{id}:
       get:
         operationId: getCharacters

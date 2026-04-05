@@ -121,6 +121,23 @@ func genOpenAPIResourceSchema() (*jsonschema.Schema, error) {
 		}
 	}
 
+	// override graphql http errors response transformation
+	httpErrors := &jsonschema.Schema{
+		Type:        "object",
+		Description: "Evaluation rules to map GraphQL errors to desired HTTP status codes.",
+		Properties:  jsonschema.NewProperties(),
+	}
+
+	for _, statusCode := range []string{"400", "401", "403", "404", "405", "422", "500", "501"} {
+		httpErrors.Properties.Set(statusCode, &jsonschema.Schema{
+			Type:      "string",
+			MinLength: new(uint64(1)),
+		})
+	}
+
+	reflectSchema.Definitions["ProxyCustomGraphQLResponseConfig"].
+		Properties.Set("httpErrors", httpErrors)
+
 	return reflectSchema, nil
 }
 
