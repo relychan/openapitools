@@ -17,7 +17,9 @@ package graphqlhandler
 import (
 	"testing"
 
+	"github.com/jmespath-community/go-jmespath"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestProxyCustomGraphQLResponseConfigIsZero tests the IsZero method
@@ -33,18 +35,25 @@ func TestProxyCustomGraphQLResponseConfigIsZero(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "with_http_error_code",
-			config: ProxyCustomGraphQLResponseConfig{
-				HTTPErrorCode: func() *int { i := 400; return &i }(),
-			},
+			name:     "with_http_error_code",
+			config:   ProxyCustomGraphQLResponseConfig{HTTPErrorCode: new(400)},
 			expected: false,
+		},
+		{
+			name:     "with_http_errors",
+			config:   ProxyCustomGraphQLResponseConfig{HTTPErrors: map[string][]string{"400": {"errors[0].message == 'bad'"}}},
+			expected: false,
+		},
+		{
+			name:     "with_nil_body",
+			config:   ProxyCustomGraphQLResponseConfig{Body: nil},
+			expected: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := tc.config.IsZero()
-			assert.Equal(t, tc.expected, result)
+			assert.Equal(t, tc.expected, tc.config.IsZero())
 		})
 	}
 }
@@ -54,30 +63,140 @@ func TestNewProxyCustomGraphQLResponse(t *testing.T) {
 	t.Run("nil_config", func(t *testing.T) {
 		result, err := newProxyCustomGraphQLResponse(nil, nil)
 		assert.NoError(t, err)
-		assert.True(t, result == nil)
+		assert.Nil(t, result)
 	})
 
 	t.Run("empty_config", func(t *testing.T) {
-		config := &ProxyCustomGraphQLResponseConfig{}
-		result, err := newProxyCustomGraphQLResponse(config, nil)
+		result, err := newProxyCustomGraphQLResponse(&ProxyCustomGraphQLResponseConfig{}, nil)
 		assert.NoError(t, err)
-		assert.True(t, result == nil)
+		assert.Nil(t, result)
 	})
 
 	t.Run("with_http_error_code", func(t *testing.T) {
-		errorCode := 400
+		config := &ProxyCustomGraphQLResponseConfig{HTTPErrorCode: new(400)}
+		result, err := newProxyCustomGraphQLResponse(config, nil)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, 400, *result.HTTPErrorCode)
+		assert.Empty(t, result.HTTPErrors)
+		assert.Nil(t, result.Body)
+	})
+
+	t.Run("with_http_error_code_500", func(t *testing.T) {
+		config := &ProxyCustomGraphQLResponseConfig{HTTPErrorCode: new(500)}
+		result, err := newProxyCustomGraphQLResponse(config, nil)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, 500, *result.HTTPErrorCode)
+	})
+
+	t.Run("with_valid_http_errors", func(t *testing.T) {
 		config := &ProxyCustomGraphQLResponseConfig{
-			HTTPErrorCode: &errorCode,
+			HTTPErrorCode: new(400),
+			HTTPErrors: map[string][]string{
+				"404": {"errors[0].extensions.code == 'NOT_FOUND'"},
+				"500": {"errors[0].extensions.code == 'INTERNAL'", "errors[0].message == 'server error'"},
+			},
 		}
 		result, err := newProxyCustomGraphQLResponse(config, nil)
-		assert.NoError(t, err)
-		assert.True(t, result != nil)
-		assert.Equal(t, 400, *result.HTTPErrorCode)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Len(t, result.HTTPErrors, 2)
+		// keys are sorted, so 404 comes before 500
+		assert.Equal(t, 404, result.HTTPErrors[0].Status)
+		assert.Len(t, result.HTTPErrors[0].Expressions, 1)
+		assert.Equal(t, 500, result.HTTPErrors[1].Status)
+		assert.Len(t, result.HTTPErrors[1].Expressions, 2)
+	})
+
+	t.Run("http_errors_sorted_by_key", func(t *testing.T) {
+		config := &ProxyCustomGraphQLResponseConfig{
+			HTTPErrorCode: new(400),
+			HTTPErrors: map[string][]string{
+				"503": {"errors[0].message == 'unavailable'"},
+				"401": {"errors[0].extensions.code == 'UNAUTHORIZED'"},
+				"422": {"errors[0].extensions.code == 'UNPROCESSABLE'"},
+			},
+		}
+		result, err := newProxyCustomGraphQLResponse(config, nil)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Len(t, result.HTTPErrors, 3)
+		assert.Equal(t, 401, result.HTTPErrors[0].Status)
+		assert.Equal(t, 422, result.HTTPErrors[1].Status)
+		assert.Equal(t, 503, result.HTTPErrors[2].Status)
+	})
+
+	t.Run("http_errors_empty_expressions_skipped", func(t *testing.T) {
+		config := &ProxyCustomGraphQLResponseConfig{
+			HTTPErrorCode: new(400),
+			HTTPErrors: map[string][]string{
+				"404": {},
+				"500": {"errors[0].message == 'error'"},
+			},
+		}
+		result, err := newProxyCustomGraphQLResponse(config, nil)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		// 404 entry is skipped because it has no expressions
+		assert.Len(t, result.HTTPErrors, 1)
+		assert.Equal(t, 500, result.HTTPErrors[0].Status)
+	})
+
+	t.Run("invalid_http_error_key_not_a_number", func(t *testing.T) {
+		config := &ProxyCustomGraphQLResponseConfig{
+			HTTPErrorCode: new(400),
+			HTTPErrors: map[string][]string{
+				"not-a-number": {"errors[0].message == 'x'"},
+			},
+		}
+		result, err := newProxyCustomGraphQLResponse(config, nil)
+		assert.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("invalid_jmespath_expression", func(t *testing.T) {
+		config := &ProxyCustomGraphQLResponseConfig{
+			HTTPErrorCode: new(400),
+			HTTPErrors: map[string][]string{
+				"400": {"[[[invalid"},
+			},
+		}
+		result, err := newProxyCustomGraphQLResponse(config, nil)
+		assert.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("error_detail_pointer_for_invalid_key", func(t *testing.T) {
+		config := &ProxyCustomGraphQLResponseConfig{
+			HTTPErrorCode: new(400),
+			HTTPErrors: map[string][]string{
+				"bad-key": {"errors[0].message == 'x'"},
+			},
+		}
+		_, err := newProxyCustomGraphQLResponse(config, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "/response/httpErrors/bad-key")
+	})
+
+	t.Run("error_detail_pointer_for_invalid_expression", func(t *testing.T) {
+		config := &ProxyCustomGraphQLResponseConfig{
+			HTTPErrorCode: new(400),
+			HTTPErrors: map[string][]string{
+				"400": {"[[[invalid"},
+			},
+		}
+		_, err := newProxyCustomGraphQLResponse(config, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "/response/httpErrors/400/0")
 	})
 }
 
 // TestProxyCustomGraphQLResponseIsZero tests the IsZero method
 func TestProxyCustomGraphQLResponseIsZero(t *testing.T) {
+	compiledExpr, err := jmespath.Compile("errors[0].message")
+	require.NoError(t, err)
+
 	testCases := []struct {
 		name     string
 		response proxyCustomGraphQLResponse
@@ -89,18 +208,29 @@ func TestProxyCustomGraphQLResponseIsZero(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "with_http_error_code",
+			name:     "with_http_error_code",
+			response: proxyCustomGraphQLResponse{HTTPErrorCode: new(400)},
+			expected: false,
+		},
+		{
+			name: "with_http_errors",
 			response: proxyCustomGraphQLResponse{
-				HTTPErrorCode: func() *int { i := 400; return &i }(),
+				HTTPErrors: []proxyHTTPErrorMapping{
+					{Status: 404, Expressions: []jmespath.JMESPath{compiledExpr}},
+				},
 			},
 			expected: false,
+		},
+		{
+			name:     "with_nil_body",
+			response: proxyCustomGraphQLResponse{Body: nil},
+			expected: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := tc.response.IsZero()
-			assert.Equal(t, tc.expected, result)
+			assert.Equal(t, tc.expected, tc.response.IsZero())
 		})
 	}
 }

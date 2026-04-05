@@ -72,8 +72,10 @@ openapiclient/
       parameter/                 # Path, query, header parameter serialization
     graphqlhandler/
       handler.go                 # GraphQLHandler implementation
-      config.go                  # GraphQL-specific configuration
+      config.go                  # GraphQL-specific configuration (ProxyGraphQLActionConfig, ProxyGraphQLRequestConfig, ProxyCustomGraphQLResponseConfig)
       request.go                 # GraphQL request construction
+      response.go                # GraphQL response evaluation — JMESPath-based error mapping, HTTP status resolution
+      utils.go                   # ValidateGraphQLString, type conversions, error utilities
   internal/
     tree.go                      # Trie-based route matching
     types.go                     # Route, MethodHandler, Node structs; routing error types
@@ -113,6 +115,23 @@ Each OpenAPI operation gets exactly one handler, selected by the `x-rely-proxy-a
 | `x-rely-security-credentials` | operation object | Per-operation credential overrides |
 | `x-rely-oauth2-token-url-env` | security scheme | Env var for OAuth2 token URL |
 | `x-rely-oauth2-refresh-url-env` | security scheme | Env var for OAuth2 refresh URL |
+
+### GraphQL handler configuration
+
+`ProxyGraphQLActionConfig` (set via `x-rely-proxy-action` with `type: graphql`) has two sub-configs:
+
+**`ProxyGraphQLRequestConfig`** — upstream request shape:
+- `URL` — override request URL
+- `Method` — `GET` or `POST` (default: `POST`)
+- `Headers` — per-header JMESPath expressions for request transformation
+- `Query` — GraphQL query string (required)
+- `Variables` — JMESPath-mapped GraphQL variables
+- `Extensions` — JMESPath-mapped GraphQL extensions
+
+**`ProxyCustomGraphQLResponseConfig`** — response error mapping:
+- `HTTPErrorCode` — default HTTP status to return when GraphQL `errors` field is present (400–599)
+- `HTTPErrors` — `map[string][]string`: maps HTTP status code (string key) → one or more JMESPath expressions evaluated against GraphQL error objects; first matching expression wins, rules evaluated in ascending status-code order
+- `Body` — optional `TemplateTransformerConfig` for response body transformation
 
 ### Error handling
 
