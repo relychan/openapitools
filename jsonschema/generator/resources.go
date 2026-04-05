@@ -1,12 +1,11 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"io"
 	"maps"
-	"net/http"
 	"strings"
 
 	"github.com/relychan/goutils"
@@ -75,16 +74,20 @@ func genOpenAPIResourceSchema() (*jsonschema.Schema, error) {
 	}
 
 	actionSchema := genProxyActionSchema(r)
-	reflectSchema := r.Reflect(oaschema.OpenAPIResourceDefinition{})
 
 	openApiSpec, err := loadOpenAPISchema()
 	if err != nil {
 		return nil, err
 	}
 
+	reflectSchema := newOpenAPIResourceSchema()
+
 	maps.Copy(reflectSchema.Definitions, openApiSpec.Definitions)
 	openApiSpec.Definitions = nil
 	maps.Copy(reflectSchema.Definitions, actionSchema.Definitions)
+
+	settings := r.Reflect(oaschema.OpenAPIResourceSettings{})
+	maps.Copy(reflectSchema.Definitions, settings.Definitions)
 
 	remoteSchemas, err := downloadRemoteSchemas()
 	if err != nil {
@@ -97,23 +100,6 @@ func genOpenAPIResourceSchema() (*jsonschema.Schema, error) {
 
 	// custom schema types
 	reflectSchema.Definitions["Document"] = openApiSpec
-
-	// delete unused definitions
-	delete(reflectSchema.Definitions, "Contact")
-	delete(reflectSchema.Definitions, "Components")
-	delete(reflectSchema.Definitions, "ExternalDoc")
-	delete(reflectSchema.Definitions, "Tag")
-	delete(reflectSchema.Definitions, "SecurityRequirement")
-	delete(reflectSchema.Definitions, "Server")
-	delete(reflectSchema.Definitions, "Paths")
-	delete(reflectSchema.Definitions, "Info")
-	delete(reflectSchema.Definitions, "License")
-
-	for key := range reflectSchema.Definitions {
-		if strings.HasPrefix(key, "Map[") {
-			delete(reflectSchema.Definitions, key)
-		}
-	}
 
 	// override graphql http errors response transformation
 	httpErrors := &jsonschema.Schema{
@@ -159,35 +145,105 @@ func downloadRemoteSchemas() ([]*jsonschema.Schema, error) {
 	results := make([]*jsonschema.Schema, 0, len(fileURLs))
 
 	for _, fileURL := range fileURLs {
-		rawResp, err := http.Get(fileURL) //nolint:bodyclose,noctx,gosec
+		jsonSchema, err := goutils.ReadJSONOrYAMLFile[jsonschema.Schema](context.TODO(), fileURL)
 		if err != nil {
-			return nil, fmt.Errorf("failed to download file %s: %w", fileURL, err)
-		}
-
-		if rawResp.StatusCode != http.StatusOK {
-			rawBody, err := io.ReadAll(rawResp.Body)
-
-			goutils.CatchWarnErrorFunc(rawResp.Body.Close)
-
-			if err != nil {
-				return nil, fmt.Errorf("failed to download %s schema: %s", fileURL, rawResp.Status) //nolint
-			}
-
-			return nil, fmt.Errorf("failed to download %s schema: %s", fileURL, string(rawBody)) //nolint
-		}
-
-		jsonSchema := new(jsonschema.Schema)
-
-		err = json.NewDecoder(rawResp.Body).Decode(jsonSchema)
-
-		goutils.CatchWarnErrorFunc(rawResp.Body.Close)
-
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode gohttpc schema: %w", err)
+			return nil, err
 		}
 
 		results = append(results, jsonSchema)
 	}
 
 	return results, nil
+}
+
+func newOverlayActionSchema() *jsonschema.Schema {
+	// The schema is copied from https://raw.githubusercontent.com/OAI/Overlay-Specification/refs/heads/main/schemas/v1.1/schema.yaml
+
+	props := jsonschema.NewProperties()
+	props.Set("target", &jsonschema.Schema{
+		Type:        "string",
+		Description: "A RFC9535 JSONPath query expression selecting nodes in the target document.",
+		Pattern:     `^\$`,
+	})
+	props.Set("description", &jsonschema.Schema{
+		Type:        "string",
+		Description: "A description of the action.",
+	})
+	props.Set("update", &jsonschema.Schema{
+		Description: "If the target selects object nodes, the value of this field MUST be an object with the properties and values to merge with each selected object. If the target selects array nodes, the value of this field MUST be an array to concatenate with each selected array, or an object or primitive value to append to each selected array. If the target selects primitive nodes, the value of this field MUST be a primitive value to replace each selected node. This field has no impact if the remove field of this action object is true or if the copy field contains a value.",
+	})
+	props.Set("copy", &jsonschema.Schema{
+		Type:        "string",
+		Description: "A JSONPath expression selecting a single node to copy into the target nodes. If the target selects object nodes, the value of this field MUST be an object with the properties and values to merge with each selected object. If the target selects array nodes, the value of this field MUST be an array to concatenate with each selected array, or an object or primitive value to append to each selected array. If the target selects primitive nodes, the value of this field MUST be a primitive value to replace each selected node. This field has no impact if the remove field of this action object is true or if the update field contains a value.",
+	})
+	props.Set("remove", &jsonschema.Schema{
+		Type:        "boolean",
+		Description: "A boolean value that indicates that each of the target nodes MUST be removed from the the map or array it is contained in. The default value is false.",
+		Default:     false,
+	})
+
+	jsonSchema := &jsonschema.Schema{
+		Type:        "object",
+		Description: "Represents one or more changes to be applied to the target document at the location defined by the target JSONPath expression.",
+		Required:    []string{"target"},
+		Properties:  props,
+	}
+
+	return jsonSchema
+}
+
+func newOpenAPIResourceSchema() *jsonschema.Schema {
+	resourceProps := jsonschema.NewProperties()
+	resourceProps.Set("settings", &jsonschema.Schema{
+		Description: "Settings of the OpenAPI resource.",
+		Ref:         "#/$defs/OpenAPIResourceSettings",
+	})
+	resourceProps.Set("patches", &jsonschema.Schema{
+		Description: "A set of patches, or overlay actions to be applied to one or many OpenAPI descriptions. See https://spec.openapis.org/overlay/v1.0.0.html#action-object",
+		Type:        "array",
+		Items: &jsonschema.Schema{
+			Ref: "#/$defs/OverlayActionObject",
+		},
+	})
+
+	refProps := jsonschema.NewProperties()
+	refProps.Set("ref", &jsonschema.Schema{
+		Description: "Path of URL of the referenced OpenAPI document.\nRequires at least one of ref or spec.\nIf both fields are configured, the spec will be merged into the reference.",
+		Type:        "string",
+	})
+
+	specProps := jsonschema.NewProperties()
+	specProps.Set("spec", &jsonschema.Schema{
+		Description: "Specification of the OpenAPI v3 documentation.",
+		Ref:         "#/$defs/Document",
+	})
+
+	return &jsonschema.Schema{
+		Version: "https://json-schema.org/draft/2020-12/schema",
+		ID:      "https://github.com/relychan/openapitools/oaschema/open-api-resource-definition",
+		Ref:     "#/$defs/OpenAPIResourceDefinition",
+		Definitions: jsonschema.Definitions{
+			"OpenAPIResourceDefinition": &jsonschema.Schema{
+				Type:        "object",
+				Description: "Definition of an OpenAPI resource",
+				Properties:  resourceProps,
+				Required:    []string{"settings"},
+				OneOf: []*jsonschema.Schema{
+					{
+						Type:        "object",
+						Description: "Definition of an OpenAPI resource",
+						Properties:  refProps,
+						Required:    []string{"ref"},
+					},
+					{
+						Type:        "object",
+						Description: "Definition of an OpenAPI resource",
+						Properties:  specProps,
+						Required:    []string{"spec"},
+					},
+				},
+			},
+			"OverlayActionObject": newOverlayActionSchema(),
+		},
+	}
 }

@@ -25,8 +25,148 @@ import (
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v4"
 )
+
+func TestOpenAPIResourceDefinition_UnmarshalJSON(t *testing.T) {
+	testCases := []struct {
+		name        string
+		jsonData    string
+		expectError bool
+		checkFunc   func(*testing.T, *OpenAPIResourceDefinition)
+	}{
+		{
+			name: "valid minimal spec",
+			jsonData: `{
+				"spec": {
+					"openapi": "3.0.0",
+					"info": {
+						"title": "Test API",
+						"version": "1.0.0"
+					},
+					"paths": {}
+				}
+			}`,
+			expectError: false,
+			checkFunc: func(t *testing.T, def *OpenAPIResourceDefinition) {
+				assert.True(t, len(def.specBytes) > 0)
+			},
+		},
+		{
+			name: "valid spec with settings",
+			jsonData: `{
+				"settings": {
+					"basePath": "/api/v1"
+				},
+				"spec": {
+					"openapi": "3.0.0",
+					"info": {
+						"title": "Test API",
+						"version": "1.0.0"
+					},
+					"paths": {}
+				}
+			}`,
+			expectError: false,
+			checkFunc: func(t *testing.T, def *OpenAPIResourceDefinition) {
+				assert.True(t, len(def.specBytes) > 0)
+			},
+		},
+		{
+			name:        "invalid json",
+			jsonData:    `{"spec": invalid}`,
+			expectError: true,
+			checkFunc:   nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var def OpenAPIResourceDefinition
+			err := json.Unmarshal([]byte(tc.jsonData), &def)
+			if tc.expectError {
+				assert.True(t, err != nil, "expected error but got nil")
+			} else {
+				assert.NoError(t, err)
+				if tc.checkFunc != nil {
+					tc.checkFunc(t, &def)
+				}
+			}
+		})
+	}
+}
+
+func TestOpenAPIResourceDefinition_UnmarshalYAML(t *testing.T) {
+	testCases := []struct {
+		name        string
+		yamlData    string
+		expectError bool
+		checkFunc   func(*testing.T, *OpenAPIResourceDefinition)
+	}{
+		{
+			name: "valid minimal spec with servers and paths",
+			yamlData: `spec:
+  openapi: "3.0.0"
+  info:
+    title: Test API
+    version: "1.0.0"
+  servers:
+    - url: "{SERVER_URL}"
+      variables:
+        SERVER_URL: 
+          default: https://api.example.com
+  paths:
+    /users:
+      get:
+        operationId: getUsers`,
+			expectError: false,
+			checkFunc: func(t *testing.T, def *OpenAPIResourceDefinition) {
+				assert.True(t, def.specNode != nil)
+			},
+		},
+		{
+			name: "valid spec with settings",
+			yamlData: `settings:
+  basePath: /api/v1
+spec:
+  openapi: "3.0.0"
+  info:
+    title: Test API
+    version: "1.0.0"
+  servers:
+    - url: https://api.example.com
+  paths: {}`,
+			expectError: false,
+			checkFunc: func(t *testing.T, def *OpenAPIResourceDefinition) {
+				assert.True(t, def.specNode != nil)
+			},
+		},
+		{
+			name: "invalid spec format",
+			yamlData: `spec:
+		  invalid: data`,
+			expectError: true,
+			checkFunc:   nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var def OpenAPIResourceDefinition
+			err := yaml.Load([]byte(tc.yamlData), &def)
+
+			if tc.expectError {
+				require.True(t, err != nil, "expected error but got nil")
+			} else {
+				require.NoError(t, err)
+				if tc.checkFunc != nil {
+					tc.checkFunc(t, &def)
+				}
+			}
+		})
+	}
+}
 
 // TestOpenAPIResourceDefinition_MarshalJSON tests JSON marshaling
 func TestOpenAPIResourceDefinition_MarshalJSON(t *testing.T) {
@@ -211,8 +351,8 @@ func TestOpenAPIResourceDefinition_Build(t *testing.T) {
 // goarch: arm64
 // pkg: github.com/relychan/openapitools/oaschema
 // cpu: Apple M3 Pro
-// BenchmarkResourceUnmarshaler/unmarshal_json-11         	     115	  10267543 ns/op	16303070 B/op	   80154 allocs/op
-// BenchmarkResourceUnmarshaler/unmarshal_yaml-11         	     168	   7166988 ns/op	 5987193 B/op	   85500 allocs/op
+// BenchmarkResourceUnmarshaler/build_from_json-11         	     108	  11033754 ns/op	16304145 B/op	   80155 allocs/op
+// BenchmarkResourceUnmarshaler/build_from_yaml-11         	     170	   7257790 ns/op	 5988277 B/op	   85500 allocs/op
 func BenchmarkResourceUnmarshaler(b *testing.B) {
 	rawPetStoreJson, err := os.ReadFile("./testdata/petstore3/openapi.json")
 	if err != nil {
@@ -233,22 +373,32 @@ func BenchmarkResourceUnmarshaler(b *testing.B) {
 		panic(err)
 	}
 
-	b.Run("unmarshal_json", func(b *testing.B) {
+	b.Run("build_from_json", func(b *testing.B) {
 		for b.Loop() {
 			var value OpenAPIResourceDefinition
 			err := json.Unmarshal(petStoreJson, &value)
 			if err != nil {
-				panic(err)
+				b.Fatal(err)
+			}
+
+			_, err = value.Build(context.Background())
+			if err != nil {
+				b.Fatal(err)
 			}
 		}
 	})
 
-	b.Run("unmarshal_yaml", func(b *testing.B) {
+	b.Run("build_from_yaml", func(b *testing.B) {
 		for b.Loop() {
 			var value OpenAPIResourceDefinition
 			err := yaml.Load(petStoreYaml, &value)
 			if err != nil {
-				panic(err)
+				b.Fatal(err)
+			}
+
+			_, err = value.Build(context.Background())
+			if err != nil {
+				b.Fatal(err)
 			}
 		}
 	})
