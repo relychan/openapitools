@@ -25,6 +25,7 @@ import (
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/stretchr/testify/assert"
+	"go.yaml.in/yaml/v4"
 )
 
 // TestOpenAPIResourceDefinition_MarshalJSON tests JSON marshaling
@@ -202,6 +203,53 @@ func TestOpenAPIResourceDefinition_Build(t *testing.T) {
 			changes, err := libopenapi.CompareDocuments(expectedRawDoc, newDoc)
 			assert.NoError(t, err)
 			assert.True(t, len(changes.GetAllChanges()) == 0)
+		}
+	})
+}
+
+// goos: darwin
+// goarch: arm64
+// pkg: github.com/relychan/openapitools/oaschema
+// cpu: Apple M3 Pro
+// BenchmarkResourceUnmarshaler/unmarshal_json-11         	     115	  10267543 ns/op	16303070 B/op	   80154 allocs/op
+// BenchmarkResourceUnmarshaler/unmarshal_yaml-11         	     168	   7166988 ns/op	 5987193 B/op	   85500 allocs/op
+func BenchmarkResourceUnmarshaler(b *testing.B) {
+	rawPetStoreJson, err := os.ReadFile("./testdata/petstore3/openapi.json")
+	if err != nil {
+		panic(err)
+	}
+
+	petStoreJson := fmt.Appendf([]byte{}, `{"spec": %s}`, rawPetStoreJson)
+
+	var petStoreDoc any
+
+	err = json.Unmarshal(petStoreJson, &petStoreDoc)
+	if err != nil {
+		panic(err)
+	}
+
+	petStoreYaml, err := yaml.Dump(petStoreDoc)
+	if err != nil {
+		panic(err)
+	}
+
+	b.Run("unmarshal_json", func(b *testing.B) {
+		for b.Loop() {
+			var value OpenAPIResourceDefinition
+			err := json.Unmarshal(petStoreJson, &value)
+			if err != nil {
+				panic(err)
+			}
+		}
+	})
+
+	b.Run("unmarshal_yaml", func(b *testing.B) {
+		for b.Loop() {
+			var value OpenAPIResourceDefinition
+			err := yaml.Load(petStoreYaml, &value)
+			if err != nil {
+				panic(err)
+			}
 		}
 	})
 }

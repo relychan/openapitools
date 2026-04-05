@@ -105,7 +105,7 @@ func GetDefaultContentType(contents *orderedmap.Map[string, *highv3.MediaType]) 
 		// always prefer JSON content type.
 		for item := range strings.SplitSeq(key, ",") {
 			item = strings.TrimSpace(item)
-			if IsContentTypeJSON(item) {
+			if httpheader.IsContentTypeJSON(item) {
 				return item
 			}
 		}
@@ -174,27 +174,4 @@ func ValidateContentType(contentType string) (string, error) {
 	}
 
 	return "", ErrInvalidContentType
-}
-
-// IsContentTypeXML checks if the content type is XML.
-func IsContentTypeXML(contentType string) bool {
-	return strings.HasPrefix(contentType, httpheader.ContentTypeXML) ||
-		strings.HasPrefix(contentType, httpheader.ContentTypeTextXML) ||
-		strings.HasSuffix(contentType, "+xml")
-}
-
-// IsContentTypeJSON checks if the content type is JSON.
-func IsContentTypeJSON(contentType string) bool {
-	return strings.HasPrefix(contentType, httpheader.ContentTypeJSON) ||
-		strings.HasSuffix(contentType, "+json")
-}
-
-// IsContentTypeText checks if the content type relates to text.
-func IsContentTypeText(contentType string) bool {
-	return strings.HasPrefix(contentType, "text/")
-}
-
-// IsContentTypeMultipartForm checks the content type relates to multipart form.
-func IsContentTypeMultipartForm(contentType string) bool {
-	return strings.HasPrefix(contentType, "multipart/")
 }

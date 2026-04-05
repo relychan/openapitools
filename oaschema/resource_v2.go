@@ -15,7 +15,6 @@
 package oaschema
 
 import (
-	"log"
 	"slices"
 	"strings"
 
@@ -187,7 +186,6 @@ func (sto *swaggerToOpenAPIv3Converter) convertOperation(
 
 		for _, param := range operation.Parameters {
 			location, _ := ParseParameterLocation(param.In)
-			log.Println("location", param.In, location)
 
 			switch location {
 			case InFormData:

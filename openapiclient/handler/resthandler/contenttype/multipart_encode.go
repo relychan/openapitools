@@ -171,16 +171,16 @@ func (mfe *multipartFormEncoder) evalRootValueReflection(reflectValue reflect.Va
 			contentType, headers := mfe.evalEncoding(keyStr)
 			mapValue := reflectValue.MapIndex(key)
 
-			if oaschema.IsContentTypeJSON(contentType) {
+			if httpheader.IsContentTypeJSON(contentType) {
 				return mfe.writer.WriteJSON(keyStr, mapValue.Interface(), headers)
 			}
 
-			if oaschema.IsContentTypeXML(contentType) {
+			if httpheader.IsContentTypeXML(contentType) {
 				return mfe.writer.WriteXML(keyStr, value.Interface(), headers)
 			}
 
 			if contentType == "" ||
-				oaschema.IsContentTypeText(contentType) {
+				httpheader.IsContentTypeText(contentType) {
 				return mfe.evalValueReflectionWithDefaultContentType(keyStr, value, headers)
 			}
 
@@ -198,15 +198,15 @@ func (mfe *multipartFormEncoder) evalRootValueReflection(reflectValue reflect.Va
 func (mfe *multipartFormEncoder) evalValue(key string, value any) error {
 	contentType, headers := mfe.evalEncoding(key)
 
-	if oaschema.IsContentTypeJSON(contentType) {
+	if httpheader.IsContentTypeJSON(contentType) {
 		return mfe.writer.WriteJSON(key, value, headers)
 	}
 
-	if oaschema.IsContentTypeXML(contentType) {
+	if httpheader.IsContentTypeXML(contentType) {
 		return mfe.writer.WriteXML(key, value, headers)
 	}
 
-	if contentType == "" || oaschema.IsContentTypeText(contentType) {
+	if contentType == "" || httpheader.IsContentTypeText(contentType) {
 		return mfe.evalValueWithDefaultContentType(key, value, headers)
 	}
 

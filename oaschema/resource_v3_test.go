@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v4"
 )
 
@@ -230,7 +231,7 @@ spec:
 		{
 			name: "invalid spec format",
 			yamlData: `spec:
-  invalid: data`,
+		  invalid: data`,
 			expectError: true,
 			checkFunc:   nil,
 		},
@@ -239,12 +240,12 @@ spec:
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			var def OpenAPIResourceDefinition
-			err := yaml.Unmarshal([]byte(tc.yamlData), &def)
+			err := yaml.Load([]byte(tc.yamlData), &def)
 
 			if tc.expectError {
-				assert.True(t, err != nil, "expected error but got nil")
+				require.True(t, err != nil, "expected error but got nil")
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				if tc.checkFunc != nil {
 					tc.checkFunc(t, &def)
 				}

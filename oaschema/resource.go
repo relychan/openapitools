@@ -86,7 +86,10 @@ func (j *OpenAPIResourceDefinition) UnmarshalJSON(b []byte) error {
 		return nil
 	}
 
-	doc, err := libopenapi.NewDocument(rawValue.Spec)
+	oasConfig := datamodel.NewDocumentConfiguration()
+	oasConfig.SkipJSONConversion = true
+
+	doc, err := libopenapi.NewDocumentWithConfiguration(rawValue.Spec, oasConfig)
 	if err != nil {
 		return err
 	}
@@ -158,18 +161,17 @@ func (j *OpenAPIResourceDefinition) UnmarshalYAML(value *yaml.Node) error {
 				)
 			}
 		case "spec":
-			// Marshal the YAML node back to bytes for libopenapi
-			specBytes, err := yaml.Dump(valueNode)
+			wrappedDoc := &yaml.Node{
+				Kind:    yaml.DocumentNode,
+				Content: []*yaml.Node{valueNode},
+			}
+
+			doc, err := extractOpenAPIv3SpecInfoFromYAML(wrappedDoc)
 			if err != nil {
 				return err
 			}
 
-			doc, err := libopenapi.NewDocument(specBytes)
-			if err != nil {
-				return err
-			}
-
-			spec, err := doc.BuildV3Model()
+			spec, err := buildV3Model(doc)
 			if err != nil {
 				return err
 			}

@@ -215,7 +215,7 @@ func (ge *GraphQLHandler) Stream(
 	}
 
 	if ge.customResponse == nil {
-		if oaschema.IsContentTypeJSON(ge.responseContentType) {
+		if httpheader.IsContentTypeJSON(ge.responseContentType) {
 			writer.Header().Set(httpheader.ContentType, ge.responseContentType)
 
 			// No custom response. Write response directly for json content type
