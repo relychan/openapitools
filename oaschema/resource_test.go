@@ -24,6 +24,7 @@ import (
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/relychan/goutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v4"
@@ -344,6 +345,27 @@ func TestOpenAPIResourceDefinition_Build(t *testing.T) {
 			assert.NoError(t, err)
 			assert.True(t, len(changes.GetAllChanges()) == 0)
 		}
+	})
+
+	t.Run("with_overlay_patch", func(t *testing.T) {
+		def, err := goutils.ReadJSONOrYAMLFile[OpenAPIResourceDefinition](
+			context.Background(),
+			"./testdata/test.yaml",
+		)
+		require.NoError(t, err)
+
+		doc, err := def.Build(context.Background())
+		require.NoError(t, err)
+
+		infoNode, ok := doc.Info.Extensions.Get("x-overlay-applied")
+		assert.True(t, ok)
+		assert.Equal(t, "structured-overlay", infoNode.Value)
+		rootPath, ok := doc.Paths.PathItems.Get("/")
+		assert.True(t, ok)
+		assert.Equal(t, "Retrieve the root resource", rootPath.Get.Summary)
+		authBasic, ok := doc.Paths.PathItems.Get("/auth/basic")
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(authBasic.Get.Security))
 	})
 }
 

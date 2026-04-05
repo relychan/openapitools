@@ -252,25 +252,7 @@ func (j *OpenAPIResourceDefinition) Build(ctx context.Context) (*highv3.Document
 	}
 
 	// apply overlay patches
-	overlayNode := &yaml.Node{
-		Kind: yaml.DocumentNode,
-		Content: []*yaml.Node{
-			{
-				Kind: yaml.MappingNode,
-				Tag:  goutils.YAMLMapTag,
-				Content: []*yaml.Node{
-					{
-						Kind:  yaml.ScalarNode,
-						Tag:   goutils.YAMLStrTag,
-						Value: "actions",
-					},
-					j.Patches,
-				},
-			},
-		},
-	}
-
-	ov, err := NewOverlayDocument(ctx, overlayNode)
+	ov, err := newOverlayDocumentFromActionNodes(ctx, j.Patches)
 	if err != nil {
 		return nil, err
 	}
