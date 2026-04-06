@@ -19,17 +19,17 @@ import (
 	"io"
 
 	"github.com/relychan/goutils"
-	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/goutils/httpheader"
 )
 
 // Encode encodes the data by content type.
 func Encode(contentType string, body any) ([]byte, error) {
 	switch {
-	case oaschema.IsContentTypeJSON(contentType):
+	case httpheader.IsContentTypeJSON(contentType):
 		return json.Marshal(body)
-	case oaschema.IsContentTypeXML(contentType):
+	case httpheader.IsContentTypeXML(contentType):
 		return EncodeXML(body)
-	case oaschema.IsContentTypeText(contentType):
+	case httpheader.IsContentTypeText(contentType):
 		return EncodeText(body)
 	default:
 		// Encode binary by default.
@@ -40,11 +40,11 @@ func Encode(contentType string, body any) ([]byte, error) {
 // Write encodes the data by content type and writes it to the stream.
 func Write(writer io.Writer, contentType string, body any) (int, error) {
 	switch {
-	case oaschema.IsContentTypeJSON(contentType):
+	case httpheader.IsContentTypeJSON(contentType):
 		return -1, json.NewEncoder(writer).Encode(body)
-	case oaschema.IsContentTypeXML(contentType):
+	case httpheader.IsContentTypeXML(contentType):
 		return WriteXML(writer, body)
-	case oaschema.IsContentTypeText(contentType):
+	case httpheader.IsContentTypeText(contentType):
 		return WriteText(writer, body)
 	default:
 		// Encode binary by default.
@@ -64,13 +64,13 @@ func Decode(contentType string, rawBody io.Reader) (any, error) {
 	}
 
 	switch {
-	case oaschema.IsContentTypeJSON(contentType):
+	case httpheader.IsContentTypeJSON(contentType):
 		var result any
 
 		return result, json.NewDecoder(rawBody).Decode(&result)
-	case oaschema.IsContentTypeXML(contentType):
+	case httpheader.IsContentTypeXML(contentType):
 		return DecodeXML(rawBody)
-	case oaschema.IsContentTypeText(contentType):
+	case httpheader.IsContentTypeText(contentType):
 		resultBytes, err := io.ReadAll(rawBody)
 		if err != nil {
 			return nil, err

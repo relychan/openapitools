@@ -72,22 +72,6 @@ L:
 	return dest
 }
 
-func mergeOrderedMaps[K comparable, V any](dest, src *orderedmap.Map[K, V]) *orderedmap.Map[K, V] {
-	if src == nil || src.Len() == 0 {
-		return dest
-	}
-
-	if dest == nil {
-		return src
-	}
-
-	for iter := src.Oldest(); iter != nil; iter = iter.Next() {
-		dest.Set(iter.Key, iter.Value)
-	}
-
-	return dest
-}
-
 // GetDefaultContentType gets the default content type from the content map.
 func GetDefaultContentType(contents *orderedmap.Map[string, *highv3.MediaType]) string {
 	if contents == nil || contents.Len() == 0 {
@@ -105,7 +89,7 @@ func GetDefaultContentType(contents *orderedmap.Map[string, *highv3.MediaType]) 
 		// always prefer JSON content type.
 		for item := range strings.SplitSeq(key, ",") {
 			item = strings.TrimSpace(item)
-			if IsContentTypeJSON(item) {
+			if httpheader.IsContentTypeJSON(item) {
 				return item
 			}
 		}
@@ -174,27 +158,4 @@ func ValidateContentType(contentType string) (string, error) {
 	}
 
 	return "", ErrInvalidContentType
-}
-
-// IsContentTypeXML checks if the content type is XML.
-func IsContentTypeXML(contentType string) bool {
-	return strings.HasPrefix(contentType, httpheader.ContentTypeXML) ||
-		strings.HasPrefix(contentType, httpheader.ContentTypeTextXML) ||
-		strings.HasSuffix(contentType, "+xml")
-}
-
-// IsContentTypeJSON checks if the content type is JSON.
-func IsContentTypeJSON(contentType string) bool {
-	return strings.HasPrefix(contentType, httpheader.ContentTypeJSON) ||
-		strings.HasSuffix(contentType, "+json")
-}
-
-// IsContentTypeText checks if the content type relates to text.
-func IsContentTypeText(contentType string) bool {
-	return strings.HasPrefix(contentType, "text/")
-}
-
-// IsContentTypeMultipartForm checks the content type relates to multipart form.
-func IsContentTypeMultipartForm(contentType string) bool {
-	return strings.HasPrefix(contentType, "multipart/")
 }

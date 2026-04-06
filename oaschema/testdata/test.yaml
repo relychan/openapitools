@@ -1,0 +1,78 @@
+# yaml-language-server: $schema=../../jsonschema/openapitools.schema.json
+settings:
+  headers: {}
+  forwardHeaders:
+    request:
+      - X-Auth-Token
+    response: []
+  http:
+    retry:
+      maxAttempts: 3
+    tls:
+      rootCAFile:
+        - value: testdata/tls/certs/ca.crt
+      certificates:
+        - certFile:
+            value: testdata/tls/certs/client.pem
+          keyPem:
+            env: TLS_KEY_PEM
+patches:
+  - target: "$" # Root of document
+    update:
+      info:
+        x-overlay-applied: structured-overlay
+      paths:
+        "/":
+          summary: "The root resource"
+          get:
+            summary: "Retrieve the root resource"
+            x-rate-limit: 100
+        "/pets":
+          get:
+            summary: "Retrieve a list of pets"
+            x-rate-limit: 100
+      components:
+      tags:
+spec:
+  openapi: "3.2.0"
+  servers:
+    - url: "{SERVER_URL}"
+  security:
+    - apiKey: []
+  components:
+    securitySchemes:
+      apiKey:
+        type: http
+        scheme: bearer
+        x-rely-security-credentials:
+          apiKey:
+            env: API_KEY
+      basic:
+        type: http
+        scheme: basic
+        x-rely-security-credentials:
+          username:
+            env: USERNAME
+          password:
+            env: PASSWORD
+
+  paths:
+    /auth/api-key:
+      get: {}
+    /auth/basic:
+      get:
+        security:
+          - basic: []
+    /auth/forward:
+      post:
+        x-rely-proxy-action:
+          type: rest
+          request:
+            parameters:
+              - in: query
+                name: foo
+                default:
+                  env: QUERY_FOO
+              - in: header
+                name: X-Test-Header
+                path: query.test

@@ -795,23 +795,49 @@
    "description": "OpenAPIForwardHeadersConfig contains configurations for headers forwarding,."
   },
   "OpenAPIResourceDefinition": {
+   "oneOf": [
+    {
+     "properties": {
+      "ref": {
+       "type": "string",
+       "description": "Path of URL of the referenced OpenAPI document.\nRequires at least one of ref or spec.\nIf both fields are configured, the spec will be merged into the reference."
+      }
+     },
+     "type": "object",
+     "required": [
+      "ref"
+     ],
+     "description": "Definition of an OpenAPI resource"
+    },
+    {
+     "properties": {
+      "spec": {
+       "$ref": "#/$defs/Document",
+       "description": "Specification of the OpenAPI v3 documentation."
+      }
+     },
+     "type": "object",
+     "required": [
+      "spec"
+     ],
+     "description": "Definition of an OpenAPI resource"
+    }
+   ],
    "properties": {
     "settings": {
      "$ref": "#/$defs/OpenAPIResourceSettings",
      "description": "Settings of the OpenAPI resource."
     },
-    "ref": {
-     "type": "string",
-     "description": "Path of URL of the referenced OpenAPI document.\nRequires at least one of ref or spec.\nIf both fields are configured, the spec will be merged into the reference."
-    },
-    "spec": {
-     "$ref": "#/$defs/Document",
-     "description": "Specification of the OpenAPI v3 documentation."
+    "patches": {
+     "items": {
+      "$ref": "#/$defs/OverlayActionObject"
+     },
+     "type": "array",
+     "description": "A set of patches, or overlay actions to be applied to one or many OpenAPI descriptions. See https://spec.openapis.org/overlay/v1.1.0.html#action-object"
     }
    },
-   "additionalProperties": false,
    "type": "object",
-   "description": "OpenAPIResourceDefinition defines fields of an OpenAPI resource."
+   "description": "Definition of an OpenAPI resource"
   },
   "OpenAPIResourceSettings": {
    "properties": {
@@ -842,6 +868,62 @@
    "additionalProperties": false,
    "type": "object",
    "description": "OpenAPIResourceSettings hold settings of the rely proxy."
+  },
+  "OverlayActionObject": {
+   "oneOf": [
+    {
+     "properties": {
+      "update": {
+       "description": "If the target selects object nodes, the value of this field MUST be an object with the properties and values to merge with each selected object. If the target selects array nodes, the value of this field MUST be an array to concatenate with each selected array, or an object or primitive value to append to each selected array. If the target selects primitive nodes, the value of this field MUST be a primitive value to replace each selected node. This field has no impact if the remove field of this action object is true or if the copy field contains a value."
+      }
+     },
+     "type": "object",
+     "required": [
+      "update"
+     ]
+    },
+    {
+     "properties": {
+      "copy": {
+       "type": "string",
+       "description": "A JSONPath expression selecting a single node to copy into the target nodes. If the target selects object nodes, the value of this field MUST be an object with the properties and values to merge with each selected object. If the target selects array nodes, the value of this field MUST be an array to concatenate with each selected array, or an object or primitive value to append to each selected array. If the target selects primitive nodes, the value of this field MUST be a primitive value to replace each selected node. This field has no impact if the remove field of this action object is true or if the update field contains a value."
+      }
+     },
+     "type": "object",
+     "required": [
+      "copy"
+     ]
+    },
+    {
+     "properties": {
+      "remove": {
+       "type": "boolean",
+       "const": true,
+       "description": "A boolean value that indicates that each of the target nodes MUST be removed from the the map or array it is contained in. The default value is false."
+      }
+     },
+     "type": "object",
+     "required": [
+      "remove"
+     ]
+    }
+   ],
+   "properties": {
+    "target": {
+     "type": "string",
+     "pattern": "^\\$",
+     "description": "A RFC9535 JSONPath query expression selecting nodes in the target document."
+    },
+    "description": {
+     "type": "string",
+     "description": "A description of the action."
+    }
+   },
+   "type": "object",
+   "required": [
+    "target"
+   ],
+   "description": "Represents one or more changes to be applied to the target document at the location defined by the target JSONPath expression."
   },
   "ProxyActionConfig": {
    "oneOf": [

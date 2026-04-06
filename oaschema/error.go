@@ -36,10 +36,10 @@ var (
 		SupportedSecuritySchemeTypes(),
 	)
 	// ErrResourceSpecRequired occurs when the spec field of resource is empty.
-	ErrResourceSpecRequired = errors.New("spec is required in resource")
-	// ErrInvalidOpenAPIResourceDefinitionYAML occurs when failing to parse a OpenAPIResourceDefinition from YAML string.
-	ErrInvalidOpenAPIResourceDefinitionYAML = errors.New(
-		"failed to parse OpenAPIResourceDefinition from YAML",
+	ErrResourceSpecRequired = errors.New("either spec or ref is required for the OpenAPI document")
+	// ErrInvalidOpenAPIResourceDefinition occurs when failing to parse a OpenAPIResourceDefinition from YAML string.
+	ErrInvalidOpenAPIResourceDefinition = errors.New(
+		"invalid OpenAPIResourceDefinition",
 	)
 	// ErrInvalidContentType occurs when the content type string is invalid.
 	ErrInvalidContentType = errors.New("invalid content type")
