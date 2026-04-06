@@ -121,20 +121,20 @@ func (j *OpenAPIResourceDefinition) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("malformed patches: %w", err)
 		}
 
-		if len(node.Content) > 0 {
-			if node.Content[0].Kind == yaml.SequenceNode &&
-				len(node.Content[0].Content) > 0 {
-				j.Patches = node.Content[0]
-			}
+		if len(node.Content) == 0 {
+			return nil
+		}
 
-			if node.Content[0].Kind != yaml.ScalarNode ||
-				node.Content[0].Tag != goutils.NullStr {
-				return fmt.Errorf(
-					"%w. Expected an array, got %s",
-					ErrInvalidOpenAPIResourceDefinitionJSON,
-					node.Content[0].Tag,
-				)
-			}
+		if node.Content[0].Kind == yaml.SequenceNode &&
+			len(node.Content[0].Content) > 0 {
+			j.Patches = node.Content[0]
+		} else if node.Content[0].Kind != yaml.ScalarNode ||
+			node.Content[0].Tag != goutils.NullStr {
+			return fmt.Errorf(
+				"%w. Expected an array, got %s",
+				ErrInvalidOpenAPIResourceDefinitionJSON,
+				node.Content[0].Tag,
+			)
 		}
 	}
 
