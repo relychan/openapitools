@@ -121,7 +121,11 @@ func (j *OpenAPIResourceDefinition) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("malformed patches: %w", err)
 		}
 
-		err = j.validatePatchesNode(node)
+		if len(node.Content) == 0 {
+			return nil
+		}
+
+		err = j.validatePatchesNode(node.Content[0])
 		if err != nil {
 			return err
 		}
@@ -139,7 +143,7 @@ func (j *OpenAPIResourceDefinition) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind != yaml.MappingNode {
 		return fmt.Errorf(
 			"%w. Expected an object, got %s",
-			ErrInvalidOpenAPIResourceDefinitionYAML,
+			ErrInvalidOpenAPIResourceDefinition,
 			value.Tag,
 		)
 	}
@@ -155,13 +159,13 @@ func (j *OpenAPIResourceDefinition) UnmarshalYAML(value *yaml.Node) error {
 		if keyNode.Kind != yaml.ScalarNode || keyNode.Tag != goutils.YAMLStrTag {
 			return fmt.Errorf(
 				"%w. Expected a key string, got %s",
-				ErrInvalidOpenAPIResourceDefinitionYAML,
+				ErrInvalidOpenAPIResourceDefinition,
 				keyNode.Tag,
 			)
 		}
 
 		if keyNode.Value == "" {
-			return fmt.Errorf("%w. Object key is empty", ErrInvalidOpenAPIResourceDefinitionYAML)
+			return fmt.Errorf("%w. Object key is empty", ErrInvalidOpenAPIResourceDefinition)
 		}
 
 		i++
@@ -182,7 +186,7 @@ func (j *OpenAPIResourceDefinition) UnmarshalYAML(value *yaml.Node) error {
 			default:
 				return fmt.Errorf(
 					"%w. Expected ref is a string, got %s",
-					ErrInvalidOpenAPIResourceDefinitionYAML,
+					ErrInvalidOpenAPIResourceDefinition,
 					valueNode.Tag,
 				)
 			}
@@ -391,19 +395,20 @@ func (j *OpenAPIResourceDefinition) buildSpecFromRef(
 }
 
 func (j *OpenAPIResourceDefinition) validatePatchesNode(node *yaml.Node) error {
-	if len(node.Content) == 0 {
+	if node.Kind == yaml.SequenceNode {
+		if len(node.Content) > 0 {
+			j.Patches = node
+		}
+
 		return nil
 	}
 
-	if node.Content[0].Kind == yaml.SequenceNode &&
-		len(node.Content[0].Content) > 0 {
-		j.Patches = node.Content[0]
-	} else if node.Content[0].Kind != yaml.ScalarNode ||
-		node.Content[0].Tag != goutils.NullStr {
+	if node.Kind != yaml.ScalarNode ||
+		node.Tag != goutils.NullStr {
 		return fmt.Errorf(
-			"%w. Expected an array, got %s",
-			ErrInvalidOpenAPIResourceDefinitionJSON,
-			node.Content[0].Tag,
+			"%w. Expected patches as an array, got %s",
+			ErrInvalidOpenAPIResourceDefinition,
+			node.Tag,
 		)
 	}
 

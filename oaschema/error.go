@@ -37,13 +37,9 @@ var (
 	)
 	// ErrResourceSpecRequired occurs when the spec field of resource is empty.
 	ErrResourceSpecRequired = errors.New("either spec or ref is required for the OpenAPI document")
-	// ErrInvalidOpenAPIResourceDefinitionYAML occurs when failing to parse a OpenAPIResourceDefinition from YAML string.
-	ErrInvalidOpenAPIResourceDefinitionYAML = errors.New(
-		"failed to parse OpenAPIResourceDefinition from YAML",
-	)
-	// ErrInvalidOpenAPIResourceDefinitionJSON occurs when failing to parse a OpenAPIResourceDefinition from JSON string.
-	ErrInvalidOpenAPIResourceDefinitionJSON = errors.New(
-		"failed to parse OpenAPIResourceDefinition from JSON",
+	// ErrInvalidOpenAPIResourceDefinition occurs when failing to parse a OpenAPIResourceDefinition from YAML string.
+	ErrInvalidOpenAPIResourceDefinition = errors.New(
+		"invalid OpenAPIResourceDefinition",
 	)
 	// ErrInvalidContentType occurs when the content type string is invalid.
 	ErrInvalidContentType = errors.New("invalid content type")
