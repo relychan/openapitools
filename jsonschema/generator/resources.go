@@ -222,7 +222,7 @@ func newOpenAPIResourceSchema() *jsonschema.Schema {
 		Ref:         "#/$defs/OpenAPIResourceSettings",
 	})
 	resourceProps.Set("patches", &jsonschema.Schema{
-		Description: "A set of patches, or overlay actions to be applied to one or many OpenAPI descriptions. See https://spec.openapis.org/overlay/v1.0.0.html#action-object",
+		Description: "A set of patches, or overlay actions to be applied to one or many OpenAPI descriptions. See https://spec.openapis.org/overlay/v1.1.0.html#action-object",
 		Type:        "array",
 		Items: &jsonschema.Schema{
 			Ref: "#/$defs/OverlayActionObject",
@@ -250,7 +250,6 @@ func newOpenAPIResourceSchema() *jsonschema.Schema {
 				Type:        "object",
 				Description: "Definition of an OpenAPI resource",
 				Properties:  resourceProps,
-				Required:    []string{"settings"},
 				OneOf: []*jsonschema.Schema{
 					{
 						Type:        "object",

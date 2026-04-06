@@ -176,12 +176,12 @@ func (mfe *multipartFormEncoder) evalRootValueReflection(reflectValue reflect.Va
 			}
 
 			if httpheader.IsContentTypeXML(contentType) {
-				return mfe.writer.WriteXML(keyStr, value.Interface(), headers)
+				return mfe.writer.WriteXML(keyStr, mapValue.Interface(), headers)
 			}
 
 			if contentType == "" ||
 				httpheader.IsContentTypeText(contentType) {
-				return mfe.evalValueReflectionWithDefaultContentType(keyStr, value, headers)
+				return mfe.evalValueReflectionWithDefaultContentType(keyStr, mapValue, headers)
 			}
 
 			err := mfe.evalValueReflection(keyStr, mapValue, contentType, headers)

@@ -36,7 +36,7 @@ var (
 		SupportedSecuritySchemeTypes(),
 	)
 	// ErrResourceSpecRequired occurs when the spec field of resource is empty.
-	ErrResourceSpecRequired = errors.New("require either spec or ref of the openapi document")
+	ErrResourceSpecRequired = errors.New("either spec or ref is required for the OpenAPI document")
 	// ErrInvalidOpenAPIResourceDefinitionYAML occurs when failing to parse a OpenAPIResourceDefinition from YAML string.
 	ErrInvalidOpenAPIResourceDefinitionYAML = errors.New(
 		"failed to parse OpenAPIResourceDefinition from YAML",

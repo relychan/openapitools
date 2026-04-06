@@ -833,13 +833,10 @@
       "$ref": "#/$defs/OverlayActionObject"
      },
      "type": "array",
-     "description": "A set of patches, or overlay actions to be applied to one or many OpenAPI descriptions. See https://spec.openapis.org/overlay/v1.0.0.html#action-object"
+     "description": "A set of patches, or overlay actions to be applied to one or many OpenAPI descriptions. See https://spec.openapis.org/overlay/v1.1.0.html#action-object"
     }
    },
    "type": "object",
-   "required": [
-    "settings"
-   ],
    "description": "Definition of an OpenAPI resource"
   },
   "OpenAPIResourceSettings": {

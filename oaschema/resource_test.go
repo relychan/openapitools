@@ -51,7 +51,7 @@ func TestOpenAPIResourceDefinition_UnmarshalJSON(t *testing.T) {
 			}`,
 			expectError: false,
 			checkFunc: func(t *testing.T, def *OpenAPIResourceDefinition) {
-				assert.True(t, len(def.specBytes) > 0)
+				assert.True(t, len(def.Spec.Content) > 0)
 			},
 		},
 		{
@@ -71,7 +71,7 @@ func TestOpenAPIResourceDefinition_UnmarshalJSON(t *testing.T) {
 			}`,
 			expectError: false,
 			checkFunc: func(t *testing.T, def *OpenAPIResourceDefinition) {
-				assert.True(t, len(def.specBytes) > 0)
+				assert.True(t, len(def.Spec.Content) > 0)
 			},
 		},
 		{
@@ -123,7 +123,7 @@ func TestOpenAPIResourceDefinition_UnmarshalYAML(t *testing.T) {
         operationId: getUsers`,
 			expectError: false,
 			checkFunc: func(t *testing.T, def *OpenAPIResourceDefinition) {
-				assert.True(t, def.specNode != nil)
+				assert.True(t, len(def.Spec.Content) > 0)
 			},
 		},
 		{
@@ -140,7 +140,7 @@ spec:
   paths: {}`,
 			expectError: false,
 			checkFunc: func(t *testing.T, def *OpenAPIResourceDefinition) {
-				assert.True(t, def.specNode != nil)
+				assert.True(t, len(def.Spec.Content) > 0)
 			},
 		},
 		{
@@ -171,14 +171,22 @@ spec:
 
 // TestOpenAPIResourceDefinition_MarshalJSON tests JSON marshaling
 func TestOpenAPIResourceDefinition_MarshalJSON(t *testing.T) {
+	rawSpec, err := yaml.Dump(&highv3.Document{
+		Info: &base.Info{
+			Title:   "Test API",
+			Version: "1.0.0",
+		},
+	})
+	assert.NoError(t, err)
+
+	var spec yaml.Node
+
+	err = yaml.Load(rawSpec, &spec)
+	assert.NoError(t, err)
+
 	t.Run("with_spec_only", func(t *testing.T) {
 		def := OpenAPIResourceDefinition{
-			Spec: &highv3.Document{
-				Info: &base.Info{
-					Title:   "Test API",
-					Version: "1.0.0",
-				},
-			},
+			Spec: &spec,
 		}
 
 		data, err := json.Marshal(def)
@@ -208,13 +216,8 @@ func TestOpenAPIResourceDefinition_MarshalJSON(t *testing.T) {
 
 	t.Run("with_ref_and_spec", func(t *testing.T) {
 		def := OpenAPIResourceDefinition{
-			Ref: "https://example.com/openapi.yaml",
-			Spec: &highv3.Document{
-				Info: &base.Info{
-					Title:   "Test API",
-					Version: "1.0.0",
-				},
-			},
+			Ref:  "https://example.com/openapi.yaml",
+			Spec: &spec,
 		}
 
 		data, err := json.Marshal(def)
@@ -233,13 +236,22 @@ func TestOpenAPIResourceDefinition_Build(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("spec_only_no_ref", func(t *testing.T) {
-		def := OpenAPIResourceDefinition{
-			Spec: &highv3.Document{
-				Info: &base.Info{
-					Title:   "Test API",
-					Version: "1.0.0",
-				},
+		rawSpec, err := yaml.Dump(&highv3.Document{
+			Version: "3.0.0",
+			Info: &base.Info{
+				Title:   "Test API",
+				Version: "1.0.0",
 			},
+		})
+		assert.NoError(t, err)
+
+		var spec yaml.Node
+
+		err = yaml.Load(rawSpec, &spec)
+		assert.NoError(t, err)
+
+		def := OpenAPIResourceDefinition{
+			Spec: &spec,
 		}
 
 		doc, err := def.Build(ctx)
@@ -369,12 +381,295 @@ func TestOpenAPIResourceDefinition_Build(t *testing.T) {
 	})
 }
 
+func TestOpenAPIResourceDefinition_UnmarshalJSON_WithPatches(t *testing.T) {
+	testCases := []struct {
+		name        string
+		jsonData    string
+		expectError bool
+		checkFunc   func(*testing.T, *OpenAPIResourceDefinition)
+	}{
+		{
+			name: "spec_with_patches",
+			jsonData: `{
+				"spec": {
+					"openapi": "3.0.0",
+					"info": {"title": "Test", "version": "1.0.0"},
+					"paths": {}
+				},
+				"patches": [
+					{"target": "$", "update": {"info": {"x-overlay-applied": "test"}}}
+				]
+			}`,
+			expectError: false,
+			checkFunc: func(t *testing.T, def *OpenAPIResourceDefinition) {
+				assert.NotNil(t, def.Patches)
+				assert.True(t, len(def.Spec.Content) > 0)
+			},
+		},
+		{
+			name: "ref_with_patches",
+			jsonData: `{
+				"ref": "testdata/petstore3/openapi.json",
+				"patches": [
+					{"target": "$", "update": {"info": {"x-overlay-applied": "test"}}}
+				]
+			}`,
+			expectError: false,
+			checkFunc: func(t *testing.T, def *OpenAPIResourceDefinition) {
+				assert.NotNil(t, def.Patches)
+				assert.Equal(t, "testdata/petstore3/openapi.json", def.Ref)
+			},
+		},
+		{
+			name: "invalid_patches_json",
+			jsonData: `{
+				"spec": {"openapi": "3.0.0", "info": {"title": "T", "version": "1"}, "paths": {}},
+				"patches": invalid
+			}`,
+			expectError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var def OpenAPIResourceDefinition
+			err := json.Unmarshal([]byte(tc.jsonData), &def)
+			if tc.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				if tc.checkFunc != nil {
+					tc.checkFunc(t, &def)
+				}
+			}
+		})
+	}
+}
+
+func TestOpenAPIResourceDefinition_UnmarshalYAML_WithPatches(t *testing.T) {
+	testCases := []struct {
+		name        string
+		yamlData    string
+		expectError bool
+		checkFunc   func(*testing.T, *OpenAPIResourceDefinition)
+	}{
+		{
+			name: "spec_with_patches",
+			yamlData: `
+spec:
+  openapi: "3.0.0"
+  info:
+    title: Test API
+    version: "1.0.0"
+  paths: {}
+patches:
+  - target: "$"
+    update:
+      info:
+        x-overlay-applied: test-overlay
+`,
+			expectError: false,
+			checkFunc: func(t *testing.T, def *OpenAPIResourceDefinition) {
+				assert.NotNil(t, def.Spec)
+				assert.NotNil(t, def.Patches)
+			},
+		},
+		{
+			name: "ref_with_patches",
+			yamlData: `
+ref: testdata/petstore3/openapi.json
+patches:
+  - target: "$"
+    update:
+      info:
+        x-overlay-applied: test-overlay
+`,
+			expectError: false,
+			checkFunc: func(t *testing.T, def *OpenAPIResourceDefinition) {
+				assert.Equal(t, "testdata/petstore3/openapi.json", def.Ref)
+				assert.NotNil(t, def.Patches)
+			},
+		},
+		{
+			name: "patches_without_spec_or_ref",
+			yamlData: `
+patches:
+  - target: "$"
+    update:
+      info:
+        x-overlay-applied: test
+`,
+			expectError: false,
+			checkFunc: func(t *testing.T, def *OpenAPIResourceDefinition) {
+				assert.NotNil(t, def.Patches)
+				assert.Nil(t, def.Spec)
+				assert.Equal(t, "", def.Ref)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var def OpenAPIResourceDefinition
+			err := yaml.Load([]byte(tc.yamlData), &def)
+			if tc.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				if tc.checkFunc != nil {
+					tc.checkFunc(t, &def)
+				}
+			}
+		})
+	}
+}
+
+func TestOpenAPIResourceDefinition_MarshalJSON_WithPatches(t *testing.T) {
+	t.Run("with_patches", func(t *testing.T) {
+		patchYAML := `- target: "$"
+  update:
+    info:
+      x-overlay-applied: test`
+
+		var patchNode yaml.Node
+		require.NoError(t, yaml.Unmarshal([]byte(patchYAML), &patchNode))
+
+		def := OpenAPIResourceDefinition{
+			Patches: patchNode.Content[0],
+		}
+
+		data, err := json.Marshal(def)
+		require.NoError(t, err)
+
+		var result map[string]any
+		require.NoError(t, json.Unmarshal(data, &result))
+		assert.NotNil(t, result["patches"])
+	})
+
+	t.Run("round_trip_patches_via_yaml", func(t *testing.T) {
+		original := `
+spec:
+  openapi: "3.0.0"
+  info:
+    title: Round Trip
+    version: "1.0.0"
+  paths: {}
+patches:
+  - target: "$"
+    update:
+      info:
+        x-overlay-applied: round-trip
+`
+		var def OpenAPIResourceDefinition
+		require.NoError(t, yaml.Load([]byte(original), &def))
+		assert.NotNil(t, def.Patches)
+
+		data, err := json.Marshal(def)
+		require.NoError(t, err)
+
+		var result map[string]any
+		require.NoError(t, json.Unmarshal(data, &result))
+		assert.NotNil(t, result["patches"])
+	})
+}
+
+func TestOpenAPIResourceDefinition_Build_WithPatches(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("spec_bytes_with_patches_via_json", func(t *testing.T) {
+		jsonData := `{
+			"spec": {
+				"openapi": "3.0.0",
+				"info": {"title": "Patched API", "version": "1.0.0"},
+				"paths": {}
+			},
+			"patches": [
+				{"target": "$", "update": {"info": {"description": "json-patch"}}}
+			]
+		}`
+
+		var def OpenAPIResourceDefinition
+		require.NoError(t, json.Unmarshal([]byte(jsonData), &def))
+
+		doc, err := def.Build(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, doc)
+		require.Equal(t, "Patched API", doc.Info.Title)
+		require.Equal(t, "json-patch", doc.Info.Description)
+	})
+
+	t.Run("spec_node_with_patches_via_yaml", func(t *testing.T) {
+		yamlData := `
+spec:
+  openapi: "3.0.0"
+  info:
+    title: Patched YAML API
+    version: "1.0.0"
+  paths: {}
+patches:
+  - target: "$"
+    update:
+      info:
+        x-overlay-applied: yaml-patch
+`
+		var def OpenAPIResourceDefinition
+		require.NoError(t, yaml.Load([]byte(yamlData), &def))
+
+		doc, err := def.Build(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, doc)
+
+		ext, ok := doc.Info.Extensions.Get("x-overlay-applied")
+		assert.True(t, ok)
+		assert.Equal(t, "yaml-patch", ext.Value)
+	})
+
+	t.Run("ref_with_patches", func(t *testing.T) {
+		yamlData := `
+ref: testdata/petstore3/openapi.json
+patches:
+  - target: "$"
+    update:
+      info:
+        x-overlay-applied: ref-patch
+`
+		var def OpenAPIResourceDefinition
+		require.NoError(t, yaml.Load([]byte(yamlData), &def))
+
+		doc, err := def.Build(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, doc)
+
+		ext, ok := doc.Info.Extensions.Get("x-overlay-applied")
+		assert.True(t, ok)
+		assert.Equal(t, "ref-patch", ext.Value)
+	})
+
+	t.Run("patches_only_no_spec_no_ref_error", func(t *testing.T) {
+		patchYAML := `- target: "$"
+  update:
+    info:
+      x-overlay-applied: test`
+
+		var patchNode yaml.Node
+		require.NoError(t, yaml.Unmarshal([]byte(patchYAML), &patchNode))
+
+		def := OpenAPIResourceDefinition{
+			Patches: patchNode.Content[0],
+		}
+
+		_, err := def.Build(ctx)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrResourceSpecRequired)
+	})
+}
+
 // goos: darwin
 // goarch: arm64
 // pkg: github.com/relychan/openapitools/oaschema
 // cpu: Apple M3 Pro
-// BenchmarkResourceUnmarshaler/build_from_json-11         	     108	  11033754 ns/op	16304145 B/op	   80155 allocs/op
-// BenchmarkResourceUnmarshaler/build_from_yaml-11         	     170	   7257790 ns/op	 5988277 B/op	   85500 allocs/op
+// BenchmarkResourceUnmarshaler/build_from_json-11         	     112	  10476485 ns/op	16303214 B/op	   80132 allocs/op
+// BenchmarkResourceUnmarshaler/build_from_yaml-11         	     169	   7085021 ns/op	 5987319 B/op	   85498 allocs/op
 func BenchmarkResourceUnmarshaler(b *testing.B) {
 	rawPetStoreJson, err := os.ReadFile("./testdata/petstore3/openapi.json")
 	if err != nil {

@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel"
@@ -36,15 +37,11 @@ type OpenAPIResourceDefinition struct {
 	// If both fields are configured, the spec will be merged into the reference.
 	Ref string `json:"ref,omitempty" yaml:"ref,omitempty"`
 	// Specification of the OpenAPI v3 documentation.
-	Spec *highv3.Document `json:"spec,omitempty" yaml:"spec,omitempty"`
+	Spec *yaml.Node `json:"spec,omitempty" yaml:"spec,omitempty"`
 	// A set of patches, or [overlay actions] to be applied to one or many OpenAPI descriptions.
 	//
-	// [overlay actions]: https://spec.openapis.org/overlay/v1.0.0.html#action-object
+	// [overlay actions]: https://spec.openapis.org/overlay/v1.1.0.html#action-object
 	Patches *yaml.Node `json:"patches,omitempty" yaml:"patches,omitempty"`
-
-	// Raw spec to be used later.
-	specBytes []byte
-	specNode  *yaml.Node
 }
 
 type rawOpenAPIResourceDefinitionJSON struct {
@@ -67,12 +64,14 @@ func (j OpenAPIResourceDefinition) MarshalJSON() ([]byte, error) {
 	}
 
 	if j.Spec != nil {
-		rawJSONBytes, err := j.Spec.RenderJSON("")
+		var spec any
+
+		err := j.Spec.Load(&spec)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to encode spec: %w", err)
 		}
 
-		result["spec"] = json.RawMessage(rawJSONBytes)
+		result["spec"] = spec
 	}
 
 	if j.Patches != nil {
@@ -83,7 +82,7 @@ func (j OpenAPIResourceDefinition) MarshalJSON() ([]byte, error) {
 			return nil, err
 		}
 
-		result["patches"] = j.Patches
+		result["patches"] = patches
 	}
 
 	return json.Marshal(result)
@@ -100,18 +99,27 @@ func (j *OpenAPIResourceDefinition) UnmarshalJSON(b []byte) error {
 
 	j.Ref = rawValue.Ref
 	j.Settings = rawValue.Settings
-	j.Spec = nil
-	j.specBytes = rawValue.Spec
+
+	if len(rawValue.Spec) > 0 {
+		var specNode yaml.Node
+
+		err := yaml.Load(rawValue.Spec, &specNode)
+		if err != nil {
+			return fmt.Errorf("malformed spec: %w", err)
+		}
+
+		j.Spec = &specNode
+	}
 
 	if len(rawValue.Patches) > 0 {
 		node := new(yaml.Node)
 
 		err := yaml.Load(rawValue.Patches, node)
 		if err != nil {
-			return err
+			return fmt.Errorf("malformed patches: %w", err)
 		}
 
-		j.Patches = node
+		j.Patches = node.Content[0]
 	}
 
 	return nil
@@ -174,7 +182,10 @@ func (j *OpenAPIResourceDefinition) UnmarshalYAML(value *yaml.Node) error {
 				)
 			}
 		case "spec":
-			j.specNode = valueNode
+			j.Spec = &yaml.Node{
+				Kind:    yaml.DocumentNode,
+				Content: []*yaml.Node{valueNode},
+			}
 		case "patches":
 			j.Patches = valueNode
 		default:
@@ -186,30 +197,32 @@ func (j *OpenAPIResourceDefinition) UnmarshalYAML(value *yaml.Node) error {
 
 // Build validates and merge the openapi specification with the reference if exist.
 func (j *OpenAPIResourceDefinition) Build(ctx context.Context) (*highv3.Document, error) {
-	if j.Spec != nil {
-		return j.Spec, nil
-	}
+	var (
+		specBytes []byte
+		err       error
+	)
 
 	havePatches := j.Patches != nil && len(j.Patches.Content) > 0
 
-	if j.specNode != nil {
+	if j.Spec != nil {
 		if !havePatches {
 			return j.buildSpecNodeWithoutPatch()
 		}
 
 		// dump yaml to bytes for applying overlay patches.
-		specBytes, err := yaml.Dump(j.specNode)
+		specBytes, err = yaml.Dump(j.Spec)
 		if err != nil {
 			return nil, err
 		}
 
-		j.specBytes = specBytes
-		j.specNode = nil
-	}
-
-	if j.Ref != "" {
+		j.Spec = nil
+	} else if j.Ref != "" {
 		if !havePatches {
 			return j.buildSpecFromRef(ctx)
+		}
+
+		if !strings.HasSuffix(j.Ref, ".yaml") {
+			return j.buildJSONDocumentWithOverlay(ctx)
 		}
 
 		// read document file to apply overlay patches.
@@ -218,7 +231,7 @@ func (j *OpenAPIResourceDefinition) Build(ctx context.Context) (*highv3.Document
 			return nil, err
 		}
 
-		j.specBytes, err = io.ReadAll(rawSourceReader)
+		specBytes, err = io.ReadAll(rawSourceReader)
 
 		goutils.CatchWarnErrorFunc(rawSourceReader.Close)
 
@@ -227,7 +240,7 @@ func (j *OpenAPIResourceDefinition) Build(ctx context.Context) (*highv3.Document
 		}
 	}
 
-	if len(j.specBytes) == 0 {
+	if len(specBytes) == 0 {
 		return nil, ErrResourceSpecRequired
 	}
 
@@ -236,7 +249,7 @@ func (j *OpenAPIResourceDefinition) Build(ctx context.Context) (*highv3.Document
 		oasConfig := datamodel.NewDocumentConfiguration()
 		oasConfig.SkipJSONConversion = true
 
-		doc, err := libopenapi.NewDocumentWithConfiguration(j.specBytes, oasConfig)
+		doc, err := libopenapi.NewDocumentWithConfiguration(specBytes, oasConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -245,8 +258,6 @@ func (j *OpenAPIResourceDefinition) Build(ctx context.Context) (*highv3.Document
 		if err != nil {
 			return nil, err
 		}
-
-		j.specBytes = nil
 
 		return &spec.Model, nil
 	}
@@ -257,7 +268,7 @@ func (j *OpenAPIResourceDefinition) Build(ctx context.Context) (*highv3.Document
 		return nil, err
 	}
 
-	result, err := libopenapi.ApplyOverlayToSpecBytes(j.specBytes, ov)
+	result, err := libopenapi.ApplyOverlayToSpecBytes(specBytes, ov)
 	if err != nil {
 		return nil, err
 	}
@@ -272,12 +283,7 @@ func (j *OpenAPIResourceDefinition) Build(ctx context.Context) (*highv3.Document
 
 func (j *OpenAPIResourceDefinition) buildSpecNodeWithoutPatch() (*highv3.Document, error) {
 	// parse document from the yaml node directly.
-	wrappedDoc := &yaml.Node{
-		Kind:    yaml.DocumentNode,
-		Content: []*yaml.Node{j.specNode},
-	}
-
-	doc, err := extractOpenAPIv3SpecInfoFromYAML(wrappedDoc)
+	doc, err := extractOpenAPIv3SpecInfoFromYAML(j.Spec)
 	if err != nil {
 		return nil, err
 	}
@@ -287,15 +293,49 @@ func (j *OpenAPIResourceDefinition) buildSpecNodeWithoutPatch() (*highv3.Documen
 		return nil, err
 	}
 
-	j.Spec = &spec.Model
-	j.specNode = nil
-
-	return j.Spec, nil
+	return &spec.Model, nil
 }
 
-func (j *OpenAPIResourceDefinition) buildSpecFromRef(
+func (j *OpenAPIResourceDefinition) buildJSONDocumentWithOverlay(
 	ctx context.Context,
 ) (*highv3.Document, error) {
+	doc, err := j.buildDocumentFromRef(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	model, err := doc.BuildV3Model()
+	if err != nil {
+		return nil, err
+	}
+
+	rawYaml, err := model.Model.Render()
+	if err != nil {
+		return nil, err
+	}
+
+	// apply overlay patches
+	ov, err := newOverlayDocumentFromActionNodes(ctx, j.Patches)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := libopenapi.ApplyOverlayToSpecBytes(rawYaml, ov)
+	if err != nil {
+		return nil, err
+	}
+
+	model, err = result.OverlayDocument.BuildV3Model()
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.Model, nil
+}
+
+func (j *OpenAPIResourceDefinition) buildDocumentFromRef(
+	ctx context.Context,
+) (libopenapi.Document, error) {
 	rawSourceReader, _, err := goutils.FileReaderFromPath(ctx, j.Ref)
 	if err != nil {
 		return nil, err
@@ -309,7 +349,13 @@ func (j *OpenAPIResourceDefinition) buildSpecFromRef(
 		return nil, err
 	}
 
-	sourceDoc, err := libopenapi.NewDocument(sourceBytes)
+	return libopenapi.NewDocument(sourceBytes)
+}
+
+func (j *OpenAPIResourceDefinition) buildSpecFromRef(
+	ctx context.Context,
+) (*highv3.Document, error) {
+	sourceDoc, err := j.buildDocumentFromRef(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -326,14 +372,14 @@ func (j *OpenAPIResourceDefinition) buildSpecFromRef(
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert openapi spec v2 to v3: %w", err)
 		}
-	} else {
-		sourceSpec, err := sourceDoc.BuildV3Model()
-		if err != nil {
-			return nil, err
-		}
 
-		doc = &sourceSpec.Model
+		return doc, nil
 	}
 
-	return doc, nil
+	sourceSpec, err := sourceDoc.BuildV3Model()
+	if err != nil {
+		return nil, err
+	}
+
+	return &sourceSpec.Model, nil
 }
