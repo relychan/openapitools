@@ -171,20 +171,19 @@ func (mfe *multipartFormEncoder) evalRootValueReflection(reflectValue reflect.Va
 			contentType, headers := mfe.evalEncoding(keyStr)
 			mapValue := reflectValue.MapIndex(key)
 
-			if httpheader.IsContentTypeJSON(contentType) {
-				return mfe.writer.WriteJSON(keyStr, mapValue.Interface(), headers)
+			var err error
+
+			switch {
+			case httpheader.IsContentTypeJSON(contentType):
+				err = mfe.writer.WriteJSON(keyStr, mapValue.Interface(), headers)
+			case httpheader.IsContentTypeXML(contentType):
+				err = mfe.writer.WriteXML(keyStr, mapValue.Interface(), headers)
+			case contentType == "" || httpheader.IsContentTypeText(contentType):
+				err = mfe.evalValueReflectionWithDefaultContentType(keyStr, mapValue, headers)
+			default:
+				err = mfe.evalValueReflection(keyStr, mapValue, contentType, headers)
 			}
 
-			if httpheader.IsContentTypeXML(contentType) {
-				return mfe.writer.WriteXML(keyStr, mapValue.Interface(), headers)
-			}
-
-			if contentType == "" ||
-				httpheader.IsContentTypeText(contentType) {
-				return mfe.evalValueReflectionWithDefaultContentType(keyStr, mapValue, headers)
-			}
-
-			err := mfe.evalValueReflection(keyStr, mapValue, contentType, headers)
 			if err != nil {
 				return err
 			}

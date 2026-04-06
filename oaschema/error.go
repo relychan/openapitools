@@ -41,6 +41,10 @@ var (
 	ErrInvalidOpenAPIResourceDefinitionYAML = errors.New(
 		"failed to parse OpenAPIResourceDefinition from YAML",
 	)
+	// ErrInvalidOpenAPIResourceDefinitionJSON occurs when failing to parse a OpenAPIResourceDefinition from JSON string.
+	ErrInvalidOpenAPIResourceDefinitionJSON = errors.New(
+		"failed to parse OpenAPIResourceDefinition from JSON",
+	)
 	// ErrInvalidContentType occurs when the content type string is invalid.
 	ErrInvalidContentType = errors.New("invalid content type")
 )

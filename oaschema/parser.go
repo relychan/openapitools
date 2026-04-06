@@ -150,7 +150,7 @@ func buildV3Model(info *datamodel.SpecInfo) (*libopenapi.DocumentModel[v3high.Do
 func parseVersionTypeData(d string) (string, int, error) {
 	r := strings.TrimSpace(d)
 
-	if len(r) == 0 {
+	if len(r) == 0 || r[0] < '0' || r[0] > '9' {
 		return "", 0, ErrInvalidOpenAPIVersion
 	}
 

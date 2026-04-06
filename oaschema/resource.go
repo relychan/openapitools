@@ -99,6 +99,8 @@ func (j *OpenAPIResourceDefinition) UnmarshalJSON(b []byte) error {
 
 	j.Ref = rawValue.Ref
 	j.Settings = rawValue.Settings
+	j.Spec = nil
+	j.Patches = nil
 
 	if len(rawValue.Spec) > 0 {
 		var specNode yaml.Node
@@ -119,7 +121,21 @@ func (j *OpenAPIResourceDefinition) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("malformed patches: %w", err)
 		}
 
-		j.Patches = node.Content[0]
+		if len(node.Content) > 0 {
+			if node.Content[0].Kind == yaml.SequenceNode &&
+				len(node.Content[0].Content) > 0 {
+				j.Patches = node.Content[0]
+			}
+
+			if node.Content[0].Kind != yaml.ScalarNode ||
+				node.Content[0].Tag != goutils.NullStr {
+				return fmt.Errorf(
+					"%w. Expected an array, got %s",
+					ErrInvalidOpenAPIResourceDefinitionJSON,
+					node.Content[0].Tag,
+				)
+			}
+		}
 	}
 
 	return nil
@@ -214,8 +230,6 @@ func (j *OpenAPIResourceDefinition) Build(ctx context.Context) (*highv3.Document
 		if err != nil {
 			return nil, err
 		}
-
-		j.Spec = nil
 	} else if j.Ref != "" {
 		if !havePatches {
 			return j.buildSpecFromRef(ctx)
