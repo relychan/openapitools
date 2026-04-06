@@ -121,20 +121,9 @@ func (j *OpenAPIResourceDefinition) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("malformed patches: %w", err)
 		}
 
-		if len(node.Content) == 0 {
-			return nil
-		}
-
-		if node.Content[0].Kind == yaml.SequenceNode &&
-			len(node.Content[0].Content) > 0 {
-			j.Patches = node.Content[0]
-		} else if node.Content[0].Kind != yaml.ScalarNode ||
-			node.Content[0].Tag != goutils.NullStr {
-			return fmt.Errorf(
-				"%w. Expected an array, got %s",
-				ErrInvalidOpenAPIResourceDefinitionJSON,
-				node.Content[0].Tag,
-			)
+		err = j.validatePatchesNode(node)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -203,7 +192,10 @@ func (j *OpenAPIResourceDefinition) UnmarshalYAML(value *yaml.Node) error {
 				Content: []*yaml.Node{valueNode},
 			}
 		case "patches":
-			j.Patches = valueNode
+			err := j.validatePatchesNode(valueNode)
+			if err != nil {
+				return err
+			}
 		default:
 		}
 	}
@@ -396,4 +388,24 @@ func (j *OpenAPIResourceDefinition) buildSpecFromRef(
 	}
 
 	return &sourceSpec.Model, nil
+}
+
+func (j *OpenAPIResourceDefinition) validatePatchesNode(node *yaml.Node) error {
+	if len(node.Content) == 0 {
+		return nil
+	}
+
+	if node.Content[0].Kind == yaml.SequenceNode &&
+		len(node.Content[0].Content) > 0 {
+		j.Patches = node.Content[0]
+	} else if node.Content[0].Kind != yaml.ScalarNode ||
+		node.Content[0].Tag != goutils.NullStr {
+		return fmt.Errorf(
+			"%w. Expected an array, got %s",
+			ErrInvalidOpenAPIResourceDefinitionJSON,
+			node.Content[0].Tag,
+		)
+	}
+
+	return nil
 }
