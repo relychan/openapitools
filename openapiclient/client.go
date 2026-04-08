@@ -18,6 +18,7 @@ package openapiclient
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/hasura/goenvconf"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
@@ -34,8 +35,8 @@ type ProxyClient struct {
 	clientOptions
 
 	lbClient       *loadbalancer.LoadBalancerClient
-	metadata       *oaschema.OpenAPIResourceDefinition
 	node           *internal.Node
+	settings       *oaschema.OpenAPIResourceSettings
 	defaultHeaders map[string]string
 	authenticators *proxyhandler.OpenAPIAuthenticator
 }
@@ -46,22 +47,21 @@ func NewProxyClient(
 	metadata *oaschema.OpenAPIResourceDefinition,
 	options ...ClientOption,
 ) (*ProxyClient, error) {
-	client := &ProxyClient{
-		metadata:       metadata,
-		defaultHeaders: map[string]string{},
+	if metadata == nil {
+		return nil, ErrMetadataRequired
 	}
 
-	err := client.init(ctx, options)
+	client := &ProxyClient{
+		defaultHeaders: map[string]string{},
+		settings:       metadata.Settings,
+	}
+
+	err := client.init(ctx, metadata, options)
 	if err != nil {
 		return nil, err
 	}
 
 	return client, nil
-}
-
-// Metadata returns the metadata of the OpenAPI client.
-func (pc *ProxyClient) Metadata() *oaschema.OpenAPIResourceDefinition {
-	return pc.metadata
 }
 
 // Close method performs cleanup and closure activities on the client instance.
@@ -79,10 +79,18 @@ func (pc *ProxyClient) Close() error {
 	return err
 }
 
-func (pc *ProxyClient) init(ctx context.Context, clientOpts []ClientOption) error {
-	spec, err := pc.metadata.Build(ctx)
+func (pc *ProxyClient) init(
+	ctx context.Context,
+	metadata *oaschema.OpenAPIResourceDefinition,
+	clientOpts []ClientOption,
+) error {
+	spec, warnings, err := metadata.Build(ctx)
 	if err != nil {
 		return err
+	}
+
+	if len(warnings) > 0 {
+		slog.Warn("warnings happened when building metadata", slog.Any("warnings", warnings))
 	}
 
 	err = pc.initOptions(clientOpts)
@@ -121,13 +129,13 @@ func (pc *ProxyClient) init(ctx context.Context, clientOpts []ClientOption) erro
 }
 
 func (pc *ProxyClient) initDefaultHeaders() error {
-	if pc.metadata.Settings == nil {
+	if pc.settings == nil {
 		return nil
 	}
 
 	getEnv := pc.GetEnvFunc()
 
-	for key, envValue := range pc.metadata.Settings.Headers {
+	for key, envValue := range pc.settings.Headers {
 		value, err := envValue.GetCustom(getEnv)
 		if err != nil {
 			return fmt.Errorf("failed to load header %s: %w", key, err)
@@ -150,10 +158,10 @@ func (pc *ProxyClient) initServers(spec *highv3.Document) error {
 
 	var healthCheckBuilder *loadbalancer.HTTPHealthCheckPolicyBuilder
 
-	if pc.metadata.Settings != nil &&
-		pc.metadata.Settings.HealthCheck != nil &&
-		pc.metadata.Settings.HealthCheck.HTTP != nil {
-		healthCheckBuilder, err = pc.metadata.Settings.HealthCheck.HTTP.ToPolicyBuilder()
+	if pc.settings != nil &&
+		pc.settings.HealthCheck != nil &&
+		pc.settings.HealthCheck.HTTP != nil {
+		healthCheckBuilder, err = pc.settings.HealthCheck.HTTP.ToPolicyBuilder()
 		if err != nil {
 			return err
 		}
@@ -263,8 +271,8 @@ func (pc *ProxyClient) initServer(
 func (pc *ProxyClient) initOptions(options []ClientOption) error {
 	var httpConfig *httpconfig.HTTPClientConfig
 
-	if pc.metadata.Settings != nil && pc.metadata.Settings.HTTP != nil {
-		httpConfig = pc.metadata.Settings.HTTP
+	if pc.settings != nil && pc.settings.HTTP != nil {
+		httpConfig = pc.settings.HTTP
 	}
 
 	baseClientOptions, err := httpconfig.NewClientOptionsFromConfig(httpConfig)
