@@ -807,6 +807,7 @@
      "required": [
       "ref"
      ],
+     "title": "OpenAPIResourceRef",
      "description": "Definition of an OpenAPI resource"
     },
     {
@@ -820,6 +821,7 @@
      "required": [
       "spec"
      ],
+     "title": "OpenAPIResourceSpec",
      "description": "Definition of an OpenAPI resource"
     }
    ],
@@ -880,7 +882,8 @@
      "type": "object",
      "required": [
       "update"
-     ]
+     ],
+     "title": "OverlayActionUpdateObject"
     },
     {
      "properties": {
@@ -892,7 +895,8 @@
      "type": "object",
      "required": [
       "copy"
-     ]
+     ],
+     "title": "OverlayActionCopyObject"
     },
     {
      "properties": {
@@ -905,7 +909,8 @@
      "type": "object",
      "required": [
       "remove"
-     ]
+     ],
+     "title": "OverlayActionRemoveObject"
     }
    ],
    "properties": {
@@ -3365,17 +3370,6 @@
      },
      "type": "object",
      "description": "Defines custom headers to be injected to the remote server.\nMerged with the global headers."
-    },
-    "x-rely-server-security-schemes": {
-     "additionalProperties": {
-      "$ref": "#/$defs/security-scheme"
-     },
-     "type": "object",
-     "description": "Security schemes that can be used by the operations.\nUse global security schemes if empty."
-    },
-    "x-rely-server-security": {
-     "$ref": "#/$defs/security-requirement",
-     "description": "Global security requirements/roles for the target.\nUse global securities if empty."
     },
     "x-rely-server-tls": {
      "$ref": "#/$defs/TLSConfig",

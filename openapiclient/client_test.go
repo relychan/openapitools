@@ -16,7 +16,6 @@ package openapiclient
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -37,6 +36,7 @@ import (
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -271,13 +271,17 @@ func TestRESTHandler_GraphQLServer(t *testing.T) {
 // NOTE: Run the script at testdata/tls/create-certs.sh before running TLS tests.
 
 func TestProxyClient_Auth(t *testing.T) {
-	serverContext := createMockServer(t)
-	defer serverContext.Server.Close()
+	server1 := createMockServer(t)
+	defer server1.Server.Close()
 
-	t.Setenv("SERVER_URL", serverContext.Server.URL)
-	t.Setenv("API_KEY", serverContext.APIKey)
-	t.Setenv("USERNAME", serverContext.Username)
-	t.Setenv("PASSWORD", serverContext.Password)
+	server2 := createMockServer(t)
+	defer server2.Server.Close()
+
+	t.Setenv("SERVER_URL", server1.Server.URL)
+	t.Setenv("SERVER_URL_2", server2.Server.URL)
+	t.Setenv("API_KEY", server1.APIKey)
+	t.Setenv("USERNAME", server1.Username)
+	t.Setenv("PASSWORD", server1.Password)
 	t.Setenv("QUERY_FOO", "bar")
 
 	keyPem, err := os.ReadFile(filepath.Join("testdata/tls/certs", "client.key"))
@@ -347,7 +351,7 @@ func TestProxyClient_Auth(t *testing.T) {
 				},
 				Method: "POST",
 				Header: http.Header{
-					"X-Auth-Token": []string{serverContext.APIKey},
+					"X-Auth-Token": []string{"test-token"},
 				},
 			},
 			StatusCode:   200,
@@ -398,14 +402,16 @@ func TestProxyClient_Auth(t *testing.T) {
 			}
 		})
 	}
+
+	assert.Equal(t, 2, int(server1.GetCounter()))
+	assert.Equal(t, 2, int(server2.GetCounter()))
 }
 
 type mockServerState struct {
-	Server     *httptest.Server
-	RetryCount int32
-	APIKey     string
-	Username   string
-	Password   string
+	Server   *httptest.Server
+	APIKey   string
+	Username string
+	Password string
 
 	counter atomic.Int32
 }
@@ -422,9 +428,9 @@ func createMockServer(t *testing.T) *mockServerState {
 	t.Helper()
 
 	state := mockServerState{
-		APIKey:   rand.Text(),
-		Username: rand.Text(),
-		Password: rand.Text(),
+		APIKey:   "test-api-key",
+		Username: "test-username",
+		Password: "test-password",
 	}
 
 	mux := http.NewServeMux()
@@ -484,7 +490,7 @@ func createMockServer(t *testing.T) *mockServerState {
 			tokenValue := r.Header.Get("X-Auth-Token")
 			testHeaderValue := r.Header.Get("X-Test-Header")
 
-			require.Equal(t, state.APIKey, tokenValue, "invalid forwarded auth header")
+			require.Equal(t, "test-token", tokenValue, "invalid forwarded auth header")
 			require.Equal(t, "true", testHeaderValue, "invalid X-Test-Header auth header")
 
 			writeResponse(w, "OK")

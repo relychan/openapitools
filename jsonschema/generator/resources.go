@@ -196,16 +196,19 @@ func newOverlayActionSchema() *jsonschema.Schema {
 		OneOf: []*jsonschema.Schema{
 			{
 				Type:       "object",
+				Title:      "OverlayActionUpdateObject",
 				Required:   []string{"update"},
 				Properties: updateProps,
 			},
 			{
 				Type:       "object",
+				Title:      "OverlayActionCopyObject",
 				Required:   []string{"copy"},
 				Properties: copyProps,
 			},
 			{
 				Type:       "object",
+				Title:      "OverlayActionRemoveObject",
 				Required:   []string{"remove"},
 				Properties: removeProps,
 			},
@@ -254,12 +257,14 @@ func newOpenAPIResourceSchema() *jsonschema.Schema {
 					{
 						Type:        "object",
 						Description: "Definition of an OpenAPI resource",
+						Title:       "OpenAPIResourceRef",
 						Properties:  refProps,
 						Required:    []string{"ref"},
 					},
 					{
 						Type:        "object",
 						Description: "Definition of an OpenAPI resource",
+						Title:       "OpenAPIResourceSpec",
 						Properties:  specProps,
 						Required:    []string{"spec"},
 					},

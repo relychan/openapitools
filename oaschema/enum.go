@@ -25,10 +25,6 @@ const (
 	XRelyServerWeight = "x-rely-server-weight"
 	// XRelyServerHeaders is the extension name enum for custom headers for the server.
 	XRelyServerHeaders = "x-rely-server-headers"
-	// XRelyServerSecuritySchemes is the extension name enum for server security schemes.
-	XRelyServerSecuritySchemes = "x-rely-server-security-schemes"
-	// XRelyServerSecurity is the extension name enum for a server security.
-	XRelyServerSecurity = "x-rely-server-security"
 	// XRelyServerTLS is the extension name enum for a server TLS config.
 	XRelyServerTLS = "x-rely-server-tls"
 	// XRelyProxyAction is the extension name enum for a proxy action.

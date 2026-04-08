@@ -109,8 +109,6 @@ Each OpenAPI operation gets exactly one handler, selected by the `x-rely-proxy-a
 | `x-rely-server-weight` | server object | Weighted round-robin weight |
 | `x-rely-server-headers` | server object | Per-server injected headers |
 | `x-rely-proxy-action` | operation object | Handler config (REST params, GraphQL query/variables) |
-| `x-rely-server-security-schemes` | server object | Server-level security scheme definitions |
-| `x-rely-server-security` | server object | Server-level security requirements |
 | `x-rely-server-tls` | server object | TLS configuration |
 | `x-rely-security-credentials` | operation object | Per-operation credential overrides |
 | `x-rely-oauth2-token-url-env` | security scheme | Env var for OAuth2 token URL |

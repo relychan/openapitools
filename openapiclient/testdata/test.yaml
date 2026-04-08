@@ -20,6 +20,7 @@ spec:
   openapi: "3.2.0"
   servers:
     - url: "{SERVER_URL}"
+    - url: "{SERVER_URL_2}"
   security:
     - apiKey: []
   components:
