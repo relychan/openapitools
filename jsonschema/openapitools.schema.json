@@ -874,6 +874,18 @@
   "OverlayActionObject": {
    "oneOf": [
     {
+     "oneOf": [
+      {
+       "required": [
+        "update"
+       ]
+      },
+      {
+       "required": [
+        "copy"
+       ]
+      }
+     ],
      "properties": {
       "update": {
        "description": "If the target selects object nodes, the value of this field MUST be an object with the properties and values to merge with each selected object. If the target selects array nodes, the value of this field MUST be an array to concatenate with each selected array, or an object or primitive value to append to each selected array. If the target selects primitive nodes, the value of this field MUST be a primitive value to replace each selected node. This field has no impact if the remove field of this action object is true or if the copy field contains a value."
@@ -884,9 +896,6 @@
       }
      },
      "type": "object",
-     "required": [
-      "update"
-     ],
      "title": "OverlayActionUpdateCopyObject"
     },
     {

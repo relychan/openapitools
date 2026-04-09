@@ -195,8 +195,15 @@ func newOverlayActionSchema() *jsonschema.Schema {
 			{
 				Type:       "object",
 				Title:      "OverlayActionUpdateCopyObject",
-				Required:   []string{"update"},
 				Properties: updateProps,
+				OneOf: []*jsonschema.Schema{
+					{
+						Required: []string{"update"},
+					},
+					{
+						Required: []string{"copy"},
+					},
+				},
 			},
 			{
 				Type:       "object",
