@@ -174,9 +174,7 @@ func newOverlayActionSchema() *jsonschema.Schema {
 	updateProps.Set("update", &jsonschema.Schema{
 		Description: "If the target selects object nodes, the value of this field MUST be an object with the properties and values to merge with each selected object. If the target selects array nodes, the value of this field MUST be an array to concatenate with each selected array, or an object or primitive value to append to each selected array. If the target selects primitive nodes, the value of this field MUST be a primitive value to replace each selected node. This field has no impact if the remove field of this action object is true or if the copy field contains a value.",
 	})
-
-	copyProps := jsonschema.NewProperties()
-	copyProps.Set("copy", &jsonschema.Schema{
+	updateProps.Set("copy", &jsonschema.Schema{
 		Type:        "string",
 		Description: "A JSONPath expression selecting a single node to copy into the target nodes. If the target selects object nodes, the value of this field MUST be an object with the properties and values to merge with each selected object. If the target selects array nodes, the value of this field MUST be an array to concatenate with each selected array, or an object or primitive value to append to each selected array. If the target selects primitive nodes, the value of this field MUST be a primitive value to replace each selected node. This field has no impact if the remove field of this action object is true or if the update field contains a value.",
 	})
@@ -196,15 +194,9 @@ func newOverlayActionSchema() *jsonschema.Schema {
 		OneOf: []*jsonschema.Schema{
 			{
 				Type:       "object",
-				Title:      "OverlayActionUpdateObject",
+				Title:      "OverlayActionUpdateCopyObject",
 				Required:   []string{"update"},
 				Properties: updateProps,
-			},
-			{
-				Type:       "object",
-				Title:      "OverlayActionCopyObject",
-				Required:   []string{"copy"},
-				Properties: copyProps,
 			},
 			{
 				Type:       "object",
