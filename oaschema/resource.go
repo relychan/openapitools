@@ -209,7 +209,9 @@ func (j *OpenAPIResourceDefinition) UnmarshalYAML(value *yaml.Node) error {
 }
 
 // Build validates and merge the openapi specification with the reference if exist.
-func (j *OpenAPIResourceDefinition) Build(ctx context.Context) (*highv3.Document, []*overlay.Warning, error) {
+func (j *OpenAPIResourceDefinition) Build(
+	ctx context.Context,
+) (*highv3.Document, []*overlay.Warning, error) {
 	var (
 		specBytes []byte
 		err       error
@@ -257,24 +259,6 @@ func (j *OpenAPIResourceDefinition) Build(ctx context.Context) (*highv3.Document
 
 	if len(specBytes) == 0 {
 		return nil, nil, ErrResourceSpecRequired
-	}
-
-	if !havePatches {
-		// build openapi model from raw bytes.
-		oasConfig := datamodel.NewDocumentConfiguration()
-		oasConfig.SkipJSONConversion = true
-
-		doc, err := libopenapi.NewDocumentWithConfiguration(specBytes, oasConfig)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		spec, err := doc.BuildV3Model()
-		if err != nil {
-			return nil, nil, err
-		}
-
-		return &spec.Model, nil, nil
 	}
 
 	// apply overlay patches

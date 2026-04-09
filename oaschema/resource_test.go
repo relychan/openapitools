@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"testing"
 
@@ -625,7 +624,7 @@ patches:
 		doc, warnings, err := def.Build(ctx)
 		require.NoError(t, err)
 		require.NotNil(t, doc)
-		log.Println("warnings", warnings)
+		t.Log("warnings", warnings)
 		require.Equal(t, 0, len(warnings))
 
 		ext, ok := doc.Info.Extensions.Get("x-overlay-applied")

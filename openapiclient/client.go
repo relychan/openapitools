@@ -90,7 +90,10 @@ func (pc *ProxyClient) init(
 	}
 
 	if len(warnings) > 0 {
-		slog.Warn("warnings happened when building metadata", slog.Any("warnings", warnings))
+		slog.WarnContext(ctx,
+			"warnings happened when building metadata",
+			slog.Any("warnings", warnings),
+		)
 	}
 
 	err = pc.initOptions(clientOpts)
