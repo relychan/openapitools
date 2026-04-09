@@ -24,6 +24,7 @@ var tracer = gotel.NewTracer("openapitools")
 
 var (
 	ErrServerURLRequired = errors.New("server url is required")
+	ErrMetadataRequired  = errors.New("metadata for the proxy client is required")
 	ErrNoAvailableServer = errors.New(
 		"failed to initialize servers. Require at least 1 server has URL",
 	)

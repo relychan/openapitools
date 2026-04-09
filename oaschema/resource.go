@@ -24,6 +24,7 @@ import (
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/pb33f/libopenapi/overlay"
 	"github.com/relychan/goutils"
 	"go.yaml.in/yaml/v4"
 )
@@ -208,7 +209,9 @@ func (j *OpenAPIResourceDefinition) UnmarshalYAML(value *yaml.Node) error {
 }
 
 // Build validates and merge the openapi specification with the reference if exist.
-func (j *OpenAPIResourceDefinition) Build(ctx context.Context) (*highv3.Document, error) {
+func (j *OpenAPIResourceDefinition) Build(
+	ctx context.Context,
+) (*highv3.Document, []*overlay.Warning, error) {
 	var (
 		specBytes []byte
 		err       error
@@ -218,17 +221,21 @@ func (j *OpenAPIResourceDefinition) Build(ctx context.Context) (*highv3.Document
 
 	if j.Spec != nil {
 		if !havePatches {
-			return j.buildSpecNodeWithoutPatch()
+			doc, err := j.buildSpecNodeWithoutPatch()
+
+			return doc, nil, err
 		}
 
 		// dump yaml to bytes for applying overlay patches.
 		specBytes, err = yaml.Dump(j.Spec)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	} else if j.Ref != "" {
 		if !havePatches {
-			return j.buildSpecFromRef(ctx)
+			doc, err := j.buildSpecFromRef(ctx)
+
+			return doc, nil, err
 		}
 
 		if !strings.HasSuffix(j.Ref, ".yaml") {
@@ -238,7 +245,7 @@ func (j *OpenAPIResourceDefinition) Build(ctx context.Context) (*highv3.Document
 		// read document file to apply overlay patches.
 		rawSourceReader, _, err := goutils.FileReaderFromPath(ctx, j.Ref)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		specBytes, err = io.ReadAll(rawSourceReader)
@@ -246,49 +253,31 @@ func (j *OpenAPIResourceDefinition) Build(ctx context.Context) (*highv3.Document
 		goutils.CatchWarnErrorFunc(rawSourceReader.Close)
 
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	if len(specBytes) == 0 {
-		return nil, ErrResourceSpecRequired
-	}
-
-	if !havePatches {
-		// build openapi model from raw bytes.
-		oasConfig := datamodel.NewDocumentConfiguration()
-		oasConfig.SkipJSONConversion = true
-
-		doc, err := libopenapi.NewDocumentWithConfiguration(specBytes, oasConfig)
-		if err != nil {
-			return nil, err
-		}
-
-		spec, err := doc.BuildV3Model()
-		if err != nil {
-			return nil, err
-		}
-
-		return &spec.Model, nil
+		return nil, nil, ErrResourceSpecRequired
 	}
 
 	// apply overlay patches
 	ov, err := newOverlayDocumentFromActionNodes(ctx, j.Patches)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	result, err := libopenapi.ApplyOverlayToSpecBytes(specBytes, ov)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	model, err := result.OverlayDocument.BuildV3Model()
 	if err != nil {
-		return nil, err
+		return nil, result.Warnings, err
 	}
 
-	return &model.Model, nil
+	return &model.Model, result.Warnings, nil
 }
 
 func (j *OpenAPIResourceDefinition) buildSpecNodeWithoutPatch() (*highv3.Document, error) {
@@ -308,39 +297,39 @@ func (j *OpenAPIResourceDefinition) buildSpecNodeWithoutPatch() (*highv3.Documen
 
 func (j *OpenAPIResourceDefinition) buildJSONDocumentWithOverlay(
 	ctx context.Context,
-) (*highv3.Document, error) {
+) (*highv3.Document, []*overlay.Warning, error) {
 	doc, err := j.buildDocumentFromRef(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	model, err := doc.BuildV3Model()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	rawYaml, err := model.Model.Render()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// apply overlay patches
 	ov, err := newOverlayDocumentFromActionNodes(ctx, j.Patches)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	result, err := libopenapi.ApplyOverlayToSpecBytes(rawYaml, ov)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	model, err = result.OverlayDocument.BuildV3Model()
 	if err != nil {
-		return nil, err
+		return nil, result.Warnings, err
 	}
 
-	return &model.Model, nil
+	return &model.Model, result.Warnings, nil
 }
 
 func (j *OpenAPIResourceDefinition) buildDocumentFromRef(

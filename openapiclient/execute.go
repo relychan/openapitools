@@ -128,12 +128,12 @@ func (pc *ProxyClient) prepareRequest(
 	requestURL := request.GetURL()
 	originalPath := requestURL.Path
 
-	if pc.metadata.Settings != nil &&
-		pc.metadata.Settings.BasePath != "" &&
-		pc.metadata.Settings.BasePath != "/" &&
+	if pc.settings != nil &&
+		pc.settings.BasePath != "" &&
+		pc.settings.BasePath != "/" &&
 		requestURL.Path != "" {
 		// The URL path may omit the slash character
-		basePath := pc.metadata.Settings.BasePath
+		basePath := pc.settings.BasePath
 		if requestURL.Path[0] != '/' {
 			basePath = basePath[1:]
 		}
@@ -162,7 +162,7 @@ func (pc *ProxyClient) prepareRequest(
 	)
 
 	options := &proxyhandler.ProxyHandleOptions{
-		Settings:    pc.metadata.Settings,
+		Settings:    pc.settings,
 		ParamValues: route.ParamValues,
 		NewRequest:  pc.newRequestFunc(request, route),
 	}
@@ -219,9 +219,9 @@ func (pc *ProxyClient) newRequestFunc(
 		headers := request.Header()
 
 		if len(headers) > 0 &&
-			pc.metadata.Settings != nil &&
-			pc.metadata.Settings.ForwardHeaders != nil {
-			for _, key := range pc.metadata.Settings.ForwardHeaders.Request {
+			pc.settings != nil &&
+			pc.settings.ForwardHeaders != nil {
+			for _, key := range pc.settings.ForwardHeaders.Request {
 				value := headers.Get(key)
 				if value != "" {
 					reqHeader.Set(key, value)

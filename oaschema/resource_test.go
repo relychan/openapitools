@@ -254,7 +254,7 @@ func TestOpenAPIResourceDefinition_Build(t *testing.T) {
 			Spec: &spec,
 		}
 
-		doc, err := def.Build(ctx)
+		doc, _, err := def.Build(ctx)
 		assert.NoError(t, err)
 		assert.True(t, doc != nil)
 		assert.Equal(t, "Test API", doc.Info.Title)
@@ -263,7 +263,7 @@ func TestOpenAPIResourceDefinition_Build(t *testing.T) {
 	t.Run("no_spec_no_ref_error", func(t *testing.T) {
 		def := OpenAPIResourceDefinition{}
 
-		doc, err := def.Build(ctx)
+		doc, _, err := def.Build(ctx)
 		assert.True(t, err != nil)
 		assert.Equal(t, ErrResourceSpecRequired, err)
 		assert.True(t, doc == nil)
@@ -274,7 +274,7 @@ func TestOpenAPIResourceDefinition_Build(t *testing.T) {
 			Ref: "nonexistent/file.json",
 		}
 
-		doc, err := def.Build(ctx)
+		doc, _, err := def.Build(ctx)
 		assert.True(t, err != nil)
 		assert.True(t, doc == nil)
 	})
@@ -293,7 +293,7 @@ func TestOpenAPIResourceDefinition_Build(t *testing.T) {
 				Ref: fmt.Sprintf("testdata/%s/swagger.json", tc.Ref),
 			}
 
-			doc, err := def.Build(ctx)
+			doc, _, err := def.Build(ctx)
 			assert.NoError(t, err)
 			assert.True(t, doc != nil)
 			assert.True(t, doc.Info != nil)
@@ -333,7 +333,7 @@ func TestOpenAPIResourceDefinition_Build(t *testing.T) {
 				Ref: fmt.Sprintf("testdata/%s/openapi.json", tc.Ref),
 			}
 
-			doc, err := def.Build(ctx)
+			doc, _, err := def.Build(ctx)
 			assert.NoError(t, err)
 			assert.True(t, doc != nil)
 			assert.True(t, doc.Info != nil)
@@ -366,7 +366,7 @@ func TestOpenAPIResourceDefinition_Build(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		doc, err := def.Build(context.Background())
+		doc, _, err := def.Build(context.Background())
 		require.NoError(t, err)
 
 		infoNode, ok := doc.Info.Extensions.Get("x-overlay-applied")
@@ -591,9 +591,10 @@ func TestOpenAPIResourceDefinition_Build_WithPatches(t *testing.T) {
 		var def OpenAPIResourceDefinition
 		require.NoError(t, json.Unmarshal([]byte(jsonData), &def))
 
-		doc, err := def.Build(ctx)
+		doc, warnings, err := def.Build(ctx)
 		require.NoError(t, err)
 		require.NotNil(t, doc)
+		require.Equal(t, 0, len(warnings))
 		require.Equal(t, "Patched API", doc.Info.Title)
 		require.Equal(t, "json-patch", doc.Info.Description)
 	})
@@ -611,17 +612,25 @@ patches:
     update:
       info:
         x-overlay-applied: yaml-patch
+  - target: "$"
+    update:
+      servers:
+        - url: "{SERVER_URL}"
+        - url: "{SERVER_URL_2}"
 `
 		var def OpenAPIResourceDefinition
 		require.NoError(t, yaml.Load([]byte(yamlData), &def))
 
-		doc, err := def.Build(ctx)
+		doc, warnings, err := def.Build(ctx)
 		require.NoError(t, err)
 		require.NotNil(t, doc)
+		t.Log("warnings", warnings)
+		require.Equal(t, 0, len(warnings))
 
 		ext, ok := doc.Info.Extensions.Get("x-overlay-applied")
 		assert.True(t, ok)
 		assert.Equal(t, "yaml-patch", ext.Value)
+		assert.Equal(t, 2, len(doc.Servers))
 	})
 
 	t.Run("ref_with_patches", func(t *testing.T) {
@@ -636,9 +645,10 @@ patches:
 		var def OpenAPIResourceDefinition
 		require.NoError(t, yaml.Load([]byte(yamlData), &def))
 
-		doc, err := def.Build(ctx)
+		doc, warnings, err := def.Build(ctx)
 		require.NoError(t, err)
 		require.NotNil(t, doc)
+		require.Equal(t, 0, len(warnings))
 
 		ext, ok := doc.Info.Extensions.Get("x-overlay-applied")
 		assert.True(t, ok)
@@ -658,9 +668,10 @@ patches:
 			Patches: patchNode.Content[0],
 		}
 
-		_, err := def.Build(ctx)
+		_, warnings, err := def.Build(ctx)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrResourceSpecRequired)
+		require.Equal(t, 0, len(warnings))
 	})
 }
 
@@ -698,7 +709,7 @@ func BenchmarkResourceUnmarshaler(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			_, err = value.Build(context.Background())
+			_, _, err = value.Build(context.Background())
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -713,7 +724,7 @@ func BenchmarkResourceUnmarshaler(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			_, err = value.Build(context.Background())
+			_, _, err = value.Build(context.Background())
 			if err != nil {
 				b.Fatal(err)
 			}

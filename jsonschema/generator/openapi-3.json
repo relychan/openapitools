@@ -221,17 +221,6 @@
           "type": "object",
           "description": "Defines custom headers to be injected to the remote server.\nMerged with the global headers."
         },
-        "x-rely-server-security-schemes": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/security-scheme"
-          },
-          "description": "Security schemes that can be used by the operations.\nUse global security schemes if empty."
-        },
-        "x-rely-server-security": {
-          "$ref": "#/$defs/security-requirement",
-          "description": "Global security requirements/roles for the target.\nUse global securities if empty."
-        },
         "x-rely-server-tls": {
           "$ref": "#/$defs/TLSConfig",
           "description": "TLS configuration of the server. Used for mTLS authentication."
