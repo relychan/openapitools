@@ -89,23 +89,6 @@
    "$schema": "https://json-schema.org/draft/2020-12/schema",
    "$id": "https://spec.openapis.org/oas/3.2/schema/2025-09-17",
    "$ref": "#/$defs/specification-extensions",
-   "anyOf": [
-    {
-     "required": [
-      "paths"
-     ]
-    },
-    {
-     "required": [
-      "components"
-     ]
-    },
-    {
-     "required": [
-      "webhooks"
-     ]
-    }
-   ],
    "properties": {
     "openapi": {
      "type": "string",
@@ -888,6 +871,7 @@
      ],
      "properties": {
       "update": {
+       "$ref": "#/$defs/Document",
        "description": "If the target selects object nodes, the value of this field MUST be an object with the properties and values to merge with each selected object. If the target selects array nodes, the value of this field MUST be an array to concatenate with each selected array, or an object or primitive value to append to each selected array. If the target selects primitive nodes, the value of this field MUST be a primitive value to replace each selected node. This field has no impact if the remove field of this action object is true or if the copy field contains a value."
       },
       "copy": {

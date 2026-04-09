@@ -26,6 +26,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -308,6 +309,7 @@ func TestProxyClient_Auth(t *testing.T) {
 		WithTimeout(time.Minute),
 	)
 	require.NoError(t, err)
+	require.NotNil(t, client.Settings())
 
 	defer client.Close()
 
@@ -454,8 +456,15 @@ func createMockServer(t *testing.T) *mockServerState {
 			apiKey := r.Header.Get("Authorization")
 			expectedValue := "Bearer " + state.APIKey
 			if apiKey != expectedValue {
-				t.Errorf("invalid bearer auth, expected %s, got %s", expectedValue, apiKey)
-				t.FailNow()
+				t.Fatalf("invalid bearer auth, expected %s, got %s", expectedValue, apiKey)
+			}
+
+			if r.Header.Get("X-Foo") != "bar" {
+				t.Fatal("expected the value of X-Foo header to be `bar`")
+			}
+
+			if !slices.Contains([]string{"1", "2"}, r.Header.Get("X-Test-Server")) {
+				t.Fatal("expected the value of X-Test-Server header to be 1 or 2")
 			}
 
 			w.Header().Add("Content-Type", "text/plain")

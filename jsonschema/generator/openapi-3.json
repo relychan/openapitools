@@ -81,23 +81,6 @@
     }
   },
   "required": [],
-  "anyOf": [
-    {
-      "required": [
-        "paths"
-      ]
-    },
-    {
-      "required": [
-        "components"
-      ]
-    },
-    {
-      "required": [
-        "webhooks"
-      ]
-    }
-  ],
   "$ref": "#/$defs/specification-extensions",
   "unevaluatedProperties": false,
   "$defs": {
