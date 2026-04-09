@@ -64,6 +64,11 @@ func NewProxyClient(
 	return client, nil
 }
 
+// Settings returns the inner settings of the resource.
+func (pc *ProxyClient) Settings() *oaschema.OpenAPIResourceSettings {
+	return pc.settings
+}
+
 // Close method performs cleanup and closure activities on the client instance.
 func (pc *ProxyClient) Close() error {
 	var err error

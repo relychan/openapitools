@@ -1,6 +1,8 @@
 # yaml-language-server: $schema=../../jsonschema/openapitools.schema.json
 settings:
-  headers: {}
+  headers:
+    X-Foo:
+      env: QUERY_FOO
   forwardHeaders:
     request:
       - X-Auth-Token
@@ -21,7 +23,15 @@ patches:
     update:
       servers:
         - url: "{SERVER_URL}"
+          x-rely-server-weight: 2
+          x-rely-server-headers:
+            X-Test-Server:
+              value: "1"
         - url: "{SERVER_URL_2}"
+          x-rely-server-weight: 2
+          x-rely-server-headers:
+            X-Test-Server:
+              value: "2"
 spec:
   openapi: "3.2.0"
   security:

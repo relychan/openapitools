@@ -173,6 +173,7 @@ func newOverlayActionSchema() *jsonschema.Schema {
 	updateProps := jsonschema.NewProperties()
 	updateProps.Set("update", &jsonschema.Schema{
 		Description: "If the target selects object nodes, the value of this field MUST be an object with the properties and values to merge with each selected object. If the target selects array nodes, the value of this field MUST be an array to concatenate with each selected array, or an object or primitive value to append to each selected array. If the target selects primitive nodes, the value of this field MUST be a primitive value to replace each selected node. This field has no impact if the remove field of this action object is true or if the copy field contains a value.",
+		Ref:         "#/$defs/Document",
 	})
 	updateProps.Set("copy", &jsonschema.Schema{
 		Type:        "string",
