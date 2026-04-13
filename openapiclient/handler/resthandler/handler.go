@@ -231,7 +231,7 @@ func (re *RESTfulHandler) handleRequest(
 			err,
 		)
 
-		return resp, nil, err
+		return resp, transformedBody, err
 	}
 
 	// encode the body back to the response stream.

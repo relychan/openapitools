@@ -205,10 +205,10 @@ func (ge *GraphQLHandler) prepareRequest(
 		}
 	}
 
-	reqHeader.Set(httpheader.Accept, acceptContentTypes)
+	reqHeader[httpheader.Accept] = []string{acceptContentTypes}
 
 	if ge.method == http.MethodPost {
-		reqHeader.Set(httpheader.ContentType, httpheader.ContentTypeJSON)
+		reqHeader[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
 
 		return ge.prepareRequestPOST(ctx, request, req, graphqlPayload)
 	}

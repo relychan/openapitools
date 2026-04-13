@@ -35,7 +35,7 @@ func writeErrorResponse(writer http.ResponseWriter, status int, err error) {
 		return
 	}
 
-	writer.Header().Set(httpheader.ContentType, httpheader.ContentTypeJSON)
+	writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
 	writer.WriteHeader(status)
 
 	writeErr := json.NewEncoder(writer).Encode(err)

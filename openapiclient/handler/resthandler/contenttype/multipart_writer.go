@@ -73,15 +73,16 @@ func (w *MultipartWriter) WriteBinary(
 	h := make(textproto.MIMEHeader)
 	maps.Copy(h, headers)
 
-	h.Set(httpheader.ContentDisposition,
+	h[httpheader.ContentDisposition] = []string{
 		fmt.Sprintf(`form-data; name=%s; filename=%s`,
-			strconv.Quote(name), strconv.Quote(name)))
+			strconv.Quote(name), strconv.Quote(name)),
+	}
 
 	if contentType == "" {
 		contentType = httpheader.ContentTypeOctetStream
 	}
 
-	h.Set(httpheader.ContentType, contentType)
+	h[httpheader.ContentType] = []string{contentType}
 
 	p, err := w.CreatePart(h)
 	if err != nil {
@@ -104,7 +105,7 @@ func (w *MultipartWriter) WriteJSON(fieldName string, value any, headers http.He
 	}
 
 	h := createFieldMIMEHeader(fieldName, headers)
-	h.Set(httpheader.ContentType, httpheader.ContentTypeJSON)
+	h[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
 
 	p, err := w.CreatePart(h)
 	if err != nil {
@@ -163,7 +164,9 @@ func createFieldMIMEHeader(fieldName string, headers http.Header) textproto.MIME
 	h := make(textproto.MIMEHeader)
 
 	maps.Copy(h, headers)
-	h.Set(httpheader.ContentDisposition, "form-data; name="+strconv.Quote(fieldName))
+	h[httpheader.ContentDisposition] = []string{
+		"form-data; name=" + strconv.Quote(fieldName),
+	}
 
 	return h
 }

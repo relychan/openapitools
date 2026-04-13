@@ -411,7 +411,7 @@ func (mfe *multipartFormEncoder) evalEncoding(key string) (string, http.Header) 
 	headers := getHeadersFromSchema(mfe.headers, encoding.Headers)
 
 	if encoding.ContentType != "" {
-		headers.Set(httpheader.ContentType, encoding.ContentType)
+		headers[httpheader.ContentType] = []string{encoding.ContentType}
 		contentType = encoding.ContentType
 	}
 

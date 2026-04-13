@@ -164,7 +164,7 @@ func (ge *GraphQLHandler) writeTransformResponse(
 	if status >= http.StatusBadRequest {
 		resp.StatusCode = status
 
-		writer.Header().Set(httpheader.ContentType, httpheader.ContentTypeJSON)
+		writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
 		writer.WriteHeader(status)
 
 		_, err := writer.Write(rawBody)
@@ -182,7 +182,7 @@ func (ge *GraphQLHandler) writeTransformResponse(
 	}
 
 	if ge.customResponse.Body == nil || ge.customResponse.Body.IsZero() {
-		writer.Header().Set(httpheader.ContentType, ge.responseContentType)
+		writer.Header()[httpheader.ContentType] = []string{ge.responseContentType}
 
 		_, err := writer.Write(rawBody)
 		if err != nil {
@@ -222,7 +222,7 @@ func (ge *GraphQLHandler) writeTransformResponse(
 		)
 	}
 
-	writer.Header().Set(httpheader.ContentType, ge.responseContentType)
+	writer.Header()[httpheader.ContentType] = []string{ge.responseContentType}
 
 	_, err = contenttype.Write(writer, ge.responseContentType, transformedBody)
 	if err != nil {

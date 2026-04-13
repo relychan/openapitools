@@ -170,7 +170,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	}
 
 	contentType := re.getDestinedContentType(request)
-	req.Header().Set(httpheader.ContentType, contentType)
+	req.Header()[httpheader.ContentType] = []string{contentType}
 
 	reader, ok := newBody.(io.Reader)
 	if ok && reader != nil {
