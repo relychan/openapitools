@@ -77,6 +77,23 @@ type ProxyHandleOptions struct {
 	ParamValues map[string]string
 }
 
+// ForwardResponseHeaders forward headers from http.Response to http.ResponseWriter.
+func (pho *ProxyHandleOptions) ForwardResponseHeaders(
+	writer http.ResponseWriter,
+	response *http.Response,
+) {
+	if pho.Settings == nil || pho.Settings.ForwardHeaders == nil {
+		return
+	}
+
+	for _, header := range pho.Settings.ForwardHeaders.Response {
+		value := response.Header.Get(header)
+		if value != "" {
+			writer.Header().Set(header, value)
+		}
+	}
+}
+
 // Request represents an HTTP request to be proxying.
 type Request struct {
 	// Method specifies the HTTP method (GET, POST, PUT, etc.).

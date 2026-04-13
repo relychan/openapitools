@@ -48,12 +48,12 @@ type Route struct {
 
 // MethodHandler represents a handler data for a method.
 type MethodHandler struct {
-	Handler  proxyhandler.ProxyHandler
-	Security []*base.SecurityRequirement
+	Operation *highv3.Operation
+	Handler   proxyhandler.ProxyHandler
 }
 
 // Node presents the route tree to organize the recursive route structure.
-type Node struct { //nolint:recvcheck
+type Node struct {
 	handlers map[string]MethodHandler
 
 	// regexp matcher for regexp nodes
@@ -517,8 +517,8 @@ func createMethods( //nolint:cyclop,funlen
 		}
 
 		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Get.Security,
+			Handler:   h,
+			Operation: operations.Get,
 		}
 	}
 
@@ -535,8 +535,8 @@ func createMethods( //nolint:cyclop,funlen
 		}
 
 		handlers[http.MethodPost] = MethodHandler{
-			Handler:  h,
-			Security: operations.Post.Security,
+			Handler:   h,
+			Operation: operations.Post,
 		}
 	}
 
@@ -553,8 +553,8 @@ func createMethods( //nolint:cyclop,funlen
 		}
 
 		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Put.Security,
+			Handler:   h,
+			Operation: operations.Put,
 		}
 	}
 
@@ -571,8 +571,8 @@ func createMethods( //nolint:cyclop,funlen
 		}
 
 		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Patch.Security,
+			Handler:   h,
+			Operation: operations.Patch,
 		}
 	}
 
@@ -589,8 +589,8 @@ func createMethods( //nolint:cyclop,funlen
 		}
 
 		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Delete.Security,
+			Handler:   h,
+			Operation: operations.Delete,
 		}
 	}
 
@@ -607,8 +607,8 @@ func createMethods( //nolint:cyclop,funlen
 		}
 
 		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Head.Security,
+			Handler:   h,
+			Operation: operations.Head,
 		}
 	}
 
@@ -628,8 +628,8 @@ func createMethods( //nolint:cyclop,funlen
 		}
 
 		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Options.Security,
+			Handler:   h,
+			Operation: operations.Options,
 		}
 	}
 
@@ -646,8 +646,8 @@ func createMethods( //nolint:cyclop,funlen
 		}
 
 		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Query.Security,
+			Handler:   h,
+			Operation: operations.Query,
 		}
 	}
 
@@ -664,8 +664,8 @@ func createMethods( //nolint:cyclop,funlen
 		}
 
 		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Trace.Security,
+			Handler:   h,
+			Operation: operations.Trace,
 		}
 	}
 
@@ -688,8 +688,8 @@ func createMethods( //nolint:cyclop,funlen
 			}
 
 			handlers[method] = MethodHandler{
-				Handler:  h,
-				Security: op.Security,
+				Handler:   h,
+				Operation: op,
 			}
 		}
 	}

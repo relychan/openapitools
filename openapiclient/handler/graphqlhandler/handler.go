@@ -214,6 +214,8 @@ func (ge *GraphQLHandler) Stream(
 		return nil, err
 	}
 
+	options.ForwardResponseHeaders(writer, resp)
+
 	if ge.customResponse == nil {
 		if httpheader.IsContentTypeJSON(ge.responseContentType) {
 			writer.Header().Set(httpheader.ContentType, ge.responseContentType)
@@ -281,7 +283,7 @@ func (ge *GraphQLHandler) printLog(
 		slog.String("query", graphqlPayload.Query),
 	)
 
-	requestHeaders := otelutils.ExtractTelemetryHeaders(request.Header())
+	requestHeaders := otelutils.ExtractTelemetryHeaders(request.Header(), nil)
 	otelutils.SetSpanHeaderMatrixAttributes(span, "http.request.header", requestHeaders)
 
 	requestLogAttrs = append(requestLogAttrs,
@@ -314,7 +316,7 @@ func (ge *GraphQLHandler) printLog(
 
 	if response != nil {
 		message = response.Status
-		respHeaders := otelutils.ExtractTelemetryHeaders(response.Header)
+		respHeaders := otelutils.ExtractTelemetryHeaders(response.Header, nil)
 
 		otelutils.SetSpanHeaderMatrixAttributes(span, "http.response.header", respHeaders)
 

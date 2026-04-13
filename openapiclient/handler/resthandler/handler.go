@@ -37,7 +37,6 @@ var tracer = gotel.NewTracer("openapitools/resthandler")
 
 // RESTfulHandler implements the ProxyHandler interface for RESTful proxy.
 type RESTfulHandler struct {
-	operation           *highv3.Operation
 	requestContentType  string
 	responseContentType string
 	customRequest       *customRESTRequest
@@ -52,7 +51,6 @@ func NewRESTfulHandler(
 	options *proxyhandler.NewProxyHandlerOptions,
 ) (proxyhandler.ProxyHandler, error) {
 	handler := &RESTfulHandler{
-		operation:  operation,
 		parameters: oaschema.MergeParameters(options.Parameters, operation.Parameters),
 	}
 
@@ -186,9 +184,19 @@ func (re *RESTfulHandler) handleRequest(
 		return resp, nil, err
 	}
 
+	// Decode and return/stream the response directly if there is no custom response config.
 	if re.customResponse == nil || re.customResponse.IsZero() ||
 		(resp.StatusCode < 200 || resp.StatusCode >= 300) {
-		respBody, err := re.resolveRawResponse(ctx, resp, writer)
+		var (
+			respBody  any
+			respError error
+		)
+
+		if writer == nil {
+			respBody, respError = re.decodeRawResponse(ctx, resp)
+		} else {
+			respError = re.writeRawResponse(ctx, resp, writer, options)
+		}
 
 		re.printRequestLog(
 			ctx,
@@ -197,10 +205,10 @@ func (re *RESTfulHandler) handleRequest(
 			request,
 			req,
 			resp,
-			err,
+			respError,
 		)
 
-		return resp, respBody, err
+		return resp, respBody, respError
 	}
 
 	transformedBody, err := re.transformResponse(ctx, logger, resp, writer)
@@ -242,7 +250,7 @@ func (*RESTfulHandler) printRequestLog(
 		)
 	}
 
-	requestHeaders := otelutils.ExtractTelemetryHeaders(originalRequest.Header())
+	requestHeaders := otelutils.ExtractTelemetryHeaders(originalRequest.Header(), nil)
 	otelutils.SetSpanHeaderMatrixAttributes(span, "http.request.header", requestHeaders)
 
 	requestAttrs = append(requestAttrs,
@@ -263,7 +271,7 @@ func (*RESTfulHandler) printRequestLog(
 	)
 
 	if response != nil {
-		respHeaders := otelutils.ExtractTelemetryHeaders(response.Header)
+		respHeaders := otelutils.ExtractTelemetryHeaders(response.Header, nil)
 
 		attrs = append(attrs, slog.GroupAttrs(
 			"response",

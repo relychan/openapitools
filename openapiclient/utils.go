@@ -16,7 +16,6 @@ package openapiclient
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -25,48 +24,9 @@ import (
 
 	"github.com/hasura/goenvconf"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
-	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
-	"github.com/relychan/openapitools/oaschema"
-	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
 )
-
-// newRequest creates a new proxy request from an HTTP request.
-func newRequest(writer http.ResponseWriter, request *http.Request) (*proxyhandler.Request, error) {
-	req := proxyhandler.NewRequest(request.Method, request.URL, request.Header, nil)
-
-	if request.Body == nil || request.Body == http.NoBody {
-		return req, nil
-	}
-
-	contentType := request.Header.Get(httpheader.ContentType)
-
-	decodedBody, err := contenttype.Decode(contentType, request.Body)
-	if err == nil {
-		req.SetBody(decodedBody)
-
-		return req, nil
-	}
-
-	errorDetail, ok := errors.AsType[*goutils.ErrorDetail](err)
-	if !ok {
-		errorDetail = &goutils.ErrorDetail{
-			Detail: err.Error(),
-			Code:   oaschema.ErrCodeRequestDecodeBodyError,
-		}
-	}
-
-	respErr := goutils.NewBadRequestError(*errorDetail)
-	respErr.Detail = "failed to decode request"
-
-	if writer != nil {
-		writeErrorResponse(writer, respErr.Status, respErr)
-	}
-
-	return nil, respErr
-}
 
 func writeErrorResponse(writer http.ResponseWriter, status int, err error) {
 	tracingWriter, ok := writer.(tracingResponseWriter)

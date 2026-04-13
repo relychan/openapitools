@@ -25,6 +25,7 @@ import (
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -158,45 +159,99 @@ func (*RESTfulHandler) postTransformedResponse(
 	return respErr
 }
 
-func (*RESTfulHandler) resolveRawResponse(
+func (re *RESTfulHandler) writeRawResponse(
 	ctx context.Context,
 	response *http.Response,
 	writer http.ResponseWriter,
-) (any, error) {
-	_, span := tracer.Start(ctx, "write_response", trace.WithSpanKind(trace.SpanKindInternal))
+	options *proxyhandler.ProxyHandleOptions,
+) error {
+	_, span := tracer.Start(ctx, "write_raw_response", trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
 
+	options.ForwardResponseHeaders(writer, response)
+
 	if response.Body == nil || response.Body == http.NoBody {
+		writer.WriteHeader(response.StatusCode)
 		span.SetStatus(codes.Ok, "empty response body")
 
-		return nil, nil
+		return nil
 	}
 
-	if writer != nil {
+	defer goutils.CatchWarnErrorFunc(response.Body.Close)
+
+	var (
+		err          error
+		contentTypes = response.Header[httpheader.ContentType]
+		responseBody = response.Body
+	)
+
+	if re.responseContentType == "" || len(contentTypes) == 0 ||
+		!oaschema.EqualContentType(re.responseContentType, contentTypes[0]) {
+		// Stream response directly without conversion.
+		writer.Header()[httpheader.ContentType] = contentTypes
 		writer.WriteHeader(response.StatusCode)
 
-		_, err := io.Copy(writer, response.Body)
-
-		goutils.CatchWarnErrorFunc(response.Body.Close)
-
-		if err != nil {
+		_, err = io.Copy(writer, responseBody)
+	} else {
+		decodedBody, decodeError := contenttype.Decode(contentTypes[0], response.Body)
+		if decodeError != nil {
 			respErr := goutils.NewServerError(goutils.ErrorDetail{
 				Code:   oaschema.ErrCodeWriteResponseError,
-				Detail: err.Error(),
+				Detail: decodeError.Error(),
 			})
 
-			respErr.Detail = "failed to write response body"
+			respErr.Detail = "failed to decode response body"
 
 			span.SetStatus(codes.Error, respErr.Detail)
-			span.RecordError(err)
+			span.RecordError(decodeError)
 
-			return nil, err
+			writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
+
+			writer.WriteHeader(http.StatusInternalServerError)
+
+			writeError := json.NewEncoder(writer).Encode(respErr)
+			if writeError != nil {
+				span.SetAttributes(
+					attribute.String("http.response.write_error",
+						writeError.Error(),
+					),
+				)
+			}
+
+			return err
 		}
 
-		span.SetStatus(codes.Ok, "streamed response successfully")
+		writer.Header()[httpheader.ContentType] = []string{re.responseContentType}
+		writer.WriteHeader(response.StatusCode)
 
-		return nil, nil
+		_, err = contenttype.Write(writer, re.responseContentType, decodedBody)
 	}
+
+	if err != nil {
+		respErr := goutils.NewServerError(goutils.ErrorDetail{
+			Code:   oaschema.ErrCodeWriteResponseError,
+			Detail: err.Error(),
+		})
+
+		respErr.Detail = "failed to write response body"
+
+		span.SetStatus(codes.Error, respErr.Detail)
+		span.RecordError(err)
+
+		return err
+	}
+
+	span.SetStatus(codes.Ok, "wrote response successfully")
+
+	return nil
+}
+
+func (*RESTfulHandler) decodeRawResponse(
+	ctx context.Context,
+	response *http.Response,
+) (any, error) {
+	_, span := tracer.Start(ctx, "decode_raw_response", trace.WithSpanKind(trace.SpanKindInternal))
+	defer span.End()
 
 	decodedBody, err := contenttype.Decode(
 		response.Header.Get(httpheader.ContentType),
@@ -215,6 +270,8 @@ func (*RESTfulHandler) resolveRawResponse(
 
 		return nil, err
 	}
+
+	span.SetStatus(codes.Ok, "")
 
 	return decodedBody, nil
 }

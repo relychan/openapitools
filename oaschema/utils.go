@@ -159,3 +159,14 @@ func ValidateContentType(contentType string) (string, error) {
 
 	return "", ErrInvalidContentType
 }
+
+// EqualContentType checks if both content type are equal with parameters excluded.
+func EqualContentType(left, right string) bool {
+	leftMediaType, _, _ := strings.Cut(left, ";")
+	rightMediaType, _, _ := strings.Cut(right, ";")
+
+	return strings.EqualFold(
+		strings.TrimSpace(leftMediaType),
+		strings.TrimSpace(rightMediaType),
+	)
+}
