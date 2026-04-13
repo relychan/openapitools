@@ -26,8 +26,8 @@ import (
 	"github.com/hasura/gotel"
 	"github.com/hasura/gotel/otelutils"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/relychan/gohttpc"
 	"github.com/relychan/gotransform/jmes"
-	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
@@ -159,13 +159,12 @@ func (ge *GraphQLHandler) Handle(
 		return nil, nil, err
 	}
 
+	defer gohttpc.CloseResponse(resp)
+
 	if ge.customResponse == nil || ge.customResponse.IsZero() {
 		var respBody any
 
 		err := json.NewDecoder(resp.Body).Decode(&respBody)
-
-		goutils.CatchWarnErrorFunc(resp.Body.Close)
-
 		if err != nil {
 			return resp, nil, newGraphQLResponseEncodeError(
 				oaschema.ErrCodeResponseTransformError,
@@ -182,7 +181,7 @@ func (ge *GraphQLHandler) Handle(
 			err,
 		)
 
-		return resp, respBody, err
+		return resp, respBody, nil
 	}
 
 	respBody, err := ge.handleTransformResponse(ctx, resp)
@@ -218,12 +217,20 @@ func (ge *GraphQLHandler) Stream(
 
 	if ge.customResponse == nil {
 		if httpheader.IsContentTypeJSON(ge.responseContentType) {
-			writer.Header().Set(httpheader.ContentType, ge.responseContentType)
+			writer.Header()[httpheader.ContentType] = []string{ge.responseContentType}
 
 			// No custom response. Write response directly for json content type
 			_, err = io.Copy(writer, resp.Body)
 
-			goutils.CatchWarnErrorFunc(resp.Body.Close)
+			gohttpc.CloseResponse(resp)
+			ge.printLog(
+				ctx,
+				request,
+				graphqlPayload,
+				resp,
+				nil,
+				err,
+			)
 
 			return resp, err
 		}
@@ -232,9 +239,18 @@ func (ge *GraphQLHandler) Stream(
 
 		err := json.NewDecoder(resp.Body).Decode(&respBody)
 
-		goutils.CatchWarnErrorFunc(resp.Body.Close)
+		gohttpc.CloseResponse(resp)
 
 		if err != nil {
+			ge.printLog(
+				ctx,
+				request,
+				graphqlPayload,
+				resp,
+				nil,
+				err,
+			)
+
 			return resp, err
 		}
 

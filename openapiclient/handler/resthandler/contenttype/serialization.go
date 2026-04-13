@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
 )
 
@@ -56,11 +55,6 @@ func Write(writer io.Writer, contentType string, body any) (int, error) {
 func Decode(contentType string, rawBody io.Reader) (any, error) {
 	if rawBody == nil {
 		return nil, nil
-	}
-
-	closer, ok := rawBody.(io.Closer)
-	if ok {
-		defer goutils.CatchWarnErrorFunc(closer.Close)
 	}
 
 	switch {

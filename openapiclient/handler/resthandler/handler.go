@@ -25,8 +25,10 @@ import (
 	"github.com/hasura/gotel/otelutils"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gohttpc"
+	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
+	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 	"go.opentelemetry.io/otel/trace"
@@ -211,7 +213,38 @@ func (re *RESTfulHandler) handleRequest(
 		return resp, respBody, respError
 	}
 
-	transformedBody, err := re.transformResponse(ctx, logger, resp, writer)
+	var contentTypeFrom string
+
+	if len(resp.Header[httpheader.ContentType]) > 0 {
+		contentTypeFrom = resp.Header[httpheader.ContentType][0]
+	}
+
+	transformedBody, err := re.transformResponse(ctx, logger, resp, contentTypeFrom)
+	if err != nil || writer == nil {
+		re.printRequestLog(
+			ctx,
+			span,
+			logger,
+			request,
+			req,
+			resp,
+			err,
+		)
+
+		return resp, nil, err
+	}
+
+	// encode the body back to the response stream.
+	contentTypeTo := re.responseContentType
+	if contentTypeTo == "" {
+		contentTypeTo = contentTypeFrom
+	}
+
+	writer.Header()[httpheader.ContentType] = []string{contentTypeTo}
+	writer.WriteHeader(resp.StatusCode)
+
+	_, err = contenttype.Write(writer, contentTypeTo, transformedBody)
+
 	re.printRequestLog(
 		ctx,
 		span,

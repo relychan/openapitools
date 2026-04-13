@@ -122,8 +122,8 @@ func (w *MultipartWriter) WriteJSON(fieldName string, value any, headers http.He
 // WriteXML calls CreateFormField and then writes the given value with XML encoding.
 func (w *MultipartWriter) WriteXML(fieldName string, value any, headers http.Header) error {
 	h := createFieldMIMEHeader(fieldName, headers)
-	if h.Get(httpheader.ContentType) == "" {
-		h.Set(httpheader.ContentType, httpheader.ContentTypeTextXML)
+	if len(h[httpheader.ContentType]) == 0 || h[httpheader.ContentType][0] == "" {
+		h[httpheader.ContentType] = []string{httpheader.ContentTypeTextXML}
 	}
 
 	p, err := w.CreatePart(h)
@@ -142,8 +142,8 @@ func (w *MultipartWriter) WriteXML(fieldName string, value any, headers http.Hea
 // WriteField calls CreateFormField and then writes the given value.
 func (w *MultipartWriter) WriteField(fieldName, value string, headers http.Header) error {
 	h := createFieldMIMEHeader(fieldName, headers)
-	if h.Get(httpheader.ContentType) == "" {
-		h.Set(httpheader.ContentType, httpheader.ContentTypeTextPlain)
+	if len(h[httpheader.ContentType]) == 0 || h[httpheader.ContentType][0] == "" {
+		h[httpheader.ContentType] = []string{httpheader.ContentTypeTextPlain}
 	}
 
 	p, err := w.CreatePart(h)

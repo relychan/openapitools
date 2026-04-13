@@ -98,9 +98,6 @@ func (ge *GraphQLHandler) handleTransformResponse(
 		}
 	} else {
 		err := json.NewDecoder(resp.Body).Decode(&responseBody)
-
-		goutils.CatchWarnErrorFunc(resp.Body.Close)
-
 		if err != nil {
 			span.SetStatus(codes.Error, "failed to decode response body")
 			span.RecordError(err)
