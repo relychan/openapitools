@@ -2,7 +2,7 @@
 spec:
   openapi: "3.2.0"
   servers:
-    - url: http://localhost:8080
+    - url: "{SERVER_URL}"
   paths:
     /mock:
       get: {}
