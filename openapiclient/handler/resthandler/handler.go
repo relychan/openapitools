@@ -213,11 +213,7 @@ func (re *RESTfulHandler) handleRequest(
 		return resp, respBody, respError
 	}
 
-	var contentTypeFrom string
-
-	if len(resp.Header[httpheader.ContentType]) > 0 {
-		contentTypeFrom = resp.Header[httpheader.ContentType][0]
-	}
+	contentTypeFrom := httpheader.GetHeaderValue(resp.Header, httpheader.ContentType)
 
 	transformedBody, err := re.transformResponse(ctx, logger, resp, contentTypeFrom)
 	if err != nil || writer == nil {

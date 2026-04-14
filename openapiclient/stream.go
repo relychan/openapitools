@@ -44,14 +44,6 @@ func (pc *ProxyClient) ServeHTTP(
 
 	req := proxyhandler.NewRequest(request.Method, request.URL, request.Header, nil)
 
-	// req, err := validateHTTPRequest(writer, request)
-	// if err != nil {
-	// 	span.SetStatus(codes.Error, "failed to validate request body")
-	// 	span.RecordError(err)
-
-	// 	return nil, err
-	// }
-
 	route, options, notFoundErr := pc.findRoute(span, req)
 	if notFoundErr != nil {
 		writeErrorResponse(writer, notFoundErr.Status, notFoundErr)
@@ -59,7 +51,17 @@ func (pc *ProxyClient) ServeHTTP(
 		return
 	}
 
-	_, err := route.Method.Handler.Stream(ctx, req, writer, options) //nolint:bodyclose
+	requestBody, err := parseHTTPRequestBody(writer, request)
+	if err != nil {
+		span.SetStatus(codes.Error, "failed to validate request body")
+		span.RecordError(err)
+
+		return
+	}
+
+	req.SetBody(requestBody)
+
+	_, err = route.Method.Handler.Stream(ctx, req, writer, options) //nolint:bodyclose
 	if err != nil {
 		status, respErr := pc.handleError(span, err, request.URL.Path)
 
@@ -108,24 +110,20 @@ func (pc *ProxyClient) Stream(
 	return response, nil
 }
 
-// validateHTTPRequest validates and create a new proxy request from an HTTP request.
-func validateHTTPRequest(
+// parse the HTTP request body.
+func parseHTTPRequestBody(
 	writer http.ResponseWriter,
 	request *http.Request,
-) (*proxyhandler.Request, error) {
-	req := proxyhandler.NewRequest(request.Method, request.URL, request.Header, nil)
-
+) (any, error) {
 	if request.Body == nil || request.Body == http.NoBody {
-		return req, nil
+		return nil, nil
 	}
 
-	contentType := request.Header.Get(httpheader.ContentType)
+	contentType := httpheader.GetHeaderValue(request.Header, httpheader.ContentType)
 
 	decodedBody, err := contenttype.Decode(contentType, request.Body)
 	if err == nil {
-		req.SetBody(decodedBody)
-
-		return req, nil
+		return decodedBody, nil
 	}
 
 	errorDetail, ok := errors.AsType[*goutils.ErrorDetail](err)
@@ -139,9 +137,7 @@ func validateHTTPRequest(
 	respErr := goutils.NewBadRequestError(*errorDetail)
 	respErr.Detail = "failed to decode request"
 
-	if writer != nil {
-		writeErrorResponse(writer, respErr.Status, respErr)
-	}
+	writeErrorResponse(writer, respErr.Status, respErr)
 
-	return nil, respErr
+	return nil, err
 }

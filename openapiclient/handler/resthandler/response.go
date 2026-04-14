@@ -162,21 +162,21 @@ func (re *RESTfulHandler) writeRawResponse(
 
 	var (
 		err          error
-		contentTypes = response.Header[httpheader.ContentType]
+		contentType  = httpheader.GetHeaderValue(response.Header, httpheader.ContentType)
 		responseBody = response.Body
 	)
 
-	if re.responseContentType == "" || len(contentTypes) == 0 ||
-		!oaschema.EqualContentType(re.responseContentType, contentTypes[0]) {
+	if re.responseContentType == "" || contentType == "" ||
+		!oaschema.EqualContentType(re.responseContentType, contentType) {
 		// Stream response directly without conversion.
-		writer.Header()[httpheader.ContentType] = contentTypes
+		writer.Header()[httpheader.ContentType] = response.Header[httpheader.ContentType]
 		writer.WriteHeader(response.StatusCode)
 
 		_, err = io.Copy(writer, responseBody)
 
-		gohttpc.CloseResponse(response)
+		goutils.CatchWarnErrorFunc(response.Body.Close)
 	} else {
-		decodedBody, decodeError := contenttype.Decode(contentTypes[0], response.Body)
+		decodedBody, decodeError := contenttype.Decode(contentType, response.Body)
 		gohttpc.CloseResponse(response)
 
 		if decodeError != nil {
@@ -227,11 +227,7 @@ func (*RESTfulHandler) decodeRawResponse(
 
 	defer gohttpc.CloseResponse(response)
 
-	var contentType string
-
-	if len(response.Header[httpheader.ContentType]) > 0 {
-		contentType = response.Header[httpheader.ContentType][0]
-	}
+	contentType := httpheader.GetHeaderValue(response.Header, httpheader.ContentType)
 
 	decodedBody, err := contenttype.Decode(contentType, response.Body)
 	if err != nil {

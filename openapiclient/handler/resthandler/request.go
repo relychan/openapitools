@@ -204,9 +204,9 @@ func (re *RESTfulHandler) getDestinedContentType(request *proxyhandler.Request) 
 		return re.requestContentType
 	}
 
-	contentType := request.Header()[httpheader.ContentType]
-	if len(contentType) > 0 && contentType[0] != "" {
-		return contentType[0]
+	contentType := httpheader.GetHeaderValue(request.Header(), httpheader.ContentType)
+	if contentType != "" {
+		return contentType
 	}
 
 	return httpheader.ContentTypeJSON

@@ -28,6 +28,7 @@ import (
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/gotransform/jmes"
+	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
@@ -222,7 +223,7 @@ func (ge *GraphQLHandler) Stream(
 			// No custom response. Write response directly for json content type
 			_, err = io.Copy(writer, resp.Body)
 
-			gohttpc.CloseResponse(resp)
+			goutils.CatchWarnErrorFunc(resp.Body.Close)
 			ge.printLog(
 				ctx,
 				request,
