@@ -170,3 +170,25 @@ func EqualContentType(left, right string) bool {
 		strings.TrimSpace(rightMediaType),
 	)
 }
+
+// MergeOrderedMap assigns properties of the source order map to another.
+func MergeOrderedMap[K comparable, V any](dest, src *orderedmap.Map[K, V]) *orderedmap.Map[K, V] {
+	if src == nil || src.Len() == 0 {
+		return dest
+	}
+
+	if dest == nil {
+		return dest
+	}
+
+	for iter := src.First(); iter != nil; iter = iter.Next() {
+		key := iter.Key()
+
+		_, present := dest.Get(key)
+		if present {
+			dest.Set(key, iter.Value())
+		}
+	}
+
+	return dest
+}

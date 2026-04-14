@@ -104,7 +104,7 @@ func TestTreeNodes(t *testing.T) {
 	node := new(Node)
 
 	for _, route := range routes {
-		_, err := node.InsertRoute(route.Pattern, route.Handlers, &proxyhandler.InsertRouteOptions{})
+		_, err := node.InsertRoute(nil, route.Pattern, route.Handlers, &proxyhandler.InsertRouteOptions{})
 		assert.NoError(t, err, route.Pattern)
 	}
 
@@ -216,7 +216,7 @@ func TestRouteInsertionEdgeCases(t *testing.T) {
 			node := new(Node)
 
 			for _, pattern := range tc.patterns {
-				_, err := node.InsertRoute(pattern, &highv3.PathItem{
+				_, err := node.InsertRoute(nil, pattern, &highv3.PathItem{
 					Get: &highv3.Operation{},
 				}, &proxyhandler.InsertRouteOptions{})
 
@@ -254,7 +254,7 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 	}
 
 	for pattern, handlers := range routes {
-		_, err := node.InsertRoute(pattern, handlers, &proxyhandler.InsertRouteOptions{})
+		_, err := node.InsertRoute(nil, pattern, handlers, &proxyhandler.InsertRouteOptions{})
 		assert.NoError(t, err, "failed to insert route: %s", pattern)
 	}
 
@@ -421,7 +421,7 @@ func TestComplexRoutingScenarios(t *testing.T) {
 		}
 
 		for _, route := range routes {
-			_, err := node.InsertRoute(route, &highv3.PathItem{
+			_, err := node.InsertRoute(nil, route, &highv3.PathItem{
 				Get: &highv3.Operation{},
 			}, &proxyhandler.InsertRouteOptions{})
 			assert.NoError(t, err)
@@ -459,7 +459,7 @@ func TestComplexRoutingScenarios(t *testing.T) {
 		}
 
 		for pattern, handlers := range routes {
-			_, err := node.InsertRoute(pattern, handlers, &proxyhandler.InsertRouteOptions{})
+			_, err := node.InsertRoute(nil, pattern, handlers, &proxyhandler.InsertRouteOptions{})
 			assert.NoError(t, err)
 		}
 
@@ -496,7 +496,7 @@ func TestComplexRoutingScenarios(t *testing.T) {
 		}
 
 		for pattern, handlers := range routes {
-			_, err := node.InsertRoute(pattern, handlers, &proxyhandler.InsertRouteOptions{})
+			_, err := node.InsertRoute(nil, pattern, handlers, &proxyhandler.InsertRouteOptions{})
 			assert.NoError(t, err)
 		}
 
@@ -542,7 +542,7 @@ func TestComplexRoutingScenarios(t *testing.T) {
 		}
 
 		for pattern, handlers := range routes {
-			_, err := node.InsertRoute(pattern, handlers, &proxyhandler.InsertRouteOptions{})
+			_, err := node.InsertRoute(nil, pattern, handlers, &proxyhandler.InsertRouteOptions{})
 			assert.NoError(t, err)
 		}
 
@@ -564,7 +564,7 @@ func TestComplexRoutingScenarios(t *testing.T) {
 	t.Run("multiple_HTTP_methods", func(t *testing.T) {
 		node := new(Node)
 
-		_, err := node.InsertRoute("/posts/{id}", &highv3.PathItem{
+		_, err := node.InsertRoute(nil, "/posts/{id}", &highv3.PathItem{
 			Get:    &highv3.Operation{},
 			Post:   &highv3.Operation{},
 			Put:    &highv3.Operation{},
@@ -596,7 +596,7 @@ func TestComplexRoutingScenarios(t *testing.T) {
 		node := new(Node)
 
 		pattern := "/orgs/{orgId}/teams/{teamId}/projects/{projectId}/tasks/{taskId}/comments/{commentId}"
-		_, err := node.InsertRoute(pattern, &highv3.PathItem{
+		_, err := node.InsertRoute(nil, pattern, &highv3.PathItem{
 			Get: &highv3.Operation{},
 		}, &proxyhandler.InsertRouteOptions{})
 		assert.NoError(t, err)
@@ -619,7 +619,7 @@ func TestComplexRoutingScenarios(t *testing.T) {
 		}
 
 		for pattern, handlers := range routes {
-			_, err := node.InsertRoute(pattern, handlers, &proxyhandler.InsertRouteOptions{})
+			_, err := node.InsertRoute(nil, pattern, handlers, &proxyhandler.InsertRouteOptions{})
 			assert.NoError(t, err)
 		}
 
@@ -663,7 +663,7 @@ func TestAllHTTPMethods(t *testing.T) {
 	node := new(Node)
 
 	// Test all standard HTTP methods
-	_, err := node.InsertRoute("/test", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/test", &highv3.PathItem{
 		Get:     &highv3.Operation{},
 		Post:    &highv3.Operation{},
 		Put:     &highv3.Operation{},
@@ -698,7 +698,7 @@ func TestAllHTTPMethods(t *testing.T) {
 func TestQueryMethod(t *testing.T) {
 	node := new(Node)
 
-	_, err := node.InsertRoute("/graphql", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/graphql", &highv3.PathItem{
 		Query: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
@@ -716,7 +716,7 @@ func TestAdditionalOperations(t *testing.T) {
 	additionalOps.Set("CUSTOM", &highv3.Operation{})
 	additionalOps.Set("ANOTHER", &highv3.Operation{})
 
-	_, err := node.InsertRoute("/custom", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/custom", &highv3.PathItem{
 		AdditionalOperations: additionalOps,
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
@@ -738,7 +738,7 @@ func TestAdditionalOperationsWithNilValue(t *testing.T) {
 	additionalOps.Set("VALID", &highv3.Operation{})
 	additionalOps.Set("NIL", nil) // This should be skipped
 
-	_, err := node.InsertRoute("/mixed", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/mixed", &highv3.PathItem{
 		AdditionalOperations: additionalOps,
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
@@ -755,7 +755,7 @@ func TestMultipleMethodsOnSameRoute(t *testing.T) {
 	node := new(Node)
 
 	// Insert a route with multiple methods at once
-	_, err := node.InsertRoute("/resource", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/resource", &highv3.PathItem{
 		Get:  &highv3.Operation{},
 		Post: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
@@ -773,13 +773,13 @@ func TestMultipleMethodsOnSameRoute(t *testing.T) {
 func TestDuplicateCatchAll(t *testing.T) {
 	node := new(Node)
 
-	_, err := node.InsertRoute("/api/*", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/api/*", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
 
 	// Try to insert another catchall at the same level
-	_, err = node.InsertRoute("/api/*", &highv3.PathItem{
+	_, err = node.InsertRoute(nil, "/api/*", &highv3.PathItem{
 		Post: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.ErrorIs(t, err, ErrDuplicatedRoutingPattern)
@@ -804,7 +804,7 @@ func TestEmptyPatternInsertion(t *testing.T) {
 	node := new(Node)
 
 	// Insert a route with trailing slash that becomes empty after prefix removal
-	_, err := node.InsertRoute("/", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
@@ -819,13 +819,13 @@ func TestInsertChildNodeWithEmptySearch(t *testing.T) {
 	node := new(Node)
 
 	// First insert a parent route
-	_, err := node.InsertRoute("/parent", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/parent", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
 
 	// Now insert a child that will have empty search after parent prefix
-	_, err = node.InsertRoute("/parent/", &highv3.PathItem{
+	_, err = node.InsertRoute(nil, "/parent/", &highv3.PathItem{
 		Post: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
@@ -891,25 +891,25 @@ func TestNodeStringMethod(t *testing.T) {
 	node := new(Node)
 
 	// Test static node
-	_, err := node.InsertRoute("/users", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/users", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
 
 	// Test param node
-	_, err = node.InsertRoute("/posts/{id}", &highv3.PathItem{
+	_, err = node.InsertRoute(nil, "/posts/{id}", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
 
 	// Test regexp node
-	_, err = node.InsertRoute("/items/{id:[0-9]+}", &highv3.PathItem{
+	_, err = node.InsertRoute(nil, "/items/{id:[0-9]+}", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
 
 	// Test catchall node
-	_, err = node.InsertRoute("/api/*", &highv3.PathItem{
+	_, err = node.InsertRoute(nil, "/api/*", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
@@ -932,7 +932,7 @@ func TestNodeStringMethod(t *testing.T) {
 func TestFindMethodEdgeCases(t *testing.T) {
 	node := new(Node)
 
-	_, err := node.InsertRoute("/test", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/test", &highv3.PathItem{
 		Get:  &highv3.Operation{},
 		Post: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
@@ -960,7 +960,7 @@ func TestExtractParametersFromOperationV3(t *testing.T) {
 	param2.Name = "query"
 	param2.In = "query"
 
-	_, err := node.InsertRoute("/users/{id}", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/users/{id}", &highv3.PathItem{
 		Get: &highv3.Operation{
 			Parameters: []*highv3.Parameter{param1, param2},
 		},
@@ -977,7 +977,7 @@ func TestInvalidRegexpPattern(t *testing.T) {
 	node := new(Node)
 
 	// Try to insert a route with an invalid regexp pattern
-	_, err := node.InsertRoute("/users/{id:[0-9++}", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/users/{id:[0-9++}", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	// The error is wrapped, so we check that it's not nil
@@ -989,7 +989,7 @@ func TestEmptyHandlers(t *testing.T) {
 	node := new(Node)
 
 	// Try to insert a route with no operations
-	_, err := node.InsertRoute("/empty", &highv3.PathItem{}, &proxyhandler.InsertRouteOptions{})
+	_, err := node.InsertRoute(nil, "/empty", &highv3.PathItem{}, &proxyhandler.InsertRouteOptions{})
 	// Should return nil because no handlers were created
 	assert.NoError(t, err)
 
@@ -1003,7 +1003,7 @@ func TestWildcardNotLast(t *testing.T) {
 	node := new(Node)
 
 	// Try to insert a route with wildcard not at the end
-	_, err := node.InsertRoute("/api/*/something", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/api/*/something", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.ErrorIs(t, err, ErrWildcardMustBeLast)
@@ -1015,7 +1015,7 @@ func TestDuplicateParamKeys(t *testing.T) {
 
 	// Try to insert a route with duplicate parameter keys
 	// This actually succeeds because the duplicate check happens at a different level
-	_, err := node.InsertRoute("/users/{id}/posts/{id}", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/users/{id}/posts/{id}", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	// The router allows this
@@ -1032,7 +1032,7 @@ func TestMissingClosingBracket(t *testing.T) {
 	node := new(Node)
 
 	// Try to insert a route with missing closing bracket
-	_, err := node.InsertRoute("/users/{id", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/users/{id", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.ErrorIs(t, err, ErrMissingClosingBracket)
@@ -1062,7 +1062,7 @@ func TestComplexNestedRoutes(t *testing.T) {
 	}
 
 	for _, route := range routes {
-		_, err := node.InsertRoute(route, &highv3.PathItem{
+		_, err := node.InsertRoute(nil, route, &highv3.PathItem{
 			Get: &highv3.Operation{},
 		}, &proxyhandler.InsertRouteOptions{})
 		assert.NoError(t, err, "failed to insert route: %s", route)
@@ -1094,7 +1094,7 @@ func TestComplexNestedRoutes(t *testing.T) {
 func TestRootRouteWithTrailingSlash(t *testing.T) {
 	node := new(Node)
 
-	_, err := node.InsertRoute("/", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
@@ -1119,7 +1119,7 @@ func TestStaticRouteWithCommonPrefix(t *testing.T) {
 	}
 
 	for _, route := range routes {
-		_, err := node.InsertRoute(route, &highv3.PathItem{
+		_, err := node.InsertRoute(nil, route, &highv3.PathItem{
 			Get: &highv3.Operation{},
 		}, &proxyhandler.InsertRouteOptions{})
 		assert.NoError(t, err)
@@ -1145,7 +1145,7 @@ func TestParamRouteWithCommonPrefix(t *testing.T) {
 	}
 
 	for _, route := range routes {
-		_, err := node.InsertRoute(route, &highv3.PathItem{
+		_, err := node.InsertRoute(nil, route, &highv3.PathItem{
 			Get: &highv3.Operation{},
 		}, &proxyhandler.InsertRouteOptions{})
 		assert.NoError(t, err)
@@ -1177,7 +1177,7 @@ func TestRegexpRouteWithCommonPrefix(t *testing.T) {
 	}
 
 	for _, route := range routes {
-		_, err := node.InsertRoute(route, &highv3.PathItem{
+		_, err := node.InsertRoute(nil, route, &highv3.PathItem{
 			Get: &highv3.Operation{},
 		}, &proxyhandler.InsertRouteOptions{})
 		assert.NoError(t, err)
@@ -1204,7 +1204,7 @@ func TestMultipleMethodsSameRoute(t *testing.T) {
 	node := new(Node)
 
 	// Insert first route with GET
-	_, err := node.InsertRoute("/test", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/test", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
@@ -1220,13 +1220,13 @@ func TestDuplicateCatchAllRoute(t *testing.T) {
 	node := new(Node)
 
 	// Insert first catchall
-	_, err := node.InsertRoute("/api/*", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/api/*", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
 
 	// Try to insert another catchall at the same level
-	_, err = node.InsertRoute("/api/*", &highv3.PathItem{
+	_, err = node.InsertRoute(nil, "/api/*", &highv3.PathItem{
 		Post: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.ErrorIs(t, err, ErrDuplicatedRoutingPattern)
@@ -1237,7 +1237,7 @@ func TestPatNextSegmentWithAnchors(t *testing.T) {
 	node := new(Node)
 
 	// Insert route with anchors in regex
-	_, err := node.InsertRoute("/users/{id:^[0-9]+$}", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/users/{id:^[0-9]+$}", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
@@ -1255,7 +1255,7 @@ func TestPatNextSegmentWithAnchors(t *testing.T) {
 func TestFindRouteWithNoMatch(t *testing.T) {
 	node := new(Node)
 
-	_, err := node.InsertRoute("/users", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/users", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
@@ -1274,12 +1274,12 @@ func TestStaticNodeSplitting(t *testing.T) {
 	node := new(Node)
 
 	// Insert routes that will cause node splitting
-	_, err := node.InsertRoute("/users/list", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/users/list", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
 
-	_, err = node.InsertRoute("/users/active", &highv3.PathItem{
+	_, err = node.InsertRoute(nil, "/users/active", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
@@ -1297,12 +1297,12 @@ func TestParamNodeWithDifferentKeys(t *testing.T) {
 	node := new(Node)
 
 	// Insert routes with different param keys at the same level
-	_, err := node.InsertRoute("/users/{userId}", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/users/{userId}", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
 
-	_, err = node.InsertRoute("/users/{id}", &highv3.PathItem{
+	_, err = node.InsertRoute(nil, "/users/{id}", &highv3.PathItem{
 		Post: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
@@ -1322,12 +1322,12 @@ func TestRegexpNodeWithDifferentPatterns(t *testing.T) {
 	node := new(Node)
 
 	// Insert routes with different regexp patterns
-	_, err := node.InsertRoute("/items/{id:[0-9]+}", &highv3.PathItem{
+	_, err := node.InsertRoute(nil, "/items/{id:[0-9]+}", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
 
-	_, err = node.InsertRoute("/items/{slug:[a-z-]+}", &highv3.PathItem{
+	_, err = node.InsertRoute(nil, "/items/{slug:[a-z-]+}", &highv3.PathItem{
 		Post: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	assert.NoError(t, err)
@@ -1341,8 +1341,12 @@ func TestRegexpNodeWithDifferentPatterns(t *testing.T) {
 	assert.True(t, r != nil)
 }
 
-// BenchmarkTree/insert_routes-11         	  168294	      6629 ns/op	   15408 B/op	     156 allocs/op
-// BenchmarkTree/find_route-11            	 3957892	       302.9 ns/op	     416 B/op	       4 allocs/op
+// goos: darwin
+// goarch: arm64
+// pkg: github.com/relychan/openapitools/openapiclient/internal
+// cpu: Apple M3 Pro
+// BenchmarkTree/insert_routes-11         	  258915	      4612 ns/op	   14736 B/op	     156 allocs/op
+// BenchmarkTree/find_route-11            	 5705500	       209.3 ns/op	     392 B/op	       4 allocs/op
 func BenchmarkTree(b *testing.B) {
 	routes := map[string]*highv3.PathItem{
 		"/posts":                   {Get: &highv3.Operation{}},
@@ -1359,7 +1363,7 @@ func BenchmarkTree(b *testing.B) {
 			node := new(Node)
 
 			for pattern, handlers := range routes {
-				_, err := node.InsertRoute(pattern, handlers, &proxyhandler.InsertRouteOptions{})
+				_, err := node.InsertRoute(nil, pattern, handlers, &proxyhandler.InsertRouteOptions{})
 				if err != nil {
 					panic(err)
 				}
@@ -1371,7 +1375,7 @@ func BenchmarkTree(b *testing.B) {
 		node := new(Node)
 
 		for pattern, handlers := range routes {
-			_, err := node.InsertRoute(pattern, handlers, &proxyhandler.InsertRouteOptions{})
+			_, err := node.InsertRoute(nil, pattern, handlers, &proxyhandler.InsertRouteOptions{})
 			if err != nil {
 				b.Fatal(err)
 			}

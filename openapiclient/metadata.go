@@ -39,7 +39,7 @@ func BuildMetadataTree(
 	}
 
 	for pathItem := document.Paths.PathItems.Oldest(); pathItem != nil; pathItem = pathItem.Next() {
-		_, err := rootNode.InsertRoute(pathItem.Key, pathItem.Value, options)
+		_, err := rootNode.InsertRoute(document, pathItem.Key, pathItem.Value, options)
 		if err != nil {
 			return nil, fmt.Errorf("failed to insert route %s: %w", pathItem.Key, err)
 		}

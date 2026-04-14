@@ -34,6 +34,22 @@ var (
 	ErrReplaceMissingChildNode          = errors.New("replacing missing child node")
 )
 
+// Route holds parameter values from the request path.
+type Route struct {
+	Pattern     string
+	Method      *MethodHandler
+	ParamValues map[string]string
+}
+
+// IsRequestBodyRequired checks if the request body of this route is required.
+func (r Route) IsRequestBodyRequired() bool {
+	return r.Method != nil &&
+		r.Method.Operation != nil &&
+		r.Method.Operation.RequestBody != nil &&
+		r.Method.Operation.RequestBody.Required != nil &&
+		*r.Method.Operation.RequestBody.Required
+}
+
 func newInvalidOperationMetadataError(method string, pattern string, err error) error {
 	return goutils.RFC9457Error{
 		Type:     "about:blank",

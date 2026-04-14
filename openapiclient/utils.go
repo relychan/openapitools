@@ -16,6 +16,7 @@ package openapiclient
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -24,8 +25,12 @@ import (
 
 	"github.com/hasura/goenvconf"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
+	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
+	"github.com/relychan/openapitools/openapiclient/internal"
 )
 
 func writeErrorResponse(writer http.ResponseWriter, status int, err error) {
@@ -87,4 +92,76 @@ func parseServerURL(server *highv3.Server, getEnv goenvconf.GetEnvFunc) (string,
 
 		return part, nil
 	})
+}
+
+func parseHTTPRequestBody(
+	route *internal.Route,
+	writer http.ResponseWriter,
+	request *http.Request,
+	contentType string,
+) (any, error) {
+	if request.Body == nil || request.Body == http.NoBody {
+		if !route.IsRequestBodyRequired() {
+			return nil, nil
+		}
+
+		err := goutils.NewBadRequestError()
+		err.Detail = "request body is required"
+
+		writeErrorResponse(writer, err.Status, err)
+
+		return nil, err
+	}
+
+	decodedBody, err := contenttype.Decode(contentType, request.Body)
+	if err == nil {
+		return decodedBody, nil
+	}
+
+	errorDetail, ok := errors.AsType[*goutils.ErrorDetail](err)
+	if !ok {
+		errorDetail = &goutils.ErrorDetail{
+			Detail: err.Error(),
+			Code:   oaschema.ErrCodeRequestDecodeBodyError,
+		}
+	}
+
+	respErr := goutils.NewBadRequestError(*errorDetail)
+	respErr.Detail = "failed to decode request"
+
+	writeErrorResponse(writer, respErr.Status, respErr)
+
+	return nil, err
+}
+
+func newUnsupportedContentTypeError(
+	route *internal.Route,
+	urlPath string,
+	contentType string,
+) *goutils.RFC9457Error {
+	var sb strings.Builder
+
+	sb.WriteString("Unsupported Content-Type ")
+	sb.WriteString(contentType)
+	sb.WriteString(". Expected one of ")
+
+	contents := route.Method.Operation.RequestBody.Content
+	isFirstContent := true
+
+	for content := contents.First(); content != nil; content = content.Next() {
+		if isFirstContent {
+			isFirstContent = false
+		} else {
+			sb.WriteString(", ")
+		}
+
+		sb.WriteString(content.Key())
+	}
+
+	statusCode := http.StatusUnsupportedMediaType
+	err := goutils.NewRFC9457Error(statusCode, sb.String())
+	err.Code = "415-01"
+	err.Instance = urlPath
+
+	return err
 }

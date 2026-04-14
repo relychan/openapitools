@@ -21,7 +21,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/internal"
@@ -150,40 +149,6 @@ func (*ProxyClient) handleError(
 	respError.Instance = requestPath
 
 	return respError.Status, respError
-}
-
-func (pc *ProxyClient) newRequestFunc(
-	request *proxyhandler.Request,
-	route *internal.Route,
-) proxyhandler.NewRequestFunc {
-	return func(method string, url string) *gohttpc.RequestWithClient {
-		req := pc.lbClient.R(method, url)
-		reqHeader := req.Header()
-
-		authenticator := pc.authenticators.GetAuthenticator(route.Method.Operation.Security)
-		if authenticator != nil {
-			req.SetAuthenticator(authenticator)
-		}
-
-		for key, value := range pc.defaultHeaders {
-			reqHeader.Set(key, value)
-		}
-
-		headers := request.Header()
-
-		if len(headers) > 0 &&
-			pc.settings != nil &&
-			pc.settings.ForwardHeaders != nil {
-			for _, key := range pc.settings.ForwardHeaders.Request {
-				value := headers.Get(key)
-				if value != "" {
-					reqHeader.Set(key, value)
-				}
-			}
-		}
-
-		return req
-	}
 }
 
 func (pc *ProxyClient) buildSpanName(prefix string, requestURL *url.URL) string {

@@ -16,14 +16,10 @@ package openapiclient
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
-	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
-	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"go.opentelemetry.io/otel/codes"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 )
@@ -51,7 +47,19 @@ func (pc *ProxyClient) ServeHTTP(
 		return
 	}
 
-	requestBody, err := parseHTTPRequestBody(writer, request)
+	originalContentType := httpheader.GetHeaderValue(request.Header, httpheader.ContentType)
+
+	contentType, _ := getRequestBodyContentSchema(route, originalContentType)
+	if contentType == "" && originalContentType != "" {
+		err := newUnsupportedContentTypeError(route, request.URL.Path, originalContentType)
+
+		span.SetStatus(codes.Error, "unsupported content type")
+		writeErrorResponse(writer, err.Status, err)
+
+		return
+	}
+
+	requestBody, err := parseHTTPRequestBody(route, writer, request, contentType)
 	if err != nil {
 		span.SetStatus(codes.Error, "failed to validate request body")
 		span.RecordError(err)
@@ -108,36 +116,4 @@ func (pc *ProxyClient) Stream(
 	span.SetStatus(codes.Ok, "")
 
 	return response, nil
-}
-
-// parse the HTTP request body.
-func parseHTTPRequestBody(
-	writer http.ResponseWriter,
-	request *http.Request,
-) (any, error) {
-	if request.Body == nil || request.Body == http.NoBody {
-		return nil, nil
-	}
-
-	contentType := httpheader.GetHeaderValue(request.Header, httpheader.ContentType)
-
-	decodedBody, err := contenttype.Decode(contentType, request.Body)
-	if err == nil {
-		return decodedBody, nil
-	}
-
-	errorDetail, ok := errors.AsType[*goutils.ErrorDetail](err)
-	if !ok {
-		errorDetail = &goutils.ErrorDetail{
-			Detail: err.Error(),
-			Code:   oaschema.ErrCodeRequestDecodeBodyError,
-		}
-	}
-
-	respErr := goutils.NewBadRequestError(*errorDetail)
-	respErr.Detail = "failed to decode request"
-
-	writeErrorResponse(writer, respErr.Status, respErr)
-
-	return nil, err
 }
