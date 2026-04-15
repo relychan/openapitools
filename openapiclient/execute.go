@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/relychan/goutils"
@@ -46,7 +45,7 @@ func (pc *ProxyClient) Execute(
 		return nil, nil, respErr
 	}
 
-	ctx, span := tracer.Start(ctx, pc.buildSpanName("Proxy", requestURL))
+	ctx, span := tracer.Start(ctx, pc.buildSpanName("Proxy", requestURL.Path))
 	defer span.End()
 
 	span.SetAttributes(
@@ -81,42 +80,40 @@ func (pc *ProxyClient) findRoute(
 		span.SetAttributes(pc.CustomAttributesFunc(request)...)
 	}
 
-	requestURL := request.GetURL()
-	originalPath := requestURL.Path
+	requestPath := request.Path()
 
 	if pc.settings != nil &&
 		pc.settings.BasePath != "" &&
 		pc.settings.BasePath != "/" &&
-		requestURL.Path != "" {
+		requestPath != "" {
 		// The URL path may omit the slash character
-		basePath := pc.settings.BasePath
-		if requestURL.Path[0] != '/' {
-			basePath = basePath[1:]
-		}
-
-		requestURL.Path = strings.TrimPrefix(requestURL.Path, basePath)
+		requestPath = strings.TrimPrefix(requestPath, pc.settings.BasePath)
 	}
 
-	route := pc.node.FindRoute(requestURL.Path, request.Method())
+	route := pc.node.FindRoute(requestPath, request.Method())
 	if route == nil {
 		span.SetStatus(codes.Error, "request path or method does not exist")
 
 		err := goutils.NewNotFoundError()
-		err.Instance = originalPath
+		err.Instance = request.Path()
 
 		return nil, nil, err
 	}
 
-	span.SetAttributes(semconv.URLPath(requestURL.Path))
+	span.SetAttributes(semconv.URLPath(request.URL()))
 
 	span.SetAttributes(
 		attribute.String("http.request.proxy.type", string(route.Method.Handler.Type())),
 	)
 
+	err := validateRequestParameters(route, request)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	options := &proxyhandler.ProxyHandleOptions{
-		Settings:    pc.settings,
-		ParamValues: route.ParamValues,
-		NewRequest:  pc.newRequestFunc(request, route),
+		Settings:   pc.settings,
+		NewRequest: pc.newRequestFunc(request, route),
 	}
 
 	return route, options, nil
@@ -151,9 +148,9 @@ func (*ProxyClient) handleError(
 	return respError.Status, respError
 }
 
-func (pc *ProxyClient) buildSpanName(prefix string, requestURL *url.URL) string {
+func (pc *ProxyClient) buildSpanName(prefix string, requestPath string) string {
 	if pc.TraceHighCardinalityPath {
-		return prefix + " " + requestURL.String()
+		return prefix + " " + requestPath
 	}
 
 	return prefix

@@ -54,6 +54,8 @@ const (
 	ErrCodeRequestEncodeBodyError = "request_encode_body_error"
 	// ErrCodeResponseEncodeBodyError represents a code for an encoding error from response body.
 	ErrCodeResponseEncodeBodyError = "response_encode_body_error"
+	// ErrCodeMalformedJSON represents a code for a malformed JSON error.
+	ErrCodeMalformedJSON = "malformed_json"
 	// ErrCodeMalformedXML represents a code for a malformed XML error.
 	ErrCodeMalformedXML = "malformed_xml"
 	// ErrCodeXMLEncodeError represents a code for a XML encoding error.

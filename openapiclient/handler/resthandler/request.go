@@ -35,7 +35,7 @@ func (re *RESTfulHandler) prepareRequest(
 	options *proxyhandler.ProxyHandleOptions,
 ) (*gohttpc.RequestWithClient, error) {
 	if re.customRequest == nil || re.customRequest.IsZero() {
-		req := options.NewRequest(request.Method(), request.GetURL().RequestURI())
+		req := options.NewRequest(request.Method(), request.URL())
 
 		// Proxies the raw request to the remote service if the body is a reader.
 		reader, ok := request.Body().(io.Reader)
@@ -53,8 +53,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	request *proxyhandler.Request,
 	options *proxyhandler.ProxyHandleOptions,
 ) (*gohttpc.RequestWithClient, error) {
-	requestURL := request.GetURL()
-	requestPath := requestURL.RequestURI()
+	requestPath := request.URL()
 	method := request.Method()
 
 	if re.customRequest.URL != "" {
@@ -65,16 +64,12 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 		method = re.customRequest.Method
 	}
 
-	requestData := proxyhandler.NewRequestTemplateData(
-		request,
-		options.ParamValues,
-	)
-	rawRequestData := requestData.ToMap()
+	rawRequestData := request.ToMap()
 	hasQueryParam := false
 
 	resolvedRequestPath, queryValues, err := re.evaluateRequestPath(
 		requestPath,
-		requestData,
+		request,
 		rawRequestData,
 	)
 	if err != nil {
@@ -124,10 +119,12 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 
 	// Forward all query params if forwardAllQueryParams is true
 	// or null and there is no query param in the parameters list.
-	if requestURL.RawQuery != "" &&
+	rawQueryParams := request.QueryParams()
+
+	if len(rawQueryParams) > 0 &&
 		(!hasQueryParam && re.customRequest.ForwardAllQueryParams == nil) ||
 		(re.customRequest.ForwardAllQueryParams != nil && *re.customRequest.ForwardAllQueryParams) {
-		for key, values := range requestData.QueryParams {
+		for key, values := range rawQueryParams {
 			escapedKey := url.QueryEscape(key)
 			if !queryValues.Has(key) && !queryValues.Has(escapedKey) {
 				for _, value := range values {
@@ -214,7 +211,7 @@ func (re *RESTfulHandler) getDestinedContentType(request *proxyhandler.Request) 
 
 func (re *RESTfulHandler) evaluateRequestPath(
 	requestPath string,
-	requestData *proxyhandler.RequestTemplateData,
+	request *proxyhandler.Request,
 	rawRequestData map[string]any,
 ) (string, url.Values, error) {
 	if requestPath == "" {
@@ -246,7 +243,7 @@ func (re *RESTfulHandler) evaluateRequestPath(
 			}
 
 			// fallback to get the parameter from the original request path.
-			value, ok := requestData.Params[key]
+			value, ok := request.URLParams()[key]
 			if ok {
 				return goutils.ToString(value), nil
 			}

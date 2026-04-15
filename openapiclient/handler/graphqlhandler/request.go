@@ -139,14 +139,9 @@ func (ge *GraphQLHandler) prepareRequest(
 	graphqlPayload *GraphQLRequestBody,
 	options *proxyhandler.ProxyHandleOptions,
 ) (*gohttpc.RequestWithClient, error) {
-	requestData := proxyhandler.NewRequestTemplateData(
-		request,
-		options.ParamValues,
-	)
+	rawRequestData := request.ToMap()
 
-	rawRequestData := requestData.ToMap()
-
-	variables, err := ge.resolveRequestVariables(requestData, rawRequestData)
+	variables, err := ge.resolveRequestVariables(request, rawRequestData)
 	if err != nil {
 		ge.printLog(
 			ctx,
@@ -350,7 +345,7 @@ func (ge *GraphQLHandler) prepareRequestPOST(
 // in priority order: proxy config mapping, request body (for "body"), path/query params,
 // then the query string. String values are coerced to the declared GraphQL scalar type.
 func (ge *GraphQLHandler) resolveRequestVariables(
-	requestData *proxyhandler.RequestTemplateData,
+	request *proxyhandler.Request,
 	rawRequestData map[string]any,
 ) (map[string]any, error) {
 	results := make(map[string]any)
@@ -398,12 +393,12 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 		}
 
 		if varDef.Variable == "body" {
-			results[varDef.Variable] = requestData.Body
+			results[varDef.Variable] = request.Body()
 
 			continue
 		}
 
-		param, ok := requestData.Params[varDef.Variable]
+		param, ok := request.URLParams()[varDef.Variable]
 		if ok && param != "" {
 			typedParam, err := convertVariableTypeFromString(varDef, param)
 			if err != nil {
@@ -421,7 +416,7 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 			continue
 		}
 
-		queryValue := requestData.QueryParams.Get(varDef.Variable)
+		queryValue := request.QueryParams().Get(varDef.Variable)
 		if queryValue != "" {
 			typedValue, err := convertVariableTypeFromString(varDef, queryValue)
 			if err != nil {

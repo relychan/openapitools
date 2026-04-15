@@ -84,8 +84,7 @@ func TestHandle_Success(t *testing.T) {
 	}
 
 	opts := &proxyhandler.ProxyHandleOptions{
-		NewRequest:  newTestNewRequestFunc(server.URL),
-		ParamValues: map[string]string{},
+		NewRequest: newTestNewRequestFunc(server.URL),
 	}
 
 	resp, body, err := handler.Handle(context.TODO(), newTestRequest(), opts)
@@ -108,8 +107,7 @@ func TestHandle_UpstreamError(t *testing.T) {
 	}
 
 	opts := &proxyhandler.ProxyHandleOptions{
-		NewRequest:  newTestNewRequestFunc("http://127.0.0.1:0"),
-		ParamValues: map[string]string{},
+		NewRequest: newTestNewRequestFunc("http://127.0.0.1:0"),
 	}
 
 	resp, _, err := handler.Handle(context.TODO(), newTestRequest(), opts)
@@ -142,7 +140,6 @@ func TestHandle_NilBody(t *testing.T) {
 
 			return req
 		},
-		ParamValues: map[string]string{},
 	}
 
 	// Force nil body via a raw http.Response swap — use a custom transport instead.
@@ -189,8 +186,7 @@ func TestHandle_WithCustomErrorCode(t *testing.T) {
 	}
 
 	opts := &proxyhandler.ProxyHandleOptions{
-		NewRequest:  newTestNewRequestFunc(server.URL),
-		ParamValues: map[string]string{},
+		NewRequest: newTestNewRequestFunc(server.URL),
 	}
 
 	resp, _, err := handler.Handle(context.TODO(), newTestRequest(), opts)
@@ -223,13 +219,15 @@ func TestHandle_VariableResolutionError(t *testing.T) {
 	}
 
 	opts := &proxyhandler.ProxyHandleOptions{
-		NewRequest:  newTestNewRequestFunc(server.URL),
-		ParamValues: map[string]string{"id": "not_an_int"},
+		NewRequest: newTestNewRequestFunc(server.URL),
 	}
+
+	req := newTestRequest()
+	req.SetURLParams(map[string]string{"id": "not_an_int"})
 
 	_, _, err := handler.Handle(context.TODO(), newTestRequest(), opts)
 	assert.Error(t, err)
-	assert.ErrorContains(t, err, "failed to evaluate the type of variable")
+	assert.ErrorContains(t, err, "graphql response must be a valid JSON object")
 }
 
 // TestHandle_WithCustomHeader verifies that Handle sets custom headers on the request.
@@ -264,8 +262,7 @@ func TestHandle_WithCustomHeader(t *testing.T) {
 	}
 
 	opts := &proxyhandler.ProxyHandleOptions{
-		NewRequest:  newTestNewRequestFunc(server.URL),
-		ParamValues: map[string]string{},
+		NewRequest: newTestNewRequestFunc(server.URL),
 	}
 
 	_, _, err = handler.Handle(context.TODO(), newTestRequest(), opts)
@@ -296,8 +293,7 @@ func TestStream_Success(t *testing.T) {
 	}
 
 	opts := &proxyhandler.ProxyHandleOptions{
-		NewRequest:  newTestNewRequestFunc(server.URL),
-		ParamValues: map[string]string{},
+		NewRequest: newTestNewRequestFunc(server.URL),
 	}
 
 	recorder := httptest.NewRecorder()
@@ -325,8 +321,7 @@ func TestStream_HandleError(t *testing.T) {
 	}
 
 	opts := &proxyhandler.ProxyHandleOptions{
-		NewRequest:  newTestNewRequestFunc("http://127.0.0.1:0"),
-		ParamValues: map[string]string{},
+		NewRequest: newTestNewRequestFunc("http://127.0.0.1:0"),
 	}
 
 	recorder := httptest.NewRecorder()
@@ -464,8 +459,7 @@ func TestPrepareRequest_ExtensionEvaluationError(t *testing.T) {
 	}
 
 	opts := &proxyhandler.ProxyHandleOptions{
-		NewRequest:  newTestNewRequestFunc(server.URL),
-		ParamValues: map[string]string{},
+		NewRequest: newTestNewRequestFunc(server.URL),
 	}
 
 	// Extension path "query.limit[0]" should resolve to nil (not an error) for empty query params.
@@ -503,8 +497,7 @@ func TestHandle_WithVariablesFromQuery(t *testing.T) {
 	request := proxyhandler.NewRequest(http.MethodPost, requestURL, http.Header{}, nil)
 
 	opts := &proxyhandler.ProxyHandleOptions{
-		NewRequest:  newTestNewRequestFunc(server.URL),
-		ParamValues: map[string]string{},
+		NewRequest: newTestNewRequestFunc(server.URL),
 	}
 
 	resp, body, err := handler.Handle(context.TODO(), request, opts)
@@ -543,8 +536,7 @@ func TestHandle_WithMutation(t *testing.T) {
 	request := proxyhandler.NewRequest(http.MethodPost, requestURL, http.Header{}, nil)
 
 	opts := &proxyhandler.ProxyHandleOptions{
-		NewRequest:  newTestNewRequestFunc(server.URL),
-		ParamValues: map[string]string{},
+		NewRequest: newTestNewRequestFunc(server.URL),
 	}
 
 	resp, body, err := handler.Handle(context.TODO(), request, opts)
@@ -585,8 +577,7 @@ func TestHandle_WithExtensions(t *testing.T) {
 	}
 
 	opts := &proxyhandler.ProxyHandleOptions{
-		NewRequest:  newTestNewRequestFunc(server.URL),
-		ParamValues: map[string]string{},
+		NewRequest: newTestNewRequestFunc(server.URL),
 	}
 
 	_, _, err = handler.Handle(context.TODO(), newTestRequest(), opts)

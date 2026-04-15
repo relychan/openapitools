@@ -36,13 +36,14 @@ func TestTransformRequest(t *testing.T) {
 	testCases := []struct {
 		Name         string
 		Handler      GraphQLHandler
-		TemplateData proxyhandler.RequestTemplateData
+		TemplateData *proxyhandler.Request
 		Expected     map[string]any
 	}{
 		{
-			Name:     "empty",
-			Handler:  GraphQLHandler{},
-			Expected: map[string]any{},
+			Name:         "empty",
+			Handler:      GraphQLHandler{},
+			TemplateData: &proxyhandler.Request{},
+			Expected:     map[string]any{},
 		},
 		{
 			Name: "param_simple",
@@ -58,11 +59,15 @@ func TestTransformRequest(t *testing.T) {
 					},
 				},
 			},
-			TemplateData: proxyhandler.RequestTemplateData{
-				Params: map[string]string{
+			TemplateData: func() *proxyhandler.Request {
+				request := &proxyhandler.Request{}
+
+				request.SetURLParams(map[string]string{
 					"name": "Queen",
-				},
-			},
+				})
+
+				return request
+			}(),
 			Expected: map[string]any{
 				"name": "Queen",
 			},
@@ -87,12 +92,16 @@ func TestTransformRequest(t *testing.T) {
 					},
 				},
 			},
-			TemplateData: proxyhandler.RequestTemplateData{
-				QueryParams: map[string][]string{
+			TemplateData: func() *proxyhandler.Request {
+				request := &proxyhandler.Request{}
+
+				request.SetQueryParams(map[string][]string{
 					"limit":  {"10"},
 					"offset": {"1"},
-				},
-			},
+				})
+
+				return request
+			}(),
 			Expected: map[string]any{
 				"limit":  "10",
 				"offset": "1",
@@ -113,9 +122,7 @@ func TestTransformRequest(t *testing.T) {
 					},
 				},
 			},
-			TemplateData: proxyhandler.RequestTemplateData{
-				Params: map[string]string{},
-			},
+			TemplateData: &proxyhandler.Request{},
 			Expected: map[string]any{
 				"status": "active",
 			},
@@ -130,11 +137,9 @@ func TestTransformRequest(t *testing.T) {
 				},
 				variables: map[string]jmes.FieldMappingEntry{},
 			},
-			TemplateData: proxyhandler.RequestTemplateData{
-				Body: map[string]any{
-					"name": "test",
-				},
-			},
+			TemplateData: proxyhandler.NewRequest(http.MethodGet, nil, nil, map[string]any{
+				"name": "test",
+			}),
 			Expected: map[string]any{
 				"body": map[string]any{
 					"name": "test",
@@ -145,7 +150,7 @@ func TestTransformRequest(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			result, err := tc.Handler.resolveRequestVariables(&tc.TemplateData, tc.TemplateData.ToMap())
+			result, err := tc.Handler.resolveRequestVariables(tc.TemplateData, tc.TemplateData.ToMap())
 			assert.NoError(t, err)
 			assert.Equal(t, tc.Expected, result)
 		})
@@ -158,20 +163,19 @@ func TestGraphQLHandler_Type(t *testing.T) {
 }
 
 func TestRequestTemplateData_ToMap(t *testing.T) {
-	data := proxyhandler.RequestTemplateData{
-		Params: map[string]string{
-			"id": "123",
-		},
-		QueryParams: url.Values{
-			"limit": []string{"10"},
-		},
-		Headers: map[string]string{
-			"authorization": "Bearer token",
-		},
-		Body: map[string]any{
-			"name": "test",
-		},
-	}
+	data := proxyhandler.NewRequest(http.MethodGet, nil, map[string][]string{
+		"authorization": {"Bearer token"},
+	}, map[string]any{
+		"name": "test",
+	})
+
+	data.SetURLParams(map[string]string{
+		"id": "123",
+	})
+
+	data.SetQueryParams(url.Values{
+		"limit": []string{"10"},
+	})
 
 	result := data.ToMap()
 
@@ -185,7 +189,7 @@ func TestResolveRequestExtensions(t *testing.T) {
 	testCases := []struct {
 		name         string
 		handler      GraphQLHandler
-		templateData proxyhandler.RequestTemplateData
+		templateData *proxyhandler.Request
 		expected     map[string]any
 	}{
 		{
@@ -193,7 +197,7 @@ func TestResolveRequestExtensions(t *testing.T) {
 			handler: GraphQLHandler{
 				extensions: map[string]jmes.FieldMappingEntry{},
 			},
-			templateData: proxyhandler.RequestTemplateData{},
+			templateData: &proxyhandler.Request{},
 			expected:     map[string]any{},
 		},
 		{
@@ -205,11 +209,9 @@ func TestResolveRequestExtensions(t *testing.T) {
 					},
 				},
 			},
-			templateData: proxyhandler.RequestTemplateData{
-				Headers: map[string]string{
-					"x_trace_id": "trace-123",
-				},
-			},
+			templateData: proxyhandler.NewRequest(http.MethodGet, nil, map[string][]string{
+				"x_trace_id": {"trace-123"},
+			}, nil),
 			expected: map[string]any{
 				"tracing": "trace-123",
 			},
@@ -223,7 +225,7 @@ func TestResolveRequestExtensions(t *testing.T) {
 					},
 				},
 			},
-			templateData: proxyhandler.RequestTemplateData{},
+			templateData: &proxyhandler.Request{},
 			expected: map[string]any{
 				"version": "1.0",
 			},
@@ -747,11 +749,10 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			variables: map[string]jmes.FieldMappingEntry{},
 		}
 
-		templateData := proxyhandler.RequestTemplateData{
-			Params: map[string]string{
-				"limit": "10",
-			},
-		}
+		templateData := proxyhandler.Request{}
+		templateData.SetURLParams(map[string]string{
+			"limit": "10",
+		})
 
 		result, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.NoError(t, err)
@@ -769,11 +770,10 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			variables: map[string]jmes.FieldMappingEntry{},
 		}
 
-		templateData := proxyhandler.RequestTemplateData{
-			QueryParams: map[string][]string{
-				"active": {"true"},
-			},
-		}
+		templateData := proxyhandler.Request{}
+		templateData.SetQueryParams(map[string][]string{
+			"active": {"true"},
+		})
 
 		result, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.NoError(t, err)
@@ -795,11 +795,10 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			},
 		}
 
-		templateData := proxyhandler.RequestTemplateData{
-			Body: map[string]any{
-				"price": "19.99",
-			},
-		}
+		templateData := proxyhandler.Request{}
+		templateData.SetBody(map[string]any{
+			"price": "19.99",
+		})
 
 		result, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.NoError(t, err)
@@ -821,9 +820,8 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			},
 		}
 
-		templateData := proxyhandler.RequestTemplateData{
-			Body: map[string]any{},
-		}
+		templateData := proxyhandler.Request{}
+		templateData.SetBody(map[string]any{})
 
 		result, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.NoError(t, err)
@@ -841,11 +839,10 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			variables: map[string]jmes.FieldMappingEntry{},
 		}
 
-		templateData := proxyhandler.RequestTemplateData{
-			Params: map[string]string{
-				"count": "not_a_number",
-			},
-		}
+		templateData := proxyhandler.Request{}
+		templateData.SetURLParams(map[string]string{
+			"count": "not_a_number",
+		})
 
 		_, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.True(t, err != nil)
@@ -863,11 +860,10 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			variables: map[string]jmes.FieldMappingEntry{},
 		}
 
-		templateData := proxyhandler.RequestTemplateData{
-			QueryParams: map[string][]string{
-				"active": {"not_a_bool"},
-			},
-		}
+		templateData := proxyhandler.Request{}
+		templateData.SetQueryParams(map[string][]string{
+			"active": {"not_a_bool"},
+		})
 
 		_, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.True(t, err != nil)
@@ -889,11 +885,10 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 			},
 		}
 
-		templateData := proxyhandler.RequestTemplateData{
-			Body: map[string]any{
-				"price": "not_a_float",
-			},
-		}
+		templateData := proxyhandler.Request{}
+		templateData.SetBody(map[string]any{
+			"price": "not_a_float",
+		})
 
 		_, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.True(t, err != nil)

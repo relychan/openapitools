@@ -28,7 +28,7 @@ func (pc *ProxyClient) ServeHTTP(
 	writer http.ResponseWriter,
 	request *http.Request,
 ) {
-	spanName := pc.buildSpanName("Stream", request.URL)
+	spanName := pc.buildSpanName("Stream", request.URL.Path)
 
 	ctx, span := tracer.Start(request.Context(), spanName)
 	defer span.End()
@@ -87,7 +87,7 @@ func (pc *ProxyClient) Stream(
 	writer http.ResponseWriter,
 	request *proxyhandler.Request,
 ) (*http.Response, error) {
-	spanName := pc.buildSpanName("Stream", request.GetURL())
+	spanName := pc.buildSpanName("Stream", request.Path())
 
 	ctx, span := tracer.Start(ctx, spanName)
 	defer span.End()
@@ -106,7 +106,7 @@ func (pc *ProxyClient) Stream(
 
 	response, err := route.Method.Handler.Stream(ctx, request, writer, options)
 	if err != nil {
-		status, respErr := pc.handleError(span, err, request.GetURL().Path)
+		status, respErr := pc.handleError(span, err, request.Path())
 
 		writeErrorResponse(writer, status, respErr)
 

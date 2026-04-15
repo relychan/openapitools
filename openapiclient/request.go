@@ -57,6 +57,15 @@ func (pc *ProxyClient) newRequestFunc(
 	}
 }
 
+func validateRequestParameters(
+	route *internal.Route,
+	request *proxyhandler.Request,
+) *goutils.RFC9457Error {
+	request.SetURLParams(route.ParamValues)
+
+	return nil
+}
+
 func getRequestBodyContentSchema(
 	route *internal.Route,
 	contentType string,

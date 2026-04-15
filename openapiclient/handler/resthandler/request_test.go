@@ -65,8 +65,7 @@ func newRESTRequestWithQuery(method, rawURL string, body any) *proxyhandler.Requ
 // newTestHandleOptions returns minimal ProxyHandleOptions for tests.
 func newTestHandleOptions(baseURL string) *proxyhandler.ProxyHandleOptions {
 	return &proxyhandler.ProxyHandleOptions{
-		NewRequest:  newTestRequestFunc(baseURL),
-		ParamValues: map[string]string{},
+		NewRequest: newTestRequestFunc(baseURL),
 	}
 }
 
@@ -76,14 +75,16 @@ func TestEvaluateRequestPath(t *testing.T) {
 	input := RESTfulHandler{
 		customRequest: &customRESTRequest{},
 	}
+
+	req := &proxyhandler.Request{}
+	req.SetURLParams(map[string]string{
+		"id":     "1",
+		"postId": "2",
+	})
+
 	uri, _, err := input.evaluateRequestPath(
 		"https://localhost:8080/users/{id}/posts/{postId}",
-		&proxyhandler.RequestTemplateData{
-			Params: map[string]string{
-				"id":     "1",
-				"postId": "2",
-			},
-		},
+		req,
 		map[string]any{},
 	)
 	assert.NoError(t, err)
@@ -150,7 +151,7 @@ func TestGetDestinedContentType(t *testing.T) {
 
 func TestEvaluateRequestPath_EmptyPath(t *testing.T) {
 	handler := &RESTfulHandler{customRequest: &customRESTRequest{}}
-	path, values, err := handler.evaluateRequestPath("", &proxyhandler.RequestTemplateData{}, map[string]any{})
+	path, values, err := handler.evaluateRequestPath("", &proxyhandler.Request{}, map[string]any{})
 	require.NoError(t, err)
 	assert.Equal(t, "", path)
 	assert.Empty(t, values)
@@ -160,7 +161,7 @@ func TestEvaluateRequestPath_StaticPath(t *testing.T) {
 	handler := &RESTfulHandler{customRequest: &customRESTRequest{}}
 	path, values, err := handler.evaluateRequestPath(
 		"/users",
-		&proxyhandler.RequestTemplateData{Params: map[string]string{}},
+		&proxyhandler.Request{},
 		map[string]any{},
 	)
 	require.NoError(t, err)
@@ -170,11 +171,13 @@ func TestEvaluateRequestPath_StaticPath(t *testing.T) {
 
 func TestEvaluateRequestPath_WithParams(t *testing.T) {
 	handler := &RESTfulHandler{customRequest: &customRESTRequest{}}
+
+	req := &proxyhandler.Request{}
+	req.SetURLParams(map[string]string{"id": "42", "postId": "7"})
+
 	path, _, err := handler.evaluateRequestPath(
 		"/users/{id}/posts/{postId}",
-		&proxyhandler.RequestTemplateData{
-			Params: map[string]string{"id": "42", "postId": "7"},
-		},
+		req,
 		map[string]any{},
 	)
 	require.NoError(t, err)
@@ -185,7 +188,7 @@ func TestEvaluateRequestPath_MissingParam(t *testing.T) {
 	handler := &RESTfulHandler{customRequest: &customRESTRequest{}}
 	_, _, err := handler.evaluateRequestPath(
 		"/users/{id}",
-		&proxyhandler.RequestTemplateData{Params: map[string]string{}},
+		&proxyhandler.Request{},
 		map[string]any{},
 	)
 	assert.Error(t, err)
@@ -208,11 +211,12 @@ func TestEvaluateRequestPath_ParamFromCustomParameters(t *testing.T) {
 		},
 	}
 
+	req := &proxyhandler.Request{}
+	req.SetURLParams(map[string]string{"userId": "99"})
+
 	path, _, err := handler.evaluateRequestPath(
 		"/users/{id}",
-		&proxyhandler.RequestTemplateData{
-			Params: map[string]string{"userId": "99"},
-		},
+		req,
 		map[string]any{
 			"param": map[string]string{"userId": "99"},
 		},
