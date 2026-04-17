@@ -41,7 +41,7 @@ type pathParamDecoder struct {
 func DecodePathValue(definition *highv3.Parameter, value string) (any, *goutils.ErrorDetail) {
 	if value == "" {
 		return nil, &goutils.ErrorDetail{
-			Code:      oaschema.ErrCodeInvalidRequestURL,
+			Code:      oaschema.ErrCodeInvalidURLParam,
 			Detail:    "URL parameter is required",
 			Parameter: definition.Name,
 		}
@@ -58,7 +58,7 @@ func DecodePathValue(definition *highv3.Parameter, value string) (any, *goutils.
 	)
 	if err != nil {
 		return nil, &goutils.ErrorDetail{
-			Code:      oaschema.ErrCodeInvalidRequestURL,
+			Code:      oaschema.ErrCodeInvalidURLParam,
 			Detail:    err.Error(),
 			Parameter: definition.Name,
 		}
@@ -86,6 +86,31 @@ func (ppe *pathParamDecoder) Decode() (any, *goutils.ErrorDetail) {
 // Returns the decoded value, a matched type and an error.
 // Prefer string if exists.
 func (ppe *pathParamDecoder) DecodeFromSchemaTypes() (any, string, *goutils.ErrorDetail) {
+	// remove the symbol prefix from raw value string
+	switch ppe.Style {
+	case oaschema.EncodingStyleLabel:
+		if ppe.RawValue[0] != oaschema.Dot[0] {
+			return nil, "", &goutils.ErrorDetail{
+				Code:      oaschema.ErrCodeInvalidURLParam,
+				Detail:    "The label style of parameter value must start with a dot",
+				Parameter: ppe.Name,
+			}
+		}
+
+		ppe.RawValue = ppe.RawValue[1:]
+	case oaschema.EncodingStyleMatrix:
+		if ppe.RawValue[0] != oaschema.SemiColon[0] {
+			return nil, "", &goutils.ErrorDetail{
+				Code:      oaschema.ErrCodeInvalidURLParam,
+				Detail:    "The matrix style of parameter value must start with a semicolon",
+				Parameter: ppe.Name,
+			}
+		}
+
+		ppe.RawValue = ppe.RawValue[1:]
+	default:
+	}
+
 	if slices.Contains(ppe.Schema.Type, oaschema.String) {
 		return ppe.RawValue, oaschema.String, nil
 	}
@@ -103,7 +128,7 @@ func (ppe *pathParamDecoder) DecodeFromSchemaTypes() (any, string, *goutils.Erro
 		}
 
 		finalError = &goutils.ErrorDetail{
-			Code:      oaschema.ErrCodeInvalidRequestURL,
+			Code:      oaschema.ErrCodeInvalidURLParam,
 			Detail:    err.Error(),
 			Parameter: ppe.Name,
 		}
@@ -123,7 +148,7 @@ func (ppe *pathParamDecoder) DecodeFromSchemaType(
 	)
 	if err != nil {
 		return nil, "", &goutils.ErrorDetail{
-			Code:      oaschema.ErrCodeInvalidRequestURL,
+			Code:      oaschema.ErrCodeInvalidURLParam,
 			Detail:    err.Error(),
 			Parameter: ppe.Name,
 		}
@@ -151,6 +176,26 @@ func (ppe *pathParamDecoder) DecodeFromArray() ([]any, *goutils.ErrorDetail) {
 	strValues, err := ppe.SplitArrayFromString()
 	if err != nil {
 		return nil, err
+	}
+
+	valueLength := int64(len(strValues))
+	// array length validations
+	if ppe.Schema.MaxItems != nil && valueLength > *ppe.Schema.MaxItems {
+		return nil, oasvalidator.InvalidParamArrayMaxItemsError(
+			ppe.Name,
+			oaschema.ErrCodeInvalidURLParam,
+			*ppe.Schema.MaxItems,
+			valueLength,
+		)
+	}
+
+	if ppe.Schema.MinItems != nil && valueLength < *ppe.Schema.MinItems {
+		return nil, oasvalidator.InvalidParamArrayMinItemsError(
+			ppe.Name,
+			oaschema.ErrCodeInvalidURLParam,
+			*ppe.Schema.MinItems,
+			valueLength,
+		)
 	}
 
 	if len(strValues) == 0 || ppe.Schema.Items.A == nil {
@@ -218,51 +263,32 @@ func (ppe *pathParamDecoder) DecodeFromObject() (map[string]any, *goutils.ErrorD
 func (ppe *pathParamDecoder) SplitArrayFromString() ([]string, *goutils.ErrorDetail) {
 	switch ppe.Style {
 	case oaschema.EncodingStyleLabel:
-		if ppe.RawValue[0] != oaschema.Dot[0] {
-			return nil, &goutils.ErrorDetail{
-				Code:      oaschema.ErrCodeInvalidRequestURL,
-				Detail:    "The label style of parameter value must start with a dot",
-				Parameter: ppe.Name,
-			}
-		}
-
-		var strItems []string
-
-		rawValue := ppe.RawValue[1:]
-		if rawValue == "" {
-			return strItems, nil
+		if ppe.RawValue == "" {
+			return []string{}, nil
 		}
 
 		// /users/.3.4.5
 		// /users/.role=admin.firstName=Alex
 		if ppe.Explode {
-			return strings.Split(rawValue, oaschema.Dot), nil
+			return strings.Split(ppe.RawValue, oaschema.Dot), nil
 		}
 
 		// /users/.3,4,5
 		// /users/.role,admin,firstName,Alex
-		return strings.Split(rawValue, oaschema.Comma), nil
+		return strings.Split(ppe.RawValue, oaschema.Comma), nil
 	case oaschema.EncodingStyleMatrix:
-		if ppe.RawValue[0] != oaschema.SemiColon[0] {
-			return nil, &goutils.ErrorDetail{
-				Code:      oaschema.ErrCodeInvalidRequestURL,
-				Detail:    "The matrix style of parameter value must start with a semicolon",
-				Parameter: ppe.Name,
-			}
-		}
-
 		prefix := ppe.Name + oaschema.Equals
 		// /users/;id=3;id=4;id=5
 		// /users/;role=admin;firstName=Alex
 		if ppe.Explode {
-			parts := strings.Split(ppe.RawValue[1:], oaschema.SemiColon)
+			parts := strings.Split(ppe.RawValue, oaschema.SemiColon)
 			results := make([]string, len(parts))
 
 			for i, part := range parts {
 				value, found := strings.CutPrefix(part, prefix)
 				if !found {
 					return nil, &goutils.ErrorDetail{
-						Code:      oaschema.ErrCodeInvalidRequestURL,
+						Code:      oaschema.ErrCodeInvalidURLParam,
 						Detail:    "Invalid matrix style in parameter value. The array value must follow this format: ;key1=value1;key2=value2",
 						Parameter: ppe.Name,
 					}
@@ -276,10 +302,10 @@ func (ppe *pathParamDecoder) SplitArrayFromString() ([]string, *goutils.ErrorDet
 
 		// /users/;id=3,4,5
 		// /users/;id=role,admin,firstName,Alex
-		value, found := strings.CutPrefix(ppe.RawValue[1:], prefix)
+		value, found := strings.CutPrefix(ppe.RawValue, prefix)
 		if !found {
 			return nil, &goutils.ErrorDetail{
-				Code:      oaschema.ErrCodeInvalidRequestURL,
+				Code:      oaschema.ErrCodeInvalidURLParam,
 				Detail:    "Invalid matrix style in parameter value. The array value must follow this format: ;key1=value1,value2",
 				Parameter: ppe.Name,
 			}
@@ -295,47 +321,29 @@ func (ppe *pathParamDecoder) SplitArrayFromString() ([]string, *goutils.ErrorDet
 func (ppe *pathParamDecoder) SplitObjectFromString() (map[string]any, *goutils.ErrorDetail) {
 	switch ppe.Style {
 	case oaschema.EncodingStyleLabel:
-		if ppe.RawValue[0] != oaschema.Dot[0] {
-			return nil, &goutils.ErrorDetail{
-				Code:      oaschema.ErrCodeInvalidRequestURL,
-				Detail:    "The label style of parameter value must start with a dot",
-				Parameter: ppe.Name,
-			}
-		}
-
-		rawValue := ppe.RawValue[1:]
-		if rawValue == "" {
+		if ppe.RawValue == "" {
 			return map[string]any{}, nil
 		}
 
 		// /users/.role=admin.firstName=Alex
 		if ppe.Explode {
-			return ppe.parseExplodeObject(rawValue, oaschema.Dot)
+			return ppe.parseExplodeObject(ppe.RawValue, oaschema.Dot)
 		}
 
 		// /users/.role,admin,firstName,Alex
-		return ppe.parseNonExplodeObject(rawValue, oaschema.Comma)
+		return ppe.parseNonExplodeObject(ppe.RawValue, oaschema.Comma)
 	case oaschema.EncodingStyleMatrix:
-		if ppe.RawValue[0] != oaschema.SemiColon[0] {
-			return nil, &goutils.ErrorDetail{
-				Code:      oaschema.ErrCodeInvalidRequestURL,
-				Detail:    "The matrix style of parameter value must start with a semicolon",
-				Parameter: ppe.Name,
-			}
-		}
-
-		rawValue := ppe.RawValue[1:]
-		if rawValue == "" {
+		if ppe.RawValue == "" {
 			return map[string]any{}, nil
 		}
 
 		// /users/;role=admin;firstName=Alex
 		if ppe.Explode {
-			return ppe.parseExplodeObject(rawValue, oaschema.SemiColon)
+			return ppe.parseExplodeObject(ppe.RawValue, oaschema.SemiColon)
 		}
 
 		// /users/;id=role,admin,firstName,Alex
-		value, found := strings.CutPrefix(rawValue, ppe.Name+oaschema.Equals)
+		value, found := strings.CutPrefix(ppe.RawValue, ppe.Name+oaschema.Equals)
 		if !found {
 			return nil, ppe.newInvalidObjectError()
 		}
@@ -380,7 +388,7 @@ func (ppe *pathParamDecoder) DecodeItemValueFromSchemaTypes(
 		)
 		if err != nil {
 			finalError = &goutils.ErrorDetail{
-				Code:      oaschema.ErrCodeInvalidRequestURL,
+				Code:      oaschema.ErrCodeInvalidURLParam,
 				Detail:    err.Error(),
 				Parameter: ppe.Name,
 			}
@@ -394,7 +402,7 @@ func (ppe *pathParamDecoder) DecodeItemValueFromSchemaTypes(
 	}
 
 	return nil, "", &goutils.ErrorDetail{
-		Code: oaschema.ErrCodeInvalidRequestURL,
+		Code: oaschema.ErrCodeInvalidURLParam,
 		Detail: fmt.Sprintf(
 			"Unsupported types or nested fields in URL path parameter: %v",
 			itemSchema.Type,
@@ -466,7 +474,7 @@ func (ppe *pathParamDecoder) newInvalidObjectError() *goutils.ErrorDetail {
 	}
 
 	return &goutils.ErrorDetail{
-		Code:      oaschema.ErrCodeInvalidRequestURL,
+		Code:      oaschema.ErrCodeInvalidURLParam,
 		Detail:    message,
 		Parameter: ppe.Name,
 	}

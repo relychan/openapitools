@@ -526,7 +526,7 @@ func validateURLParams(
 		if !ok {
 			if param.Required != nil && *param.Required {
 				errs = append(errs, goutils.ErrorDetail{
-					Code:      oaschema.ErrCodeInvalidRequestURL,
+					Code:      oaschema.ErrCodeInvalidURLParam,
 					Detail:    "Parameter is required",
 					Parameter: param.Name,
 				})

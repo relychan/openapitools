@@ -15,7 +15,9 @@
 package oasvalidator
 
 import (
+	"cmp"
 	"mime"
+	"slices"
 	"strings"
 
 	"github.com/relychan/goutils/httpheader"
@@ -63,4 +65,41 @@ func ValidateContentType(contentType string) (string, error) {
 	}
 
 	return "", ErrInvalidContentType
+}
+
+// FindDuplicatedItems find duplicated items in the array.
+func FindDuplicatedItems[T cmp.Ordered](values []T) []T {
+	if len(values) <= 1 {
+		return []T{}
+	}
+
+	sortedSlice := make([]T, len(values))
+
+	copy(sortedSlice, values)
+	slices.Sort(sortedSlice)
+
+	results := make([]T, 0, len(sortedSlice)/2)
+
+	for i := 0; i < len(sortedSlice); i++ {
+		if i == len(sortedSlice)-1 {
+			break
+		}
+
+		item := sortedSlice[i]
+		j := i + 1
+
+		for j < len(sortedSlice) {
+			if sortedSlice[j] != item {
+				break
+			}
+
+			j++
+		}
+
+		if i == j+1 {
+			results = append(results, item)
+		}
+	}
+
+	return results
 }

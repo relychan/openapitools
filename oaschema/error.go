@@ -74,6 +74,10 @@ const (
 	ErrCodeInvalidServerURL = "invalid_server_url"
 	// ErrCodeInvalidRequestURL represents a code for invalid request URL errors.
 	ErrCodeInvalidRequestURL = "invalid_request_url"
+	// ErrCodeInvalidURLParam represents a code for invalid request URL parameter errors.
+	ErrCodeInvalidURLParam = "invalid_url_param"
+	// ErrCodeInvalidQueryParam represents a code for invalid query parameter errors.
+	ErrCodeInvalidQueryParam = "invalid_query_param"
 	// ErrCodeGraphQLResponseEmpty represents a code for empty graphql response.
 	ErrCodeGraphQLResponseEmpty = "graphql_response_empty"
 	// ErrCodeRemoteServerError represents a code for remote server errors.

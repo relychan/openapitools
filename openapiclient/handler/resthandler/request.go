@@ -252,7 +252,7 @@ func (re *RESTfulHandler) evaluateRequestPath(
 			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
 				Detail:    "the parameter can not be resolved",
 				Parameter: key,
-				Code:      oaschema.ErrCodeInvalidRequestURL,
+				Code:      oaschema.ErrCodeInvalidURLParam,
 			})
 			respErr.Detail = "failed to evaluate request path"
 

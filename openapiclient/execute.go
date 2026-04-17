@@ -100,8 +100,8 @@ func (pc *ProxyClient) findRoute(
 		return nil, nil, routeError
 	}
 
-	span.SetAttributes(semconv.URLPath(request.URL()))
 	span.SetAttributes(
+		semconv.URLTemplate(route.Pattern),
 		attribute.String("http.request.proxy.type", string(route.Method.Handler.Type())),
 	)
 
