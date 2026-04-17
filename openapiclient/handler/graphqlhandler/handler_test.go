@@ -223,7 +223,7 @@ func TestHandle_VariableResolutionError(t *testing.T) {
 	}
 
 	req := newTestRequest()
-	req.SetURLParams(map[string]string{"id": "not_an_int"})
+	req.SetURLParams(map[string]any{"id": "not_an_int"})
 
 	_, _, err := handler.Handle(context.TODO(), newTestRequest(), opts)
 	assert.Error(t, err)

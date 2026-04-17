@@ -20,23 +20,6 @@ import (
 	"github.com/relychan/goutils"
 )
 
-const (
-	// XRelyServerWeight is the extension name enum for the weight of server if the load balancer is configured.
-	XRelyServerWeight = "x-rely-server-weight"
-	// XRelyServerHeaders is the extension name enum for custom headers for the server.
-	XRelyServerHeaders = "x-rely-server-headers"
-	// XRelyServerTLS is the extension name enum for a server TLS config.
-	XRelyServerTLS = "x-rely-server-tls"
-	// XRelyProxyAction is the extension name enum for a proxy action.
-	XRelyProxyAction = "x-rely-proxy-action"
-	// XRelySecurityCredentials is the extension name enum for security credentials.
-	XRelySecurityCredentials = "x-rely-security-credentials"
-	// XRelyOAuth2TokenURLEnv is the extension name enum of a custom environment variable for OAuth2 token URL.
-	XRelyOAuth2TokenURLEnv = "x-rely-oauth2-token-url-env" //nolint:gosec
-	// XRelyOAuth2RefreshURLEnv is the extension name enum of a custom environment variable for OAuth2 refresh URL.
-	XRelyOAuth2RefreshURLEnv = "x-rely-oauth2-refresh-url-env"
-)
-
 const cookieKey = "cookie"
 
 // SecuritySchemeType represents the authentication scheme enum.

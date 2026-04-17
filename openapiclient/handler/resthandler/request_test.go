@@ -77,7 +77,7 @@ func TestEvaluateRequestPath(t *testing.T) {
 	}
 
 	req := &proxyhandler.Request{}
-	req.SetURLParams(map[string]string{
+	req.SetURLParams(map[string]any{
 		"id":     "1",
 		"postId": "2",
 	})
@@ -173,7 +173,7 @@ func TestEvaluateRequestPath_WithParams(t *testing.T) {
 	handler := &RESTfulHandler{customRequest: &customRESTRequest{}}
 
 	req := &proxyhandler.Request{}
-	req.SetURLParams(map[string]string{"id": "42", "postId": "7"})
+	req.SetURLParams(map[string]any{"id": "42", "postId": "7"})
 
 	path, _, err := handler.evaluateRequestPath(
 		"/users/{id}/posts/{postId}",
@@ -212,7 +212,7 @@ func TestEvaluateRequestPath_ParamFromCustomParameters(t *testing.T) {
 	}
 
 	req := &proxyhandler.Request{}
-	req.SetURLParams(map[string]string{"userId": "99"})
+	req.SetURLParams(map[string]any{"userId": "99"})
 
 	path, _, err := handler.evaluateRequestPath(
 		"/users/{id}",

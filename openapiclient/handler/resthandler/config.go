@@ -23,6 +23,7 @@ import (
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/goutils"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
 )
@@ -208,7 +209,7 @@ func parseRequestContentType(
 		contentType = oaschema.GetDefaultContentType(operation.RequestBody.Content)
 	}
 
-	result, err := oaschema.ValidateContentType(contentType)
+	result, err := oasvalidator.ValidateContentType(contentType)
 	if err != nil {
 		return "", &goutils.ErrorDetail{
 			Detail:  err.Error() + " " + contentType,
@@ -232,7 +233,7 @@ func parseResponseContentType(
 		contentType = oaschema.GetResponseContentTypeFromOperation(operation)
 	}
 
-	result, err := oaschema.ValidateContentType(contentType)
+	result, err := oasvalidator.ValidateContentType(contentType)
 	if err != nil {
 		return "", &goutils.ErrorDetail{
 			Detail:  err.Error() + " " + contentType,

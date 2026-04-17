@@ -48,7 +48,6 @@ var (
 		oaschema.EncodingStylePipeDelimited,
 		oaschema.EncodingStyleDeepObject,
 	)
-	errUnclosedTemplateString = errors.New("expected a closed curly bracket")
 )
 
 // BaseParameter represents an object of common configurations for a parameter.

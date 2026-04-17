@@ -26,6 +26,7 @@ import (
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"go.opentelemetry.io/otel/attribute"
@@ -167,7 +168,7 @@ func (re *RESTfulHandler) writeRawResponse(
 	)
 
 	if re.responseContentType == "" || contentType == "" ||
-		!oaschema.EqualContentType(re.responseContentType, contentType) {
+		!oasvalidator.EqualContentType(re.responseContentType, contentType) {
 		// Stream response directly without conversion.
 		writer.Header()[httpheader.ContentType] = response.Header[httpheader.ContentType]
 		writer.WriteHeader(response.StatusCode)

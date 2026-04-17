@@ -22,7 +22,10 @@ import (
 	"strings"
 
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/relychan/goutils"
+	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
+	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
 )
 
 type nodeType uint8
@@ -80,21 +83,35 @@ func (n *Node) InsertRoute(
 	return node, err
 }
 
-func (n *Node) FindRoute(path string, method string) *Route {
-	route := &Route{
-		ParamValues: map[string]string{},
-	}
+func (n *Node) FindRoute(path string, method string) (*Route, *goutils.RFC9457Error) {
+	route := &Route{}
+	rawParams := make(map[string]string)
 
 	// Find the routing handlers for the path
-	m, pattern := route.findRouteRecursive(strings.TrimLeft(path, "/"), method, n)
+	m, pattern := route.findRouteRecursive(
+		strings.TrimLeft(path, "/"),
+		method,
+		n,
+		rawParams,
+	)
+
 	if m == nil {
-		return nil
+		return nil, goutils.NewNotFoundError()
 	}
 
 	route.Method = m
 	route.Pattern = pattern
 
-	return route
+	if m.Operation != nil {
+		params, errs := validateURLParams(m.Operation, rawParams)
+		if len(errs) > 0 {
+			return nil, goutils.NewBadRequestError(errs...)
+		}
+
+		route.ParamValues = params
+	}
+
+	return route, nil
 }
 
 // String implements the fmt.Stringer interface to print debug data.
@@ -323,6 +340,7 @@ func (r *Route) findRouteRecursive( //nolint:gocognit
 	search string,
 	method string,
 	node *Node,
+	params map[string]string,
 ) (*MethodHandler, string) {
 	left, remain, _ := strings.Cut(search, "/")
 
@@ -346,7 +364,7 @@ func (r *Route) findRouteRecursive( //nolint:gocognit
 						return method, nd.pattern
 					}
 				} else {
-					method, pattern := r.findRouteRecursive(remain, method, nd)
+					method, pattern := r.findRouteRecursive(remain, method, nd, params)
 					if method != nil {
 						return method, pattern
 					}
@@ -368,9 +386,10 @@ func (r *Route) findRouteRecursive( //nolint:gocognit
 					remain,
 					method,
 					nd,
+					params,
 				)
 				if method != nil {
-					r.ParamValues[nd.key] = left
+					params[nd.key] = left
 
 					return method, pattern
 				}
@@ -484,4 +503,45 @@ func patNextSegment(pattern string) (*patNextSegmentResult, error) {
 	default:
 		return nil, ErrInvalidParamPattern
 	}
+}
+
+func validateURLParams(
+	operation *highv3.Operation,
+	values map[string]string,
+) (map[string]any, []goutils.ErrorDetail) {
+	result := goutils.ToAnyMap(values)
+
+	if operation == nil || len(operation.Parameters) == 0 {
+		return result, nil
+	}
+
+	var errs []goutils.ErrorDetail
+
+	for _, param := range operation.Parameters {
+		if param.In != oaschema.InPath.String() {
+			continue
+		}
+
+		rawValue, ok := values[param.Name]
+		if !ok {
+			if param.Required != nil && *param.Required {
+				errs = append(errs, goutils.ErrorDetail{
+					Code:      oaschema.ErrCodeInvalidRequestURL,
+					Detail:    "Parameter is required",
+					Parameter: param.Name,
+				})
+			}
+
+			continue
+		}
+
+		value, err := parameter.DecodePathValue(param, rawValue)
+		if err != nil {
+			errs = append(errs, *err)
+		} else {
+			result[param.Name] = value
+		}
+	}
+
+	return result, errs
 }

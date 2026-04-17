@@ -93,10 +93,13 @@ func (jd *jsonDecoder) DecodeToken(
 	case json.Delim:
 		if tok == '[' {
 			if typeSchema != nil && len(typeSchema.Type) > 0 &&
-				!slices.Contains(typeSchema.Type, "array") {
+				!slices.Contains(typeSchema.Type, oaschema.Array) {
 				return nil, &goutils.ErrorDetail{
-					Code:    oaschema.ErrCodeMalformedJSON,
-					Detail:  fmt.Sprintf("Invalid syntax. Expected one of %v, got array", typeSchema.Type),
+					Code: oaschema.ErrCodeMalformedJSON,
+					Detail: fmt.Sprintf(
+						"Invalid syntax. Expected one of %v, got array",
+						typeSchema.Type,
+					),
 					Pointer: pointer,
 				}
 			}
@@ -197,7 +200,7 @@ func (jd *jsonDecoder) DecodeObject(
 	typeSchema *base.Schema,
 	pointer string,
 ) (any, error) {
-	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, "object") {
+	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Object) {
 		return nil, &goutils.ErrorDetail{
 			Code:    oaschema.ErrCodeMalformedJSON,
 			Detail:  fmt.Sprintf("Invalid syntax. Expected one of %v, got object", typeSchema.Type),
@@ -237,8 +240,11 @@ func (jd *jsonDecoder) DecodeObject(
 		key, ok := keyTok.(string)
 		if !ok {
 			return nil, &goutils.ErrorDetail{
-				Code:    oaschema.ErrCodeMalformedJSON,
-				Detail:  fmt.Sprintf("Invalid object syntax. Expected a key string, got: %v", keyTok),
+				Code: oaschema.ErrCodeMalformedJSON,
+				Detail: fmt.Sprintf(
+					"Invalid object syntax. Expected a key string, got: %v",
+					keyTok,
+				),
 				Pointer: pointer,
 			}
 		}

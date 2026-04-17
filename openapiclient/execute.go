@@ -90,21 +90,22 @@ func (pc *ProxyClient) findRoute(
 		requestPath = strings.TrimPrefix(requestPath, pc.settings.BasePath)
 	}
 
-	route := pc.node.FindRoute(requestPath, request.Method())
-	if route == nil {
-		span.SetStatus(codes.Error, "request path or method does not exist")
+	route, routeError := pc.node.FindRoute(requestPath, request.Method())
+	if routeError != nil {
+		span.SetStatus(codes.Error, routeError.Detail)
+		span.RecordError(routeError)
 
-		err := goutils.NewNotFoundError()
-		err.Instance = request.Path()
+		routeError.Instance = request.Path()
 
-		return nil, nil, err
+		return nil, nil, routeError
 	}
 
 	span.SetAttributes(semconv.URLPath(request.URL()))
-
 	span.SetAttributes(
 		attribute.String("http.request.proxy.type", string(route.Method.Handler.Type())),
 	)
+
+	request.SetPath(requestPath)
 
 	err := validateRequestParameters(route, request)
 	if err != nil {

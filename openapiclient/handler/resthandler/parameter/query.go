@@ -18,6 +18,7 @@ import (
 	"net/url"
 
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 )
 
 // queryParamSetter represents an encoder for query params in URL.
@@ -53,9 +54,9 @@ func (qre *queryParamSetter) Set(params ParameterItems) {
 
 	switch qre.style {
 	case oaschema.EncodingStyleSpaceDelimited:
-		qre.setParamDelimitedStyle(params, ' ')
+		qre.setParamDelimitedStyle(params, oaschema.Space[0])
 	case oaschema.EncodingStylePipeDelimited:
-		qre.setParamDelimitedStyle(params, '|')
+		qre.setParamDelimitedStyle(params, oaschema.Pipe[0])
 	case oaschema.EncodingStyleDeepObject:
 		qre.setParamDeepObjects(params)
 	default:
@@ -68,7 +69,7 @@ func (qre *queryParamSetter) Set(params ParameterItems) {
 			return
 		}
 
-		qre.setParamDelimitedStyleNonExplode(params, ',')
+		qre.setParamDelimitedStyleNonExplode(params, oaschema.Comma[0])
 	}
 }
 
@@ -136,7 +137,10 @@ func (qre *queryParamSetter) setParamDeepObject(param ParameterItem) {
 
 func (qre *queryParamSetter) addParam(key string, value string) {
 	if qre.allowReserved {
-		qre.params.Add(queryEscapeAllowReserved(key), queryEscapeAllowReserved(value))
+		qre.params.Add(
+			oasvalidator.QueryEscapeAllowReserved(key),
+			oasvalidator.QueryEscapeAllowReserved(value),
+		)
 	} else {
 		qre.params.Add(url.QueryEscape(key), url.QueryEscape(value))
 	}
@@ -144,7 +148,10 @@ func (qre *queryParamSetter) addParam(key string, value string) {
 
 func (qre *queryParamSetter) setParam(key string, value string) {
 	if qre.allowReserved {
-		qre.params.Set(queryEscapeAllowReserved(key), queryEscapeAllowReserved(value))
+		qre.params.Set(
+			oasvalidator.QueryEscapeAllowReserved(key),
+			oasvalidator.QueryEscapeAllowReserved(value),
+		)
 	} else {
 		qre.params.Set(url.QueryEscape(key), url.QueryEscape(value))
 	}

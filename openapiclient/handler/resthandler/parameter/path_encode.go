@@ -20,11 +20,11 @@ import (
 	"github.com/relychan/openapitools/oaschema"
 )
 
-// EncodePath encodes the path parameter from an arbitrary value.
+// EncodePathValue encodes the path parameter from an arbitrary value.
 // The value is encoded differently on each style, according to the [OpenAPI specification].
 //
 // [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
-func EncodePath(definition BaseParameter, value any) string {
+func EncodePathValue(definition BaseParameter, value any) string {
 	style, explode := definition.GetStyleAndExplode()
 	items := EvaluateParameterValue(value, ParamKeys{})
 
@@ -33,12 +33,20 @@ func EncodePath(definition BaseParameter, value any) string {
 		// /users/.3.4.5
 		// /users/.role=admin.firstName=Alex
 		if explode {
-			return "." + EncodeParamDelimitedStyleNonExplode(items, '.', '=')
+			return "." + EncodeParamDelimitedStyleNonExplode(
+				items,
+				oaschema.Dot[0],
+				oaschema.Equals[0],
+			)
 		}
 
 		// /users/.3,4,5
 		// /users/.role,admin,firstName,Alex
-		return "." + EncodeParamDelimitedStyleNonExplode(items, ',', ',')
+		return "." + EncodeParamDelimitedStyleNonExplode(
+			items,
+			oaschema.Comma[0],
+			oaschema.Comma[0],
+		)
 	case oaschema.EncodingStyleMatrix:
 		if len(items) == 0 {
 			return ";" + definition.Name + "="
@@ -57,10 +65,10 @@ func EncodePath(definition BaseParameter, value any) string {
 		builtParams, count := items.Build("", false)
 
 		sb.Grow(count + len(definition.Name) + 2)
-		sb.WriteByte(';')
+		sb.WriteByte(oaschema.SemiColon[0])
 		sb.WriteString(definition.Name)
-		sb.WriteByte('=')
-		buildParamDelimitedStyleNonExplode(&sb, builtParams, ',', ',')
+		sb.WriteByte(oaschema.Equals[0])
+		buildParamDelimitedStyleNonExplode(&sb, builtParams, oaschema.Comma[0], oaschema.Comma[0])
 
 		return sb.String()
 	default:
@@ -80,16 +88,16 @@ func encodeParamMatrixExplode(name string, params ParameterItems) string {
 			// ;R=100;G=200;B=150
 			key := param.keys.Format("", false)
 
-			sb.WriteByte(';')
+			sb.WriteByte(oaschema.SemiColon[0])
 			sb.WriteString(key)
-			sb.WriteByte('=')
+			sb.WriteByte(oaschema.Equals[0])
 			sb.WriteString(param.value)
 
 			continue
 		}
 
-		// The parameter does not have nested object. Encode with the simple form format.
-		// /users?id=3&id=4&id=5
+		// The parameter does not have nested object.
+		// ;color=blue;color=black;color=brown
 		sb.WriteByte(';')
 		sb.WriteString(name)
 		sb.WriteByte('=')

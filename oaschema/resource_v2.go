@@ -239,7 +239,7 @@ func (sto *swaggerToOpenAPIv3Converter) convertOperation(
 
 		content := &v3high.MediaType{
 			Schema: base.CreateSchemaProxy(&base.Schema{
-				Type:       []string{"object"},
+				Type:       []string{Object},
 				Properties: formDataProps,
 			}),
 		}

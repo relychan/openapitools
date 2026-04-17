@@ -68,7 +68,7 @@ type Request struct {
 	// The body of the request.
 	body any
 	// Parameter values of the request.
-	urlParams map[string]string
+	urlParams map[string]any
 	// Query parameters of the request.
 	queryParams url.Values
 	// URL fragment.
@@ -161,12 +161,12 @@ func (r *Request) SetBody(value any) {
 }
 
 // URLParams returns parameter values of the request URL.
-func (r *Request) URLParams() map[string]string {
+func (r *Request) URLParams() map[string]any {
 	return r.urlParams
 }
 
 // SetURLParams sets the URL parameters of the request.
-func (r *Request) SetURLParams(value map[string]string) {
+func (r *Request) SetURLParams(value map[string]any) {
 	r.urlParams = value
 }
 

@@ -28,8 +28,8 @@ import (
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
 	"github.com/relychan/openapitools/openapiclient/internal"
 )
 
@@ -64,7 +64,7 @@ func writeErrorResponse(writer http.ResponseWriter, status int, err error) {
 func parseServerURL(server *highv3.Server, getEnv goenvconf.GetEnvFunc) (string, error) {
 	rawServerURL := strings.TrimSpace(server.URL)
 
-	return parameter.ReplaceURLTemplate(rawServerURL, func(s string) (string, error) {
+	return oasvalidator.ReplaceURLTemplate(rawServerURL, func(s string) (string, error) {
 		var variable *highv3.ServerVariable
 
 		envVar := goenvconf.NewEnvStringVariable(s)

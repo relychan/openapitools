@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/hasura/gotel/otelutils"
+	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
@@ -56,6 +57,11 @@ func TestProxyClient_RESTful(t *testing.T) {
 		config,
 		nil,
 		WithTimeout(time.Minute),
+		WithClientOptions(&gohttpc.ClientOptions{
+			RequestOptions: gohttpc.RequestOptions{
+				LogLevel: slog.LevelDebug,
+			},
+		}),
 	)
 	require.NoError(t, err)
 

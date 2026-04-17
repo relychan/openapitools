@@ -19,6 +19,7 @@ import (
 
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
 )
 
@@ -136,11 +137,11 @@ func (fue *formURLEncoder) buildParams(rootKey string, params parameter.Paramete
 			return
 		}
 
-		fue.setParamDelimitedStyleNonExplode(rootKey, params, ',', allowReserved)
+		fue.setParamDelimitedStyleNonExplode(rootKey, params, oaschema.Comma[0], allowReserved)
 	case oaschema.EncodingStyleSpaceDelimited:
-		fue.setParamDelimitedStyle(rootKey, params, ' ', explode, allowReserved)
+		fue.setParamDelimitedStyle(rootKey, params, oaschema.Space[0], explode, allowReserved)
 	case oaschema.EncodingStylePipeDelimited:
-		fue.setParamDelimitedStyle(rootKey, params, '|', explode, allowReserved)
+		fue.setParamDelimitedStyle(rootKey, params, oaschema.Pipe[0], explode, allowReserved)
 	case oaschema.EncodingStyleDeepObject:
 		// simple non-nested objects are serialized as paramName[prop1]=value1&paramName[prop2]=value2&...
 		for _, param := range params {
@@ -218,8 +219,8 @@ func (fue *formURLEncoder) addParam(key string, value string, allowReserved bool
 		fue.builder.WriteByte('&')
 	}
 
-	encodedKey := parameter.EncodeQueryEscape(key, allowReserved)
-	encodedValue := parameter.EncodeQueryEscape(value, allowReserved)
+	encodedKey := oasvalidator.EncodeQueryEscape(key, allowReserved)
+	encodedValue := oasvalidator.EncodeQueryEscape(value, allowReserved)
 
 	fue.builder.WriteString(encodedKey)
 	fue.builder.WriteByte('=')

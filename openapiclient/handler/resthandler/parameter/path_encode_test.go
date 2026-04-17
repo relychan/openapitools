@@ -332,7 +332,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Contains(t, tc.expected, EncodePath(tc.encoding, tc.value))
+			assert.Contains(t, tc.expected, EncodePathValue(tc.encoding, tc.value))
 		})
 	}
 }
@@ -353,6 +353,6 @@ func BenchmarkEncodePath(b *testing.B) {
 	}
 
 	for b.Loop() {
-		EncodePath(encoding, value)
+		EncodePathValue(encoding, value)
 	}
 }

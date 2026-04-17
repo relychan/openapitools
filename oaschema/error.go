@@ -41,8 +41,6 @@ var (
 	ErrInvalidOpenAPIResourceDefinition = errors.New(
 		"invalid OpenAPIResourceDefinition",
 	)
-	// ErrInvalidContentType occurs when the content type string is invalid.
-	ErrInvalidContentType = errors.New("invalid content type")
 )
 
 const (

@@ -26,6 +26,7 @@ import (
 	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTreeNodes(t *testing.T) {
@@ -44,7 +45,7 @@ func TestTreeNodes(t *testing.T) {
 				Get: &highv3.Operation{},
 			},
 			Route: Route{
-				ParamValues: map[string]string{},
+				ParamValues: map[string]any{},
 			},
 		},
 		{
@@ -55,7 +56,7 @@ func TestTreeNodes(t *testing.T) {
 				Post: &highv3.Operation{},
 			},
 			Route: Route{
-				ParamValues: map[string]string{
+				ParamValues: map[string]any{
 					"id": "1",
 				},
 			},
@@ -68,7 +69,7 @@ func TestTreeNodes(t *testing.T) {
 				Get: &highv3.Operation{},
 			},
 			Route: Route{
-				ParamValues: map[string]string{
+				ParamValues: map[string]any{
 					"id":        "1",
 					"commentId": "abc",
 				},
@@ -82,7 +83,7 @@ func TestTreeNodes(t *testing.T) {
 				Get: &highv3.Operation{},
 			},
 			Route: Route{
-				ParamValues: map[string]string{},
+				ParamValues: map[string]any{},
 			},
 		},
 		{
@@ -93,7 +94,7 @@ func TestTreeNodes(t *testing.T) {
 				Get: &highv3.Operation{},
 			},
 			Route: Route{
-				ParamValues: map[string]string{
+				ParamValues: map[string]any{
 					"id":       "1",
 					"authorId": "abc",
 				},
@@ -125,7 +126,8 @@ func TestTreeNodes(t *testing.T) {
 	assert.Equal(t, routeAsText, node.printDebug(0))
 	for _, route := range routes {
 		if !t.Run(route.Path, func(t *testing.T) {
-			postNode := node.FindRoute(route.Path, route.Method)
+			postNode, err := node.FindRoute(route.Path, route.Method)
+			assert.True(t, err == nil)
 			assert.True(t, postNode != nil)
 			assert.Equal(t, postNode.Pattern, route.Pattern)
 			assert.Equal(t, postNode.ParamValues, route.Route.ParamValues)
@@ -134,7 +136,8 @@ func TestTreeNodes(t *testing.T) {
 		}
 	}
 
-	notFoundNode := node.FindRoute("/posts/1/authors", http.MethodGet)
+	notFoundNode, err := node.FindRoute("/posts/1/authors", http.MethodGet)
+	assert.Equal(t, http.StatusNotFound, err.Status)
 	assert.True(t, notFoundNode == nil)
 }
 
@@ -263,7 +266,7 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 		path            string
 		method          string
 		shouldFind      bool
-		expectedParams  map[string]string
+		expectedParams  map[string]any
 		expectedPattern string
 	}{
 		{
@@ -271,7 +274,7 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 			path:            "/",
 			method:          http.MethodGet,
 			shouldFind:      true,
-			expectedParams:  map[string]string{},
+			expectedParams:  map[string]any{},
 			expectedPattern: "/",
 		},
 		{
@@ -279,7 +282,7 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 			path:            "/posts",
 			method:          http.MethodGet,
 			shouldFind:      true,
-			expectedParams:  map[string]string{},
+			expectedParams:  map[string]any{},
 			expectedPattern: "/posts",
 		},
 		{
@@ -287,7 +290,7 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 			path:            "/posts/new",
 			method:          http.MethodGet,
 			shouldFind:      true,
-			expectedParams:  map[string]string{},
+			expectedParams:  map[string]any{},
 			expectedPattern: "/posts/new",
 		},
 		{
@@ -295,7 +298,7 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 			path:       "/posts/456",
 			method:     http.MethodPut,
 			shouldFind: true,
-			expectedParams: map[string]string{
+			expectedParams: map[string]any{
 				"id": "456",
 			},
 			expectedPattern: "/posts/{id:[0-9]+}",
@@ -305,7 +308,7 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 			path:       "/posts/123/comments/456",
 			method:     http.MethodGet,
 			shouldFind: true,
-			expectedParams: map[string]string{
+			expectedParams: map[string]any{
 				"id":        "123",
 				"commentId": "456",
 			},
@@ -316,7 +319,7 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 			path:       "/users/user123/posts/post456",
 			method:     http.MethodGet,
 			shouldFind: true,
-			expectedParams: map[string]string{
+			expectedParams: map[string]any{
 				"userId": "user123",
 				"postId": "post456",
 			},
@@ -327,7 +330,7 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 			path:            "/api/v1/anything/goes/here",
 			method:          http.MethodGet,
 			shouldFind:      true,
-			expectedParams:  map[string]string{},
+			expectedParams:  map[string]any{},
 			expectedPattern: "/api/v1/*",
 		},
 		{
@@ -335,7 +338,7 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 			path:       "/products/electronics/smartphones",
 			method:     http.MethodGet,
 			shouldFind: true,
-			expectedParams: map[string]string{
+			expectedParams: map[string]any{
 				"category":    "electronics",
 				"subcategory": "smartphones",
 			},
@@ -346,7 +349,7 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 			path:       "/products/electronics/12345",
 			method:     http.MethodGet,
 			shouldFind: true,
-			expectedParams: map[string]string{
+			expectedParams: map[string]any{
 				"category": "electronics",
 				"id":       "12345",
 			},
@@ -375,7 +378,7 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 			path:       "/posts//comments",
 			method:     http.MethodGet,
 			shouldFind: true, // Router matches this with empty param
-			expectedParams: map[string]string{
+			expectedParams: map[string]any{
 				"id": "", // Empty param value
 			},
 			expectedPattern: "/posts/{id}/comments",
@@ -386,20 +389,22 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 			method:          http.MethodGet,
 			shouldFind:      true,
 			expectedPattern: "/posts",
-			expectedParams:  map[string]string{},
+			expectedParams:  map[string]any{},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			route := node.FindRoute(tc.path, tc.method)
+			route, err := node.FindRoute(tc.path, tc.method)
 
 			if tc.shouldFind {
-				assert.True(t, route != nil, "expected to find route for path: %s", tc.path)
-				assert.True(t, route.Method != nil)
+				require.Nil(t, err)
+				require.True(t, route != nil, "expected to find route for path: %s", tc.path)
+				require.True(t, route.Method != nil)
 				assert.Equal(t, tc.expectedPattern, route.Pattern)
 				assert.Equal(t, tc.expectedParams, route.ParamValues)
 			} else {
+				assert.Equal(t, http.StatusNotFound, err.Status)
 				assert.True(t, route == nil, "expected not to find route for path: %s", tc.path)
 			}
 		})
@@ -424,25 +429,29 @@ func TestComplexRoutingScenarios(t *testing.T) {
 			_, err := node.InsertRoute(nil, route, &highv3.PathItem{
 				Get: &highv3.Operation{},
 			}, &proxyhandler.InsertRouteOptions{})
-			assert.NoError(t, err)
+			assert.Nil(t, err)
 		}
 
 		// Test v1 routes
-		r := node.FindRoute("/api/v1/users", http.MethodGet)
+		r, err := node.FindRoute("/api/v1/users", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "/api/v1/users", r.Pattern)
 
-		r = node.FindRoute("/api/v1/users/123", http.MethodGet)
+		r, err = node.FindRoute("/api/v1/users/123", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "123", r.ParamValues["id"])
 
-		r = node.FindRoute("/api/v1/users/123/posts/456", http.MethodGet)
+		r, err = node.FindRoute("/api/v1/users/123/posts/456", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "123", r.ParamValues["id"])
 		assert.Equal(t, "456", r.ParamValues["postId"])
 
 		// Test v2 routes
-		r = node.FindRoute("/api/v2/users/789", http.MethodGet)
+		r, err = node.FindRoute("/api/v2/users/789", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "/api/v2/users/{id}", r.Pattern)
 	})
@@ -460,25 +469,29 @@ func TestComplexRoutingScenarios(t *testing.T) {
 
 		for pattern, handlers := range routes {
 			_, err := node.InsertRoute(nil, pattern, handlers, &proxyhandler.InsertRouteOptions{})
-			assert.NoError(t, err)
+			assert.Nil(t, err)
 		}
 
 		// Static routes should take precedence
-		r := node.FindRoute("/posts/new", http.MethodGet)
+		r, err := node.FindRoute("/posts/new", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "/posts/new", r.Pattern)
 
-		r = node.FindRoute("/posts/popular", http.MethodGet)
+		r, err = node.FindRoute("/posts/popular", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "/posts/popular", r.Pattern)
 
 		// Dynamic route should match other IDs
-		r = node.FindRoute("/posts/123", http.MethodGet)
+		r, err = node.FindRoute("/posts/123", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "/posts/{id}", r.Pattern)
 		assert.Equal(t, "123", r.ParamValues["id"])
 
-		r = node.FindRoute("/posts/456/edit", http.MethodGet)
+		r, err = node.FindRoute("/posts/456/edit", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "/posts/{id}/edit", r.Pattern)
 		assert.Equal(t, "456", r.ParamValues["id"])
@@ -497,36 +510,42 @@ func TestComplexRoutingScenarios(t *testing.T) {
 
 		for pattern, handlers := range routes {
 			_, err := node.InsertRoute(nil, pattern, handlers, &proxyhandler.InsertRouteOptions{})
-			assert.NoError(t, err)
+			assert.Nil(t, err)
 		}
 
 		// Numeric ID should match
-		r := node.FindRoute("/users/12345", http.MethodGet)
+		r, err := node.FindRoute("/users/12345", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "12345", r.ParamValues["id"])
 
 		// Alphabetic username should match
-		r = node.FindRoute("/users/john", http.MethodPost)
+		r, err = node.FindRoute("/users/john", http.MethodPost)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "john", r.ParamValues["username"])
 
 		// Slug with hyphens should match
-		r = node.FindRoute("/posts/my-blog-post-123", http.MethodGet)
+		r, err = node.FindRoute("/posts/my-blog-post-123", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "my-blog-post-123", r.ParamValues["slug"])
 
 		// Filename with dots and underscores should match
-		r = node.FindRoute("/files/my_file.txt", http.MethodGet)
+		r, err = node.FindRoute("/files/my_file.txt", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "my_file.txt", r.ParamValues["filename"])
 
 		// Date format should match
-		r = node.FindRoute("/dates/2024-01-15", http.MethodGet)
+		r, err = node.FindRoute("/dates/2024-01-15", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "2024-01-15", r.ParamValues["date"])
 
 		// Invalid date format should not match
-		r = node.FindRoute("/dates/2024-1-5", http.MethodGet)
+		r, err = node.FindRoute("/dates/2024-1-5", http.MethodGet)
+		assert.Equal(t, http.StatusNotFound, err.Status)
 		assert.True(t, r == nil)
 	})
 
@@ -543,20 +562,23 @@ func TestComplexRoutingScenarios(t *testing.T) {
 
 		for pattern, handlers := range routes {
 			_, err := node.InsertRoute(nil, pattern, handlers, &proxyhandler.InsertRouteOptions{})
-			assert.NoError(t, err)
+			assert.Nil(t, err)
 		}
 
 		// Specific routes should match first
-		r := node.FindRoute("/api/v1/users", http.MethodGet)
+		r, err := node.FindRoute("/api/v1/users", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "/api/v1/users", r.Pattern)
 
 		// Catchall should match unspecified routes
-		r = node.FindRoute("/api/v1/anything/else", http.MethodGet)
+		r, err = node.FindRoute("/api/v1/anything/else", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "/api/v1/*", r.Pattern)
 
-		r = node.FindRoute("/static/css/main.css", http.MethodGet)
+		r, err = node.FindRoute("/static/css/main.css", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "/static/css/*", r.Pattern)
 	})
@@ -564,14 +586,14 @@ func TestComplexRoutingScenarios(t *testing.T) {
 	t.Run("multiple_HTTP_methods", func(t *testing.T) {
 		node := new(Node)
 
-		_, err := node.InsertRoute(nil, "/posts/{id}", &highv3.PathItem{
+		_, insertErr := node.InsertRoute(nil, "/posts/{id}", &highv3.PathItem{
 			Get:    &highv3.Operation{},
 			Post:   &highv3.Operation{},
 			Put:    &highv3.Operation{},
 			Patch:  &highv3.Operation{},
 			Delete: &highv3.Operation{},
 		}, &proxyhandler.InsertRouteOptions{})
-		assert.NoError(t, err)
+		assert.NoError(t, insertErr)
 
 		methods := []string{
 			http.MethodGet,
@@ -582,13 +604,15 @@ func TestComplexRoutingScenarios(t *testing.T) {
 		}
 
 		for _, method := range methods {
-			r := node.FindRoute("/posts/123", method)
+			r, err := node.FindRoute("/posts/123", method)
+			assert.Nil(t, err)
 			assert.True(t, r != nil, "method %s should be found", method)
 			assert.Equal(t, "123", r.ParamValues["id"])
 		}
 
 		// Method not defined should not be found
-		r := node.FindRoute("/posts/123", http.MethodHead)
+		r, err := node.FindRoute("/posts/123", http.MethodHead)
+		assert.Equal(t, http.StatusNotFound, err.Status)
 		assert.True(t, r == nil)
 	})
 
@@ -599,9 +623,10 @@ func TestComplexRoutingScenarios(t *testing.T) {
 		_, err := node.InsertRoute(nil, pattern, &highv3.PathItem{
 			Get: &highv3.Operation{},
 		}, &proxyhandler.InsertRouteOptions{})
-		assert.NoError(t, err)
+		assert.Nil(t, err)
 
-		r := node.FindRoute("/orgs/org1/teams/team2/projects/proj3/tasks/task4/comments/comment5", http.MethodGet)
+		r, err := node.FindRoute("/orgs/org1/teams/team2/projects/proj3/tasks/task4/comments/comment5", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "org1", r.ParamValues["orgId"])
 		assert.Equal(t, "team2", r.ParamValues["teamId"])
@@ -620,16 +645,18 @@ func TestComplexRoutingScenarios(t *testing.T) {
 
 		for pattern, handlers := range routes {
 			_, err := node.InsertRoute(nil, pattern, handlers, &proxyhandler.InsertRouteOptions{})
-			assert.NoError(t, err)
+			assert.Nil(t, err)
 		}
 
 		// Query with special characters
-		r := node.FindRoute("/search/hello-world", http.MethodGet)
+		r, err := node.FindRoute("/search/hello-world", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "hello-world", r.ParamValues["query"])
 
 		// Email-like parameter
-		r = node.FindRoute("/users/user@example.com", http.MethodGet)
+		r, err = node.FindRoute("/users/user@example.com", http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil)
 		assert.Equal(t, "user@example.com", r.ParamValues["email"])
 	})
@@ -673,7 +700,7 @@ func TestAllHTTPMethods(t *testing.T) {
 		Options: &highv3.Operation{},
 		Trace:   &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// Test all methods can be found
 	methods := []string{
@@ -688,7 +715,8 @@ func TestAllHTTPMethods(t *testing.T) {
 	}
 
 	for _, method := range methods {
-		r := node.FindRoute("/test", method)
+		r, err := node.FindRoute("/test", method)
+		assert.Nil(t, err)
 		assert.True(t, r != nil, "method %s should be found", method)
 		assert.Equal(t, "/test", r.Pattern)
 	}
@@ -701,9 +729,10 @@ func TestQueryMethod(t *testing.T) {
 	_, err := node.InsertRoute(nil, "/graphql", &highv3.PathItem{
 		Query: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
-	r := node.FindRoute("/graphql", "QUERY")
+	r, err := node.FindRoute("/graphql", "QUERY")
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 	assert.Equal(t, "/graphql", r.Pattern)
 }
@@ -719,13 +748,15 @@ func TestAdditionalOperations(t *testing.T) {
 	_, err := node.InsertRoute(nil, "/custom", &highv3.PathItem{
 		AdditionalOperations: additionalOps,
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
-	r := node.FindRoute("/custom", "CUSTOM")
+	r, err := node.FindRoute("/custom", "CUSTOM")
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 	assert.Equal(t, "/custom", r.Pattern)
 
-	r = node.FindRoute("/custom", "ANOTHER")
+	r, err = node.FindRoute("/custom", "ANOTHER")
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 	assert.Equal(t, "/custom", r.Pattern)
 }
@@ -738,15 +769,17 @@ func TestAdditionalOperationsWithNilValue(t *testing.T) {
 	additionalOps.Set("VALID", &highv3.Operation{})
 	additionalOps.Set("NIL", nil) // This should be skipped
 
-	_, err := node.InsertRoute(nil, "/mixed", &highv3.PathItem{
+	_, insertErr := node.InsertRoute(nil, "/mixed", &highv3.PathItem{
 		AdditionalOperations: additionalOps,
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.NoError(t, insertErr)
 
-	r := node.FindRoute("/mixed", "VALID")
+	r, err := node.FindRoute("/mixed", "VALID")
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 
-	r = node.FindRoute("/mixed", "NIL")
+	r, err = node.FindRoute("/mixed", "NIL")
+	assert.Equal(t, http.StatusNotFound, err.Status)
 	assert.True(t, r == nil, "nil operation should not be registered")
 }
 
@@ -759,13 +792,15 @@ func TestMultipleMethodsOnSameRoute(t *testing.T) {
 		Get:  &highv3.Operation{},
 		Post: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// Verify both methods work
-	r := node.FindRoute("/resource", http.MethodGet)
+	r, err := node.FindRoute("/resource", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 
-	r = node.FindRoute("/resource", http.MethodPost)
+	r, err = node.FindRoute("/resource", http.MethodPost)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 }
 
@@ -776,7 +811,7 @@ func TestDuplicateCatchAll(t *testing.T) {
 	_, err := node.InsertRoute(nil, "/api/*", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// Try to insert another catchall at the same level
 	_, err = node.InsertRoute(nil, "/api/*", &highv3.PathItem{
@@ -807,9 +842,10 @@ func TestEmptyPatternInsertion(t *testing.T) {
 	_, err := node.InsertRoute(nil, "/", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
-	r := node.FindRoute("/", http.MethodGet)
+	r, err := node.FindRoute("/", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 	assert.Equal(t, "/", r.Pattern)
 }
@@ -822,15 +858,16 @@ func TestInsertChildNodeWithEmptySearch(t *testing.T) {
 	_, err := node.InsertRoute(nil, "/parent", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// Now insert a child that will have empty search after parent prefix
 	_, err = node.InsertRoute(nil, "/parent/", &highv3.PathItem{
 		Post: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
-	r := node.FindRoute("/parent/", http.MethodPost)
+	r, err := node.FindRoute("/parent/", http.MethodPost)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 }
 
@@ -894,37 +931,41 @@ func TestNodeStringMethod(t *testing.T) {
 	_, err := node.InsertRoute(nil, "/users", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// Test param node
 	_, err = node.InsertRoute(nil, "/posts/{id}", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// Test regexp node
 	_, err = node.InsertRoute(nil, "/items/{id:[0-9]+}", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// Test catchall node
 	_, err = node.InsertRoute(nil, "/api/*", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// Verify routes work
-	r := node.FindRoute("/users", http.MethodGet)
+	r, err := node.FindRoute("/users", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 
-	r = node.FindRoute("/posts/123", http.MethodGet)
+	r, err = node.FindRoute("/posts/123", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 
-	r = node.FindRoute("/items/456", http.MethodGet)
+	r, err = node.FindRoute("/items/456", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 
-	r = node.FindRoute("/api/anything", http.MethodGet)
+	r, err = node.FindRoute("/api/anything", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 }
 
@@ -932,18 +973,20 @@ func TestNodeStringMethod(t *testing.T) {
 func TestFindMethodEdgeCases(t *testing.T) {
 	node := new(Node)
 
-	_, err := node.InsertRoute(nil, "/test", &highv3.PathItem{
+	_, insertErr := node.InsertRoute(nil, "/test", &highv3.PathItem{
 		Get:  &highv3.Operation{},
 		Post: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.NoError(t, insertErr)
 
 	// Find existing method
-	r := node.FindRoute("/test", http.MethodGet)
+	r, err := node.FindRoute("/test", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 
 	// Find non-existing method
-	r = node.FindRoute("/test", http.MethodDelete)
+	r, err = node.FindRoute("/test", http.MethodDelete)
+	assert.Equal(t, http.StatusNotFound, err.Status)
 	assert.True(t, r == nil)
 }
 
@@ -965,9 +1008,10 @@ func TestExtractParametersFromOperationV3(t *testing.T) {
 			Parameters: []*highv3.Parameter{param1, param2},
 		},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
-	r := node.FindRoute("/users/123", http.MethodGet)
+	r, err := node.FindRoute("/users/123", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 	assert.Equal(t, "123", r.ParamValues["id"])
 }
@@ -991,10 +1035,11 @@ func TestEmptyHandlers(t *testing.T) {
 	// Try to insert a route with no operations
 	_, err := node.InsertRoute(nil, "/empty", &highv3.PathItem{}, &proxyhandler.InsertRouteOptions{})
 	// Should return nil because no handlers were created
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// Route should not be found
-	r := node.FindRoute("/empty", http.MethodGet)
+	r, err := node.FindRoute("/empty", http.MethodGet)
+	assert.ErrorContains(t, err, "404")
 	assert.True(t, r == nil)
 }
 
@@ -1019,9 +1064,10 @@ func TestDuplicateParamKeys(t *testing.T) {
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
 	// The router allows this
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
-	r := node.FindRoute("/users/user1/posts/post1", http.MethodGet)
+	r, err := node.FindRoute("/users/user1/posts/post1", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 	// The first id value is kept
 	assert.Equal(t, "user1", r.ParamValues["id"])
@@ -1071,20 +1117,21 @@ func TestComplexNestedRoutes(t *testing.T) {
 	// Test all routes can be found
 	testCases := []struct {
 		path           string
-		expectedParams map[string]string
+		expectedParams map[string]any
 	}{
-		{"/api/v1/users", map[string]string{}},
-		{"/api/v1/users/123", map[string]string{"id": "123"}},
-		{"/api/v1/users/456/profile", map[string]string{"id": "456"}},
-		{"/api/v1/users/789/settings", map[string]string{"id": "789"}},
-		{"/api/v1/posts", map[string]string{}},
-		{"/api/v1/posts/post1", map[string]string{"postId": "post1"}},
-		{"/api/v1/posts/post2/comments", map[string]string{"postId": "post2"}},
-		{"/api/v1/posts/post3/comments/comment1", map[string]string{"postId": "post3", "commentId": "comment1"}},
+		{"/api/v1/users", map[string]any{}},
+		{"/api/v1/users/123", map[string]any{"id": "123"}},
+		{"/api/v1/users/456/profile", map[string]any{"id": "456"}},
+		{"/api/v1/users/789/settings", map[string]any{"id": "789"}},
+		{"/api/v1/posts", map[string]any{}},
+		{"/api/v1/posts/post1", map[string]any{"postId": "post1"}},
+		{"/api/v1/posts/post2/comments", map[string]any{"postId": "post2"}},
+		{"/api/v1/posts/post3/comments/comment1", map[string]any{"postId": "post3", "commentId": "comment1"}},
 	}
 
 	for _, tc := range testCases {
-		r := node.FindRoute(tc.path, http.MethodGet)
+		r, err := node.FindRoute(tc.path, http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil, "route not found: %s", tc.path)
 		assert.Equal(t, tc.expectedParams, r.ParamValues)
 	}
@@ -1097,13 +1144,15 @@ func TestRootRouteWithTrailingSlash(t *testing.T) {
 	_, err := node.InsertRoute(nil, "/", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// Test with and without trailing slash
-	r := node.FindRoute("/", http.MethodGet)
+	r, err := node.FindRoute("/", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 
-	r = node.FindRoute("", http.MethodGet)
+	r, err = node.FindRoute("", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 }
 
@@ -1122,12 +1171,13 @@ func TestStaticRouteWithCommonPrefix(t *testing.T) {
 		_, err := node.InsertRoute(nil, route, &highv3.PathItem{
 			Get: &highv3.Operation{},
 		}, &proxyhandler.InsertRouteOptions{})
-		assert.NoError(t, err)
+		assert.Nil(t, err)
 	}
 
 	// All routes should be findable
 	for _, route := range routes {
-		r := node.FindRoute(route, http.MethodGet)
+		r, err := node.FindRoute(route, http.MethodGet)
+		assert.Nil(t, err)
 		assert.True(t, r != nil, "route not found: %s", route)
 		assert.Equal(t, route, r.Pattern)
 	}
@@ -1148,19 +1198,22 @@ func TestParamRouteWithCommonPrefix(t *testing.T) {
 		_, err := node.InsertRoute(nil, route, &highv3.PathItem{
 			Get: &highv3.Operation{},
 		}, &proxyhandler.InsertRouteOptions{})
-		assert.NoError(t, err)
+		assert.Nil(t, err)
 	}
 
 	// Test finding routes
-	r := node.FindRoute("/users/123", http.MethodGet)
+	r, err := node.FindRoute("/users/123", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 	assert.Equal(t, "123", r.ParamValues["id"])
 
-	r = node.FindRoute("/users/456/posts", http.MethodGet)
+	r, err = node.FindRoute("/users/456/posts", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 	assert.Equal(t, "456", r.ParamValues["id"])
 
-	r = node.FindRoute("/users/789/posts/post1", http.MethodGet)
+	r, err = node.FindRoute("/users/789/posts/post1", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 	assert.Equal(t, "789", r.ParamValues["id"])
 	assert.Equal(t, "post1", r.ParamValues["postId"])
@@ -1180,21 +1233,24 @@ func TestRegexpRouteWithCommonPrefix(t *testing.T) {
 		_, err := node.InsertRoute(nil, route, &highv3.PathItem{
 			Get: &highv3.Operation{},
 		}, &proxyhandler.InsertRouteOptions{})
-		assert.NoError(t, err)
+		assert.Nil(t, err)
 	}
 
 	// Test numeric ID
-	r := node.FindRoute("/items/123", http.MethodGet)
+	r, err := node.FindRoute("/items/123", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 	assert.Equal(t, "123", r.ParamValues["id"])
 
 	// Test slug
-	r = node.FindRoute("/items/my-item", http.MethodGet)
+	r, err = node.FindRoute("/items/my-item", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 	assert.Equal(t, "my-item", r.ParamValues["slug"])
 
 	// Test details
-	r = node.FindRoute("/items/456/details", http.MethodGet)
+	r, err = node.FindRoute("/items/456/details", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 	assert.Equal(t, "456", r.ParamValues["id"])
 }
@@ -1207,11 +1263,12 @@ func TestMultipleMethodsSameRoute(t *testing.T) {
 	_, err := node.InsertRoute(nil, "/test", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// The router allows adding different methods to the same route
 	// by checking if handlers already exist
-	r := node.FindRoute("/test", http.MethodGet)
+	r, err := node.FindRoute("/test", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 }
 
@@ -1223,7 +1280,7 @@ func TestDuplicateCatchAllRoute(t *testing.T) {
 	_, err := node.InsertRoute(nil, "/api/*", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// Try to insert another catchall at the same level
 	_, err = node.InsertRoute(nil, "/api/*", &highv3.PathItem{
@@ -1240,14 +1297,16 @@ func TestPatNextSegmentWithAnchors(t *testing.T) {
 	_, err := node.InsertRoute(nil, "/users/{id:^[0-9]+$}", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
-	r := node.FindRoute("/users/123", http.MethodGet)
+	r, err := node.FindRoute("/users/123", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 	assert.Equal(t, "123", r.ParamValues["id"])
 
 	// Should not match non-numeric
-	r = node.FindRoute("/users/abc", http.MethodGet)
+	r, err = node.FindRoute("/users/abc", http.MethodGet)
+	assert.ErrorContains(t, err, "404")
 	assert.True(t, r == nil)
 }
 
@@ -1258,14 +1317,16 @@ func TestFindRouteWithNoMatch(t *testing.T) {
 	_, err := node.InsertRoute(nil, "/users", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// Try to find a non-existent route
-	r := node.FindRoute("/posts", http.MethodGet)
+	r, err := node.FindRoute("/posts", http.MethodGet)
+	assert.ErrorContains(t, err, "404")
 	assert.True(t, r == nil)
 
 	// Try to find with wrong method
-	r = node.FindRoute("/users", http.MethodPost)
+	r, err = node.FindRoute("/users", http.MethodPost)
+	assert.ErrorContains(t, err, "404")
 	assert.True(t, r == nil)
 }
 
@@ -1277,18 +1338,20 @@ func TestStaticNodeSplitting(t *testing.T) {
 	_, err := node.InsertRoute(nil, "/users/list", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	_, err = node.InsertRoute(nil, "/users/active", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// Both routes should be findable
-	r := node.FindRoute("/users/list", http.MethodGet)
+	r, err := node.FindRoute("/users/list", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 
-	r = node.FindRoute("/users/active", http.MethodGet)
+	r, err = node.FindRoute("/users/active", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 }
 
@@ -1300,19 +1363,21 @@ func TestParamNodeWithDifferentKeys(t *testing.T) {
 	_, err := node.InsertRoute(nil, "/users/{userId}", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	_, err = node.InsertRoute(nil, "/users/{id}", &highv3.PathItem{
 		Post: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// Both should work
-	r := node.FindRoute("/users/123", http.MethodGet)
+	r, err := node.FindRoute("/users/123", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 	assert.Equal(t, "123", r.ParamValues["userId"])
 
-	r = node.FindRoute("/users/456", http.MethodPost)
+	r, err = node.FindRoute("/users/456", http.MethodPost)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 	assert.Equal(t, "456", r.ParamValues["id"])
 }
@@ -1325,19 +1390,21 @@ func TestRegexpNodeWithDifferentPatterns(t *testing.T) {
 	_, err := node.InsertRoute(nil, "/items/{id:[0-9]+}", &highv3.PathItem{
 		Get: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	_, err = node.InsertRoute(nil, "/items/{slug:[a-z-]+}", &highv3.PathItem{
 		Post: &highv3.Operation{},
 	}, &proxyhandler.InsertRouteOptions{})
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 
 	// Numeric should match GET
-	r := node.FindRoute("/items/123", http.MethodGet)
+	r, err := node.FindRoute("/items/123", http.MethodGet)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 
 	// Slug should match POST
-	r = node.FindRoute("/items/my-item", http.MethodPost)
+	r, err = node.FindRoute("/items/my-item", http.MethodPost)
+	assert.Nil(t, err)
 	assert.True(t, r != nil)
 }
 

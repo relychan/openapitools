@@ -38,7 +38,7 @@ var (
 type Route struct {
 	Pattern     string
 	Method      *MethodHandler
-	ParamValues map[string]string
+	ParamValues map[string]any
 }
 
 // IsRequestBodyRequired checks if the request body of this route is required.

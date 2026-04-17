@@ -15,10 +15,10 @@
 package oaschema
 
 import (
-	"mime"
 	"slices"
 	"strings"
 
+	"github.com/pb33f/libopenapi/datamodel/high/base"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/relychan/goutils/httpheader"
@@ -127,50 +127,6 @@ func GetResponseContentTypeFromOperation(operation *highv3.Operation) string {
 	return ""
 }
 
-// ValidateContentType validates the content type and prefer the application/json content type
-// if the content type string has many content types.
-func ValidateContentType(contentType string) (string, error) {
-	if contentType == "" {
-		return contentType, nil
-	}
-
-	var result string
-
-	for item := range strings.SplitSeq(contentType, ",") {
-		trimmed := strings.TrimSpace(item)
-
-		parsed, _, err := mime.ParseMediaType(trimmed)
-		if err != nil {
-			continue
-		}
-
-		if parsed == httpheader.ContentTypeJSON {
-			return trimmed, nil
-		}
-
-		if result == "" {
-			result = trimmed
-		}
-	}
-
-	if result != "" {
-		return result, nil
-	}
-
-	return "", ErrInvalidContentType
-}
-
-// EqualContentType checks if both content type are equal with parameters excluded.
-func EqualContentType(left, right string) bool {
-	leftMediaType, _, _ := strings.Cut(left, ";")
-	rightMediaType, _, _ := strings.Cut(right, ";")
-
-	return strings.EqualFold(
-		strings.TrimSpace(leftMediaType),
-		strings.TrimSpace(rightMediaType),
-	)
-}
-
 // MergeOrderedMap assigns properties of the source order map to another.
 func MergeOrderedMap[K comparable, V any](dest, src *orderedmap.Map[K, V]) *orderedmap.Map[K, V] {
 	if src == nil || src.Len() == 0 {
@@ -191,4 +147,32 @@ func MergeOrderedMap[K comparable, V any](dest, src *orderedmap.Map[K, V]) *orde
 	}
 
 	return dest
+}
+
+// NormalizeType normalize a schema type.
+// Returns the type name and whether if it is a primitive type.
+func NormalizeType(typeName string) (string, bool) {
+	lowerTypeName := strings.ToLower(typeName)
+
+	switch lowerTypeName {
+	case "bool", "boolean":
+		return Boolean, true
+	case "string", "uuid", "varchar":
+		return String, true
+	case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64":
+		return Integer, true
+	case "number", "decimal", "float", "float32", "float64", "double":
+		return Number, true
+	default:
+		// array, object and unknown type.
+		return lowerTypeName, false
+	}
+}
+
+// IsSchemaEmpty checks if the schema type is empty.
+func IsSchemaEmpty(schema *base.Schema) bool {
+	return schema == nil || (len(schema.Type) == 0 &&
+		len(schema.AllOf) == 0 &&
+		len(schema.AnyOf) == 0 &&
+		len(schema.OneOf) == 0)
 }

@@ -62,7 +62,7 @@ func TestTransformRequest(t *testing.T) {
 			TemplateData: func() *proxyhandler.Request {
 				request := &proxyhandler.Request{}
 
-				request.SetURLParams(map[string]string{
+				request.SetURLParams(map[string]any{
 					"name": "Queen",
 				})
 
@@ -169,7 +169,7 @@ func TestRequestTemplateData_ToMap(t *testing.T) {
 		"name": "test",
 	})
 
-	data.SetURLParams(map[string]string{
+	data.SetURLParams(map[string]any{
 		"id": "123",
 	})
 
@@ -750,7 +750,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 		}
 
 		templateData := proxyhandler.Request{}
-		templateData.SetURLParams(map[string]string{
+		templateData.SetURLParams(map[string]any{
 			"limit": "10",
 		})
 
@@ -840,7 +840,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 		}
 
 		templateData := proxyhandler.Request{}
-		templateData.SetURLParams(map[string]string{
+		templateData.SetURLParams(map[string]any{
 			"count": "not_a_number",
 		})
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package oaschema defines schemas for Open API resources
+// Package oaschema defines schemas for Open API resources.
 package oaschema
 
 import (

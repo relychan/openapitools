@@ -25,6 +25,7 @@ import (
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
@@ -147,7 +148,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 			return nil, respErr
 		}
 
-		requestURL.RawQuery = parameter.EncodeQueryValuesUnescape(queryValues)
+		requestURL.RawQuery = oasvalidator.EncodeQueryValuesUnescape(queryValues)
 		req.SetURL(requestURL.String())
 	}
 
@@ -218,7 +219,7 @@ func (re *RESTfulHandler) evaluateRequestPath(
 		return "", url.Values{}, nil
 	}
 
-	newRequestPath, err := parameter.ReplaceURLTemplate(
+	newRequestPath, err := oasvalidator.ReplaceURLTemplate(
 		requestPath,
 		func(key string) (string, error) {
 			for _, param := range re.customRequest.Parameters {

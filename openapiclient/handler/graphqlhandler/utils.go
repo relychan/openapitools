@@ -16,10 +16,10 @@ package graphqlhandler
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 
 	"github.com/relychan/goutils"
+	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/parser"
 )
@@ -68,25 +68,16 @@ func ValidateGraphQLString(query string) (*GraphQLHandler, error) {
 // convertVariableTypeFromString coerces a string value to the Go type that matches the
 // declared GraphQL scalar (bool, int*, uint*, float*). Returns the original string for
 // unknown or nil types.
-func convertVariableTypeFromString(varDef *ast.VariableDefinition, value string) (any, error) {
+func convertVariableTypeFromString(varDef *ast.VariableDefinition, value any) (any, error) {
 	if varDef.Type == nil {
 		// unknown type. Returns the original value.
 		return value, nil
 	}
 
-	switch strings.ToLower(varDef.Type.NamedType) {
-	case "bool", "boolean":
-		return strconv.ParseBool(value)
-	case "int", "int8", "int16", "int32", "int64":
-		return strconv.ParseInt(value, 10, 64)
-	case "uint", "uint8", "uint16", "uint32", "uint64":
-		return strconv.ParseUint(value, 10, 64)
-	case "number", "decimal", "float", "float32", "float64", "double":
-		return strconv.ParseFloat(value, 64)
-	default:
-		// unknown type. Returns the original value.
-		return value, nil
-	}
+	namedType := strings.ToLower(varDef.Type.NamedType)
+	result, _, err := oasvalidator.DecodePrimitiveValueFromType(value, namedType)
+
+	return result, err
 }
 
 // convertVariableTypeFromUnknownValue coerces an arbitrary value to the declared GraphQL scalar type.
