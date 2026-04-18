@@ -41,7 +41,7 @@ type pathParamDecoder struct {
 func DecodePathValue(definition *highv3.Parameter, value string) (any, *goutils.ErrorDetail) {
 	if value == "" {
 		return nil, &goutils.ErrorDetail{
-			Code:      oaschema.ErrCodeInvalidURLParam,
+			Code:      oasvalidator.ErrCodeInvalidURLParam,
 			Detail:    "URL parameter is required",
 			Parameter: definition.Name,
 		}
@@ -58,7 +58,7 @@ func DecodePathValue(definition *highv3.Parameter, value string) (any, *goutils.
 	)
 	if err != nil {
 		return nil, &goutils.ErrorDetail{
-			Code:      oaschema.ErrCodeInvalidURLParam,
+			Code:      oasvalidator.ErrCodeInvalidURLParam,
 			Detail:    err.Error(),
 			Parameter: definition.Name,
 		}
@@ -91,7 +91,7 @@ func (ppe *pathParamDecoder) DecodeFromSchemaTypes() (any, string, *goutils.Erro
 	case oaschema.EncodingStyleLabel:
 		if ppe.RawValue[0] != oaschema.Dot[0] {
 			return nil, "", &goutils.ErrorDetail{
-				Code:      oaschema.ErrCodeInvalidURLParam,
+				Code:      oasvalidator.ErrCodeInvalidURLParam,
 				Detail:    "The label style of parameter value must start with a dot",
 				Parameter: ppe.Name,
 			}
@@ -101,7 +101,7 @@ func (ppe *pathParamDecoder) DecodeFromSchemaTypes() (any, string, *goutils.Erro
 	case oaschema.EncodingStyleMatrix:
 		if ppe.RawValue[0] != oaschema.SemiColon[0] {
 			return nil, "", &goutils.ErrorDetail{
-				Code:      oaschema.ErrCodeInvalidURLParam,
+				Code:      oasvalidator.ErrCodeInvalidURLParam,
 				Detail:    "The matrix style of parameter value must start with a semicolon",
 				Parameter: ppe.Name,
 			}
@@ -128,7 +128,7 @@ func (ppe *pathParamDecoder) DecodeFromSchemaTypes() (any, string, *goutils.Erro
 		}
 
 		finalError = &goutils.ErrorDetail{
-			Code:      oaschema.ErrCodeInvalidURLParam,
+			Code:      oasvalidator.ErrCodeInvalidURLParam,
 			Detail:    err.Error(),
 			Parameter: ppe.Name,
 		}
@@ -148,7 +148,7 @@ func (ppe *pathParamDecoder) DecodeFromSchemaType(
 	)
 	if err != nil {
 		return nil, "", &goutils.ErrorDetail{
-			Code:      oaschema.ErrCodeInvalidURLParam,
+			Code:      oasvalidator.ErrCodeInvalidURLParam,
 			Detail:    err.Error(),
 			Parameter: ppe.Name,
 		}
@@ -183,7 +183,7 @@ func (ppe *pathParamDecoder) DecodeFromArray() ([]any, *goutils.ErrorDetail) {
 	if ppe.Schema.MaxItems != nil && valueLength > *ppe.Schema.MaxItems {
 		return nil, oasvalidator.InvalidParamArrayMaxItemsError(
 			ppe.Name,
-			oaschema.ErrCodeInvalidURLParam,
+			oasvalidator.ErrCodeInvalidURLParam,
 			*ppe.Schema.MaxItems,
 			valueLength,
 		)
@@ -192,10 +192,21 @@ func (ppe *pathParamDecoder) DecodeFromArray() ([]any, *goutils.ErrorDetail) {
 	if ppe.Schema.MinItems != nil && valueLength < *ppe.Schema.MinItems {
 		return nil, oasvalidator.InvalidParamArrayMinItemsError(
 			ppe.Name,
-			oaschema.ErrCodeInvalidURLParam,
+			oasvalidator.ErrCodeInvalidURLParam,
 			*ppe.Schema.MinItems,
 			valueLength,
 		)
+	}
+
+	if ppe.Schema.UniqueItems != nil && *ppe.Schema.UniqueItems {
+		duplicatedItems := oasvalidator.FindDuplicatedItems(strValues)
+		if len(duplicatedItems) > 0 {
+			return nil, oasvalidator.InvalidParamArrayUniqueItemsError(
+				ppe.Name,
+				oasvalidator.ErrCodeInvalidURLParam,
+				duplicatedItems,
+			)
+		}
 	}
 
 	if len(strValues) == 0 || ppe.Schema.Items.A == nil {
@@ -288,7 +299,7 @@ func (ppe *pathParamDecoder) SplitArrayFromString() ([]string, *goutils.ErrorDet
 				value, found := strings.CutPrefix(part, prefix)
 				if !found {
 					return nil, &goutils.ErrorDetail{
-						Code:      oaschema.ErrCodeInvalidURLParam,
+						Code:      oasvalidator.ErrCodeInvalidURLParam,
 						Detail:    "Invalid matrix style in parameter value. The array value must follow this format: ;key1=value1;key2=value2",
 						Parameter: ppe.Name,
 					}
@@ -305,7 +316,7 @@ func (ppe *pathParamDecoder) SplitArrayFromString() ([]string, *goutils.ErrorDet
 		value, found := strings.CutPrefix(ppe.RawValue, prefix)
 		if !found {
 			return nil, &goutils.ErrorDetail{
-				Code:      oaschema.ErrCodeInvalidURLParam,
+				Code:      oasvalidator.ErrCodeInvalidURLParam,
 				Detail:    "Invalid matrix style in parameter value. The array value must follow this format: ;key1=value1,value2",
 				Parameter: ppe.Name,
 			}
@@ -388,7 +399,7 @@ func (ppe *pathParamDecoder) DecodeItemValueFromSchemaTypes(
 		)
 		if err != nil {
 			finalError = &goutils.ErrorDetail{
-				Code:      oaschema.ErrCodeInvalidURLParam,
+				Code:      oasvalidator.ErrCodeInvalidURLParam,
 				Detail:    err.Error(),
 				Parameter: ppe.Name,
 			}
@@ -402,7 +413,7 @@ func (ppe *pathParamDecoder) DecodeItemValueFromSchemaTypes(
 	}
 
 	return nil, "", &goutils.ErrorDetail{
-		Code: oaschema.ErrCodeInvalidURLParam,
+		Code: oasvalidator.ErrCodeInvalidURLParam,
 		Detail: fmt.Sprintf(
 			"Unsupported types or nested fields in URL path parameter: %v",
 			itemSchema.Type,
@@ -474,7 +485,7 @@ func (ppe *pathParamDecoder) newInvalidObjectError() *goutils.ErrorDetail {
 	}
 
 	return &goutils.ErrorDetail{
-		Code:      oaschema.ErrCodeInvalidURLParam,
+		Code:      oasvalidator.ErrCodeInvalidURLParam,
 		Detail:    message,
 		Parameter: ppe.Name,
 	}

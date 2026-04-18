@@ -24,7 +24,7 @@ import (
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
-	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 )
 
 type multipartFormEncoder struct {
@@ -67,7 +67,7 @@ func (mfe *multipartFormEncoder) Encode(rootValue any) error {
 	if rootValue == nil {
 		return &goutils.ErrorDetail{
 			Detail: "request body is required",
-			Code:   oaschema.ErrCodeMultipartFormEncodeError,
+			Code:   oasvalidator.ErrCodeMultipartFormEncodeError,
 		}
 	}
 
@@ -164,7 +164,7 @@ func (mfe *multipartFormEncoder) evalRootValueReflection(reflectValue reflect.Va
 					Detail: "invalid multipart form body. Expected the object key as a string, got: " +
 						key.Kind().
 							String(),
-					Code: oaschema.ErrCodeMultipartFormEncodeError,
+					Code: oasvalidator.ErrCodeMultipartFormEncodeError,
 				}
 			}
 

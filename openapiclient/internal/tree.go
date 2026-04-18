@@ -24,6 +24,7 @@ import (
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/goutils"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
 )
@@ -526,7 +527,7 @@ func validateURLParams(
 		if !ok {
 			if param.Required != nil && *param.Required {
 				errs = append(errs, goutils.ErrorDetail{
-					Code:      oaschema.ErrCodeInvalidURLParam,
+					Code:      oasvalidator.ErrCodeInvalidURLParam,
 					Detail:    "Parameter is required",
 					Parameter: param.Name,
 				})

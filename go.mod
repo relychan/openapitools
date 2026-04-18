@@ -4,6 +4,7 @@ go 1.26
 
 require (
 	github.com/buger/jsonparser v1.1.2
+	github.com/dlclark/regexp2 v1.11.5
 	github.com/failsafe-go/failsafe-go v0.9.6
 	github.com/hasura/goenvconf v0.7.0
 	github.com/hasura/gotel v0.8.0

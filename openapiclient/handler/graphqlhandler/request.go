@@ -24,7 +24,7 @@ import (
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
-	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -110,7 +110,7 @@ func (ge *GraphQLHandler) handleRequest(
 	if resp.Body == nil || resp.Body == http.NoBody {
 		errorDetail := goutils.ErrorDetail{
 			Detail: "graphql response must be a valid JSON object",
-			Code:   oaschema.ErrCodeGraphQLResponseEmpty,
+			Code:   oasvalidator.ErrCodeGraphQLResponseEmpty,
 		}
 
 		ge.printLog(

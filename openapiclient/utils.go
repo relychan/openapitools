@@ -27,7 +27,6 @@ import (
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
-	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"github.com/relychan/openapitools/openapiclient/internal"
@@ -122,7 +121,7 @@ func parseHTTPRequestBody(
 	if !ok {
 		errorDetail = &goutils.ErrorDetail{
 			Detail: err.Error(),
-			Code:   oaschema.ErrCodeRequestDecodeBodyError,
+			Code:   oasvalidator.ErrCodeRequestDecodeBodyError,
 		}
 	}
 

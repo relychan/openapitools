@@ -25,7 +25,6 @@ import (
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
-	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
@@ -133,7 +132,7 @@ func (*RESTfulHandler) postTransformedResponse(
 	if !ok {
 		errorDetail = &goutils.ErrorDetail{
 			Detail: err.Error(),
-			Code:   oaschema.ErrCodeResponseTransformError,
+			Code:   oasvalidator.ErrCodeResponseTransformError,
 		}
 	}
 
@@ -182,7 +181,7 @@ func (re *RESTfulHandler) writeRawResponse(
 
 		if decodeError != nil {
 			respErr := goutils.NewServerError(goutils.ErrorDetail{
-				Code:   oaschema.ErrCodeWriteResponseError,
+				Code:   oasvalidator.ErrCodeWriteResponseError,
 				Detail: decodeError.Error(),
 			})
 
@@ -202,7 +201,7 @@ func (re *RESTfulHandler) writeRawResponse(
 
 	if err != nil {
 		respErr := goutils.NewServerError(goutils.ErrorDetail{
-			Code:   oaschema.ErrCodeWriteResponseError,
+			Code:   oasvalidator.ErrCodeWriteResponseError,
 			Detail: err.Error(),
 		})
 
@@ -233,7 +232,7 @@ func (*RESTfulHandler) decodeRawResponse(
 	decodedBody, err := contenttype.Decode(contentType, response.Body)
 	if err != nil {
 		respErr := goutils.NewServerError(goutils.ErrorDetail{
-			Code:   oaschema.ErrCodeResponseDecodeBodyError,
+			Code:   oasvalidator.ErrCodeResponseDecodeBodyError,
 			Detail: err.Error(),
 		})
 

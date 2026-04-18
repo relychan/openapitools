@@ -26,7 +26,7 @@ import (
 
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
-	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 )
 
 // MultipartWriter extends multipart.Writer with helpers.
@@ -175,6 +175,6 @@ func newMultipartWriteError(name string, err error) error {
 	return &goutils.ErrorDetail{
 		Detail:  err.Error(),
 		Pointer: "/" + name,
-		Code:    oaschema.ErrCodeMultipartFormEncodeError,
+		Code:    oasvalidator.ErrCodeMultipartFormEncodeError,
 	}
 }

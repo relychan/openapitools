@@ -19,7 +19,7 @@ import (
 	"io"
 
 	"github.com/relychan/goutils"
-	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 )
 
 // DecodeXML decodes an arbitrary XML from a reader stream.
@@ -143,7 +143,7 @@ L:
 func newMalformedXMLError(err error, pointer string) error {
 	return &goutils.ErrorDetail{
 		Detail:  err.Error(),
-		Code:    oaschema.ErrCodeMalformedXML,
+		Code:    oasvalidator.ErrCodeMalformedXML,
 		Pointer: pointer,
 	}
 }

@@ -80,26 +80,95 @@ func FindDuplicatedItems[T cmp.Ordered](values []T) []T {
 
 	results := make([]T, 0, len(sortedSlice)/2)
 
-	for i := 0; i < len(sortedSlice); i++ {
-		if i == len(sortedSlice)-1 {
-			break
-		}
+	i := 0
 
+	for i < len(sortedSlice)-1 {
 		item := sortedSlice[i]
 		j := i + 1
 
-		for j < len(sortedSlice) {
-			if sortedSlice[j] != item {
-				break
-			}
-
+		for j < len(sortedSlice) && sortedSlice[j] == item {
 			j++
 		}
 
-		if i == j+1 {
+		if j > i+1 {
 			results = append(results, item)
 		}
+
+		i = j
 	}
 
 	return results
+}
+
+// FindDuplicatedItemsFunc find duplicated items in the array with a comparison function.
+func FindDuplicatedItemsFunc[S ~[]E, E any](values S, compare func(a E, b E) int) []E {
+	if len(values) <= 1 {
+		return []E{}
+	}
+
+	sortedSlice := make([]E, len(values))
+
+	copy(sortedSlice, values)
+	slices.SortFunc(sortedSlice, compare)
+
+	results := make([]E, 0, len(sortedSlice)/2)
+
+	i := 0
+
+	for i < len(sortedSlice)-1 {
+		item := sortedSlice[i]
+		j := i + 1
+
+		for j < len(sortedSlice) && compare(sortedSlice[j], item) == 0 {
+			j++
+		}
+
+		if j > i+1 {
+			results = append(results, item)
+		}
+
+		i = j
+	}
+
+	return results
+}
+
+func CompareNullable[E cmp.Ordered](a *E, b *E) int {
+	if a == nil && b == nil {
+		return 0
+	}
+
+	if a == nil {
+		return -1
+	}
+
+	if b == nil {
+		return 1
+	}
+
+	return cmp.Compare(*a, *b)
+}
+
+func CompareBoolean(a bool, b bool) int {
+	if a == b {
+		return 0
+	}
+
+	if a {
+		return 1
+	}
+
+	return -1
+}
+
+func CompareNullableBoolean(a *bool, b *bool) int {
+	if (a == nil && b == nil) || a == b {
+		return 0
+	}
+
+	if a != nil && *a {
+		return 1
+	}
+
+	return -1
 }

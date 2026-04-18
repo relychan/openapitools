@@ -22,7 +22,7 @@ import (
 	"strconv"
 
 	"github.com/relychan/goutils"
-	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 )
 
 const xmlRootName = "xml"
@@ -338,7 +338,7 @@ func newXMLInvalidKeyStringError(kind reflect.Kind, pointer string) *goutils.Err
 	return &goutils.ErrorDetail{
 		Detail:  "expected the type of key is a scalar, got: " + kind.String(),
 		Pointer: pointer,
-		Code:    oaschema.ErrCodeXMLEncodeError,
+		Code:    oasvalidator.ErrCodeXMLEncodeError,
 	}
 }
 
@@ -346,7 +346,7 @@ func newXMLEncodeError(err error, pointer string) *goutils.ErrorDetail {
 	return &goutils.ErrorDetail{
 		Detail:  err.Error(),
 		Pointer: pointer,
-		Code:    oaschema.ErrCodeXMLEncodeError,
+		Code:    oasvalidator.ErrCodeXMLEncodeError,
 	}
 }
 

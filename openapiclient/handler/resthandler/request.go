@@ -85,7 +85,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 			rawValue, err := param.Evaluate(rawRequestData)
 			if err != nil {
 				respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
-					Code:   oaschema.ErrCodeRequestTransformError,
+					Code:   oasvalidator.ErrCodeRequestTransformError,
 					Detail: err.Error(),
 					Header: param.Name,
 				})
@@ -104,7 +104,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 			value, err := param.Evaluate(rawRequestData)
 			if err != nil {
 				respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
-					Code:      oaschema.ErrCodeRequestTransformError,
+					Code:      oasvalidator.ErrCodeRequestTransformError,
 					Detail:    err.Error(),
 					Parameter: param.Name,
 				})
@@ -140,7 +140,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 		requestURL, err := goutils.ParsePathOrHTTPURL(resolvedRequestPath)
 		if err != nil {
 			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
-				Code:   oaschema.ErrCodeInvalidRequestURL,
+				Code:   oasvalidator.ErrCodeInvalidRequestURL,
 				Detail: err.Error(),
 			})
 			respErr.Detail = "failed to parse request URL"
@@ -158,7 +158,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 		newBody, err = re.customRequest.Body.Transform(rawRequestData)
 		if err != nil {
 			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
-				Code:   oaschema.ErrCodeRequestTransformError,
+				Code:   oasvalidator.ErrCodeRequestTransformError,
 				Detail: err.Error(),
 			})
 			respErr.Detail = "failed to transform request body"
@@ -180,7 +180,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 			if !ok {
 				errDetail = &goutils.ErrorDetail{
 					Detail: err.Error(),
-					Code:   oaschema.ErrCodeRequestTransformError,
+					Code:   oasvalidator.ErrCodeRequestTransformError,
 				}
 			}
 
@@ -233,7 +233,7 @@ func (re *RESTfulHandler) evaluateRequestPath(
 						Detail:    err.Error(),
 						Pointer:   "/" + param.Name,
 						Parameter: key,
-						Code:      oaschema.ErrCodeInvalidRequestURL,
+						Code:      oasvalidator.ErrCodeInvalidRequestURL,
 					})
 					respErr.Detail = "failed to evaluate variable"
 
@@ -252,7 +252,7 @@ func (re *RESTfulHandler) evaluateRequestPath(
 			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
 				Detail:    "the parameter can not be resolved",
 				Parameter: key,
-				Code:      oaschema.ErrCodeInvalidURLParam,
+				Code:      oasvalidator.ErrCodeInvalidURLParam,
 			})
 			respErr.Detail = "failed to evaluate request path"
 
@@ -279,7 +279,7 @@ func extractQueryValuesFromPath(
 	if err != nil {
 		respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
 			Detail: err.Error(),
-			Code:   oaschema.ErrCodeInvalidRequestURL,
+			Code:   oasvalidator.ErrCodeInvalidRequestURL,
 		})
 		respErr.Detail = "invalid query params"
 

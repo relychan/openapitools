@@ -169,7 +169,7 @@ func (ge *GraphQLHandler) Handle(
 		err := json.NewDecoder(resp.Body).Decode(&respBody)
 		if err != nil {
 			return resp, nil, newGraphQLResponseEncodeError(
-				oaschema.ErrCodeResponseTransformError,
+				oasvalidator.ErrCodeResponseTransformError,
 				err,
 			)
 		}

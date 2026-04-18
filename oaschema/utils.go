@@ -149,26 +149,6 @@ func MergeOrderedMap[K comparable, V any](dest, src *orderedmap.Map[K, V]) *orde
 	return dest
 }
 
-// NormalizeType normalize a schema type.
-// Returns the type name and whether if it is a primitive type.
-func NormalizeType(typeName string) (string, bool) {
-	lowerTypeName := strings.ToLower(typeName)
-
-	switch lowerTypeName {
-	case "bool", "boolean":
-		return Boolean, true
-	case "string", "uuid", "varchar":
-		return String, true
-	case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64":
-		return Integer, true
-	case "number", "decimal", "float", "float32", "float64", "double":
-		return Number, true
-	default:
-		// array, object and unknown type.
-		return lowerTypeName, false
-	}
-}
-
 // IsSchemaEmpty checks if the schema type is empty.
 func IsSchemaEmpty(schema *base.Schema) bool {
 	return schema == nil || (len(schema.Type) == 0 &&

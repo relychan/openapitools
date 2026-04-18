@@ -25,7 +25,7 @@ import (
 	"github.com/buger/jsonparser"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
-	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -92,7 +92,7 @@ func (ge *GraphQLHandler) handleTransformResponse(
 			span.RecordError(err)
 
 			return nil, newGraphQLResponseEncodeError(
-				oaschema.ErrCodeResponseTransformError,
+				oasvalidator.ErrCodeResponseTransformError,
 				err,
 			)
 		}
@@ -103,7 +103,7 @@ func (ge *GraphQLHandler) handleTransformResponse(
 			span.RecordError(err)
 
 			return nil, newGraphQLResponseEncodeError(
-				oaschema.ErrCodeResponseTransformError,
+				oasvalidator.ErrCodeResponseTransformError,
 				err,
 			)
 		}
@@ -121,7 +121,7 @@ func (ge *GraphQLHandler) handleTransformResponse(
 		span.RecordError(err)
 
 		return responseBody, newGraphQLResponseEncodeError(
-			oaschema.ErrCodeResponseTransformError,
+			oasvalidator.ErrCodeResponseTransformError,
 			err,
 		)
 	}
@@ -173,7 +173,7 @@ func (ge *GraphQLHandler) writeTransformResponse(
 			span.RecordError(err)
 
 			return nil, newGraphQLResponseEncodeError(
-				oaschema.ErrCodeResponseTransformError,
+				oasvalidator.ErrCodeResponseTransformError,
 				err,
 			)
 		}
@@ -190,7 +190,7 @@ func (ge *GraphQLHandler) writeTransformResponse(
 			span.RecordError(err)
 
 			return nil, newGraphQLResponseEncodeError(
-				oaschema.ErrCodeResponseTransformError,
+				oasvalidator.ErrCodeResponseTransformError,
 				err,
 			)
 		}
@@ -206,7 +206,7 @@ func (ge *GraphQLHandler) writeTransformResponse(
 		span.RecordError(err)
 
 		return nil, newGraphQLResponseEncodeError(
-			oaschema.ErrCodeResponseTransformError,
+			oasvalidator.ErrCodeResponseTransformError,
 			err,
 		)
 	}
@@ -217,7 +217,7 @@ func (ge *GraphQLHandler) writeTransformResponse(
 		span.RecordError(err)
 
 		return nil, newGraphQLResponseEncodeError(
-			oaschema.ErrCodeResponseTransformError,
+			oasvalidator.ErrCodeResponseTransformError,
 			err,
 		)
 	}
@@ -229,7 +229,7 @@ func (ge *GraphQLHandler) writeTransformResponse(
 		span.SetStatus(codes.Error, "failed to write response body")
 		span.RecordError(err)
 
-		respError := newGraphQLResponseEncodeError(oaschema.ErrCodeWriteResponseError, err)
+		respError := newGraphQLResponseEncodeError(oasvalidator.ErrCodeWriteResponseError, err)
 
 		return transformedBody, respError
 	}
@@ -253,7 +253,7 @@ func (ge *GraphQLHandler) evaluateGraphQLError(
 	if err != nil {
 		respErr := &goutils.ErrorDetail{
 			Detail: err.Error(),
-			Code:   oaschema.ErrCodeRemoteServerError,
+			Code:   oasvalidator.ErrCodeRemoteServerError,
 		}
 
 		return http.StatusInternalServerError, nil, respErr
@@ -268,7 +268,7 @@ func (ge *GraphQLHandler) evaluateGraphQLError(
 
 		respErr := &goutils.ErrorDetail{
 			Detail: err.Error(),
-			Code:   oaschema.ErrCodeRemoteServerError,
+			Code:   oasvalidator.ErrCodeRemoteServerError,
 		}
 
 		return http.StatusInternalServerError, nil, respErr
@@ -281,7 +281,7 @@ func (ge *GraphQLHandler) evaluateGraphQLError(
 	if fieldType != jsonparser.Array {
 		err := &goutils.ErrorDetail{
 			Detail: "Invalid errors in GraphQL response. Expected an array, got: " + fieldType.String(),
-			Code:   oaschema.ErrCodeRemoteServerError,
+			Code:   oasvalidator.ErrCodeRemoteServerError,
 		}
 
 		return http.StatusInternalServerError, nil, err
@@ -303,7 +303,7 @@ func (ge *GraphQLHandler) evaluateGraphQLError(
 	if err != nil {
 		respErr := &goutils.ErrorDetail{
 			Detail: err.Error(),
-			Code:   oaschema.ErrCodeRemoteServerError,
+			Code:   oasvalidator.ErrCodeRemoteServerError,
 		}
 
 		return http.StatusInternalServerError, nil, respErr

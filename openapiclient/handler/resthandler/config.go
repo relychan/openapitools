@@ -160,7 +160,7 @@ func newCustomRESTRequestFromConfig(
 	default:
 		return nil, &goutils.ErrorDetail{
 			Detail:  "invalid HTTP method to transform. Expected one of GET, POST, PUT, PATCH, DELETE, got: " + result.Method,
-			Code:    oaschema.ErrCodeInvalidRESTfulRequestConfig,
+			Code:    oasvalidator.ErrCodeInvalidRESTfulRequestConfig,
 			Pointer: "/method",
 		}
 	}
@@ -170,7 +170,7 @@ func newCustomRESTRequestFromConfig(
 		if err != nil {
 			return nil, &goutils.ErrorDetail{
 				Detail:  "failed to evaluate the parameter: " + err.Error(),
-				Code:    oaschema.ErrCodeInvalidRESTfulRequestConfig,
+				Code:    oasvalidator.ErrCodeInvalidRESTfulRequestConfig,
 				Pointer: "/parameters/" + param.Name,
 			}
 		}
@@ -186,7 +186,7 @@ func newCustomRESTRequestFromConfig(
 		if err != nil {
 			return nil, &goutils.ErrorDetail{
 				Detail:  "failed to transform custom request body: " + err.Error(),
-				Code:    oaschema.ErrCodeInvalidRESTfulRequestConfig,
+				Code:    oasvalidator.ErrCodeInvalidRESTfulRequestConfig,
 				Pointer: "/body",
 			}
 		}
@@ -214,7 +214,7 @@ func parseRequestContentType(
 		return "", &goutils.ErrorDetail{
 			Detail:  err.Error() + " " + contentType,
 			Pointer: "/contentType",
-			Code:    oaschema.ErrCodeInvalidRESTfulRequestConfig,
+			Code:    oasvalidator.ErrCodeInvalidRESTfulRequestConfig,
 		}
 	}
 
@@ -238,7 +238,7 @@ func parseResponseContentType(
 		return "", &goutils.ErrorDetail{
 			Detail:  err.Error() + " " + contentType,
 			Pointer: "/contentType",
-			Code:    oaschema.ErrCodeProxyRESTfulResponseConfig,
+			Code:    oasvalidator.ErrCodeProxyRESTfulResponseConfig,
 		}
 	}
 
