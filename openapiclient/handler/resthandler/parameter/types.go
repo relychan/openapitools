@@ -17,9 +17,11 @@ package parameter
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/relychan/goutils"
 	"github.com/relychan/openapitools/oaschema"
 )
 
@@ -103,6 +105,13 @@ func (conf BaseParameter) GetStyleAndExplode() (oaschema.ParameterEncodingStyle,
 // ParamKeys represent a key slice.
 type ParamKeys []ParamKey
 
+// Equal checks if the target value is equal.
+func (ks ParamKeys) Equal(target ParamKeys) bool {
+	return slices.EqualFunc(ks, target, func(a, b ParamKey) bool {
+		return a.Equal(b)
+	})
+}
+
 // Format prints parameter keys with format.
 func (ks ParamKeys) Format(root string, isDeepObject bool) string {
 	lenKeys := len(ks)
@@ -149,7 +158,7 @@ func (ks ParamKeys) String() string {
 
 // ParamKey represents a key string or index.
 type ParamKey struct {
-	key   string
+	key   *string
 	index *int
 }
 
@@ -160,16 +169,22 @@ func NewIndex(index int) ParamKey {
 
 // NewKey creates a string key.
 func NewKey(key string) ParamKey {
-	return ParamKey{key: key}
+	return ParamKey{key: &key}
+}
+
+// Equal checks if the target value is equal.
+func (k ParamKey) Equal(target ParamKey) bool {
+	return goutils.EqualComparablePtr(k.key, target.key) &&
+		goutils.EqualComparablePtr(k.index, target.index)
 }
 
 // IsZero checks if the key is empty.
 func (k ParamKey) IsZero() bool {
-	return k.key == "" && k.index == nil
+	return k.key != nil && k.index == nil
 }
 
 // Key gets the string key.
-func (k ParamKey) Key() string {
+func (k ParamKey) Key() *string {
 	return k.key
 }
 
@@ -184,13 +199,20 @@ func (k ParamKey) String() string {
 		return strconv.Itoa(*k.index)
 	}
 
-	return k.key
+	if k.key != nil {
+		return *k.key
+	}
+
+	return ""
 }
 
 type ParameterItems []ParameterItem
 
-// Build parameter items to a key-values map and estimate the length of the string will be built.
-func (ssp ParameterItems) Build(prefix string, isDeepObject bool) (map[string][]string, int) {
+// Build build parameter items to a key-values map and estimate the length of the string will be built.
+func (ssp ParameterItems) Build(
+	prefix string,
+	isDeepObject bool,
+) (map[string][]string, int) {
 	if len(ssp) == 0 {
 		return nil, 0
 	}
@@ -209,7 +231,7 @@ func (ssp ParameterItems) Build(prefix string, isDeepObject bool) (map[string][]
 	return results, count
 }
 
-// ParameterItem represents the key-value slice pair.
+// ParameterItem represents the key-value pair.
 type ParameterItem struct {
 	keys  ParamKeys
 	value string
@@ -238,4 +260,85 @@ func (pi ParameterItem) Keys() ParamKeys {
 // Value return the value of the item.
 func (pi ParameterItem) Value() string {
 	return pi.value
+}
+
+type ParameterNodes []*ParameterNode
+
+func (pn *ParameterNodes) InsertNode(keys ParamKeys, values []string) *goutils.ErrorDetail {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	for _, vs := range *pn {
+		if vs.key.Equal(keys[0]) {
+			err := vs.InsertNode(keys[1:], values)
+			if err != nil {
+				err.Parameter = keys[0].String()
+
+				return err
+			}
+
+			return nil
+		}
+	}
+
+	node := &ParameterNode{
+		key: keys[0],
+	}
+
+	*pn = append(*pn, node)
+
+	err := node.InsertNode(keys[1:], values)
+	if err != nil {
+		err.Parameter = keys[0].String()
+
+		return err
+	}
+
+	return nil
+}
+
+type ParameterNode struct {
+	key    ParamKey
+	values []string
+	items  []*ParameterNode
+}
+
+func (pn *ParameterNode) InsertNode(keys ParamKeys, values []string) *goutils.ErrorDetail {
+	if len(keys) == 0 {
+		pn.values = values
+
+		return nil
+	}
+
+	// best-effort to converting the key to index if other keys in the list are indexes.
+	if len(pn.items) == 1 && pn.items[0].key.key != nil && keys[0].index != nil {
+		indexKey, err := strconv.Atoi(*pn.items[0].key.key)
+		if err != nil {
+			return newMixedArrayAndObjectError()
+		}
+
+		pn.items[0].key = NewIndex(indexKey)
+	} else if len(pn.items) > 1 && pn.items[0].key.index != nil && keys[0].key != nil {
+		indexKey, err := strconv.Atoi(*keys[0].key)
+		if err != nil {
+			return newMixedArrayAndObjectError()
+		}
+
+		keys[0] = NewIndex(indexKey)
+	}
+
+	for _, item := range pn.items {
+		if item.key.Equal(keys[0]) {
+			return item.InsertNode(keys[1:], values)
+		}
+	}
+
+	item := &ParameterNode{
+		key: keys[0],
+	}
+
+	pn.items = append(pn.items, item)
+
+	return item.InsertNode(keys[1:], values)
 }

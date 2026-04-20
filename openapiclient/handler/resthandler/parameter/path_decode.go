@@ -15,6 +15,7 @@
 package parameter
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -38,12 +39,14 @@ type pathParamDecoder struct {
 // The value is encoded differently on each style, according to the [OpenAPI specification].
 //
 // [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
-func DecodePathValue(definition *highv3.Parameter, value string) (any, *goutils.ErrorDetail) {
+func DecodePathValue(definition *highv3.Parameter, value string) (any, []goutils.ErrorDetail) {
 	if value == "" {
-		return nil, &goutils.ErrorDetail{
-			Code:      oasvalidator.ErrCodeInvalidURLParam,
-			Detail:    "URL parameter is required",
-			Parameter: definition.Name,
+		return nil, []goutils.ErrorDetail{
+			{
+				Code:      oasvalidator.ErrCodeInvalidURLParam,
+				Detail:    "URL parameter is required",
+				Parameter: definition.Name,
+			},
 		}
 	}
 
@@ -57,10 +60,12 @@ func DecodePathValue(definition *highv3.Parameter, value string) (any, *goutils.
 		definition.Explode,
 	)
 	if err != nil {
-		return nil, &goutils.ErrorDetail{
-			Code:      oasvalidator.ErrCodeInvalidURLParam,
-			Detail:    err.Error(),
-			Parameter: definition.Name,
+		return nil, []goutils.ErrorDetail{
+			{
+				Code:      oasvalidator.ErrCodeInvalidURLParam,
+				Detail:    err.Error(),
+				Parameter: definition.Name,
+			},
 		}
 	}
 
@@ -68,7 +73,7 @@ func DecodePathValue(definition *highv3.Parameter, value string) (any, *goutils.
 		Name:     definition.Name,
 		Style:    style,
 		Explode:  explode,
-		RawValue: value,
+		RawValue: strings.TrimSpace(value),
 		Schema:   definition.Schema.Schema(),
 	}
 
@@ -76,34 +81,38 @@ func DecodePathValue(definition *highv3.Parameter, value string) (any, *goutils.
 }
 
 // Decode evaluates and decodes URL parameters.
-func (ppe *pathParamDecoder) Decode() (any, *goutils.ErrorDetail) {
-	result, _, err := ppe.DecodeFromSchemaTypes()
+func (ppe *pathParamDecoder) Decode() (any, []goutils.ErrorDetail) {
+	result, _, errs := ppe.DecodeFromSchemaTypes()
 
-	return result, err
+	return result, errs
 }
 
 // DecodeFromSchemaTypes decode a path parameter value from types of schema.
 // Returns the decoded value, a matched type and an error.
 // Prefer string if exists.
-func (ppe *pathParamDecoder) DecodeFromSchemaTypes() (any, string, *goutils.ErrorDetail) {
+func (ppe *pathParamDecoder) DecodeFromSchemaTypes() (any, string, []goutils.ErrorDetail) {
 	// remove the symbol prefix from raw value string
 	switch ppe.Style {
 	case oaschema.EncodingStyleLabel:
 		if ppe.RawValue[0] != oaschema.Dot[0] {
-			return nil, "", &goutils.ErrorDetail{
-				Code:      oasvalidator.ErrCodeInvalidURLParam,
-				Detail:    "The label style of parameter value must start with a dot",
-				Parameter: ppe.Name,
+			return nil, "", []goutils.ErrorDetail{
+				{
+					Code:      oasvalidator.ErrCodeInvalidURLParam,
+					Detail:    "The label style of parameter value must start with a dot",
+					Parameter: ppe.Name,
+				},
 			}
 		}
 
 		ppe.RawValue = ppe.RawValue[1:]
 	case oaschema.EncodingStyleMatrix:
 		if ppe.RawValue[0] != oaschema.SemiColon[0] {
-			return nil, "", &goutils.ErrorDetail{
-				Code:      oasvalidator.ErrCodeInvalidURLParam,
-				Detail:    "The matrix style of parameter value must start with a semicolon",
-				Parameter: ppe.Name,
+			return nil, "", []goutils.ErrorDetail{
+				{
+					Code:      oasvalidator.ErrCodeInvalidURLParam,
+					Detail:    "The matrix style of parameter value must start with a semicolon",
+					Parameter: ppe.Name,
+				},
 			}
 		}
 
@@ -115,42 +124,40 @@ func (ppe *pathParamDecoder) DecodeFromSchemaTypes() (any, string, *goutils.Erro
 		return ppe.RawValue, oaschema.String, nil
 	}
 
-	var finalError *goutils.ErrorDetail
+	var finalErrors []goutils.ErrorDetail
 
 	for _, typeName := range ppe.Schema.Type {
-		if typeName == "" {
+		if typeName == "" || typeName == oaschema.Null {
 			continue
 		}
 
-		result, primitiveType, err := ppe.DecodeFromSchemaType(typeName)
-		if err == nil {
+		result, primitiveType, errs := ppe.DecodeFromSchemaType(typeName)
+		if len(errs) == 0 {
 			return result, primitiveType, nil
 		}
 
-		finalError = &goutils.ErrorDetail{
-			Code:      oasvalidator.ErrCodeInvalidURLParam,
-			Detail:    err.Error(),
-			Parameter: ppe.Name,
-		}
+		finalErrors = errs
 	}
 
-	return nil, "", finalError
+	return nil, "", finalErrors
 }
 
 // DecodeFromSchemaType decodes a path parameter value from a type of the schema.
 // Returns the decoded value, a matched type and an error.
 func (ppe *pathParamDecoder) DecodeFromSchemaType(
 	typeName string,
-) (any, string, *goutils.ErrorDetail) {
+) (any, string, []goutils.ErrorDetail) {
 	result, primitiveType, err := oasvalidator.DecodePrimitiveValueFromType(
 		ppe.RawValue,
 		typeName,
 	)
 	if err != nil {
-		return nil, "", &goutils.ErrorDetail{
-			Code:      oasvalidator.ErrCodeInvalidURLParam,
-			Detail:    err.Error(),
-			Parameter: ppe.Name,
+		return nil, "", []goutils.ErrorDetail{
+			{
+				Code:      oasvalidator.ErrCodeInvalidURLParam,
+				Detail:    err.Error(),
+				Parameter: ppe.Name,
+			},
 		}
 	}
 
@@ -172,50 +179,25 @@ func (ppe *pathParamDecoder) DecodeFromSchemaType(
 	}
 }
 
-func (ppe *pathParamDecoder) DecodeFromArray() ([]any, *goutils.ErrorDetail) {
+func (ppe *pathParamDecoder) DecodeFromArray() ([]any, []goutils.ErrorDetail) {
 	strValues, err := ppe.SplitArrayFromString()
 	if err != nil {
-		return nil, err
+		return nil, []goutils.ErrorDetail{*err}
 	}
 
-	valueLength := int64(len(strValues))
-	// array length validations
-	if ppe.Schema.MaxItems != nil && valueLength > *ppe.Schema.MaxItems {
-		return nil, oasvalidator.InvalidParamArrayMaxItemsError(
-			ppe.Name,
-			oasvalidator.ErrCodeInvalidURLParam,
-			*ppe.Schema.MaxItems,
-			valueLength,
-		)
-	}
-
-	if ppe.Schema.MinItems != nil && valueLength < *ppe.Schema.MinItems {
-		return nil, oasvalidator.InvalidParamArrayMinItemsError(
-			ppe.Name,
-			oasvalidator.ErrCodeInvalidURLParam,
-			*ppe.Schema.MinItems,
-			valueLength,
-		)
-	}
-
-	if ppe.Schema.UniqueItems != nil && *ppe.Schema.UniqueItems {
-		duplicatedItems := oasvalidator.FindDuplicatedItems(strValues)
-		if len(duplicatedItems) > 0 {
-			return nil, oasvalidator.InvalidParamArrayUniqueItemsError(
-				ppe.Name,
-				oasvalidator.ErrCodeInvalidURLParam,
-				duplicatedItems,
-			)
-		}
-	}
+	errFuncs := oasvalidator.ValidateArray(ppe.Schema, strValues, cmp.Compare)
+	errs := oasvalidator.CollectErrorsFunc(errFuncs, func(ed *goutils.ErrorDetail) {
+		ed.Code = oasvalidator.ErrCodeInvalidURLParam
+		ed.Parameter = ppe.Name
+	})
 
 	if len(strValues) == 0 || ppe.Schema.Items.A == nil {
-		return []any{}, nil
+		return []any{}, errs
 	}
 
 	itemSchema := ppe.Schema.Items.A.Schema()
 	if oaschema.IsSchemaEmpty(itemSchema) {
-		return goutils.ToAnySlice(strValues), nil
+		return goutils.ToAnySlice(strValues), errs
 	}
 
 	results := make([]any, len(strValues))
@@ -223,23 +205,28 @@ func (ppe *pathParamDecoder) DecodeFromArray() ([]any, *goutils.ErrorDetail) {
 	for i, value := range strValues {
 		itemValue, _, err := ppe.DecodeItemValueFromSchemaTypes(itemSchema, value)
 		if err != nil {
-			return nil, err
+			errs = append(errs, *err)
+
+			return nil, errs
 		}
 
 		results[i] = itemValue
 	}
 
-	return results, nil
+	return results, errs
 }
 
-func (ppe *pathParamDecoder) DecodeFromObject() (map[string]any, *goutils.ErrorDetail) {
+func (ppe *pathParamDecoder) DecodeFromObject() (map[string]any, []goutils.ErrorDetail) {
 	values, err := ppe.SplitObjectFromString()
 	if err != nil {
-		return nil, err
+		return nil, []goutils.ErrorDetail{*err}
 	}
 
+	errFuncs := oasvalidator.ValidateObject(ppe.Schema, values)
+	errs := oasvalidator.CollectErrors(errFuncs)
+
 	if len(values) == 0 || ppe.Schema.Properties == nil || ppe.Schema.Properties.Len() == 0 {
-		return values, nil
+		return values, errs
 	}
 
 	for iter := ppe.Schema.Properties.First(); iter != nil; iter = iter.Next() {
@@ -262,13 +249,13 @@ func (ppe *pathParamDecoder) DecodeFromObject() (map[string]any, *goutils.ErrorD
 
 		parsedValue, _, err := ppe.DecodeItemValueFromSchemaTypes(propSchema, value)
 		if err != nil {
-			return nil, err
+			errs = append(errs, *err)
+		} else {
+			values[key] = parsedValue
 		}
-
-		values[key] = parsedValue
 	}
 
-	return values, nil
+	return values, errs
 }
 
 func (ppe *pathParamDecoder) SplitArrayFromString() ([]string, *goutils.ErrorDetail) {
@@ -296,7 +283,7 @@ func (ppe *pathParamDecoder) SplitArrayFromString() ([]string, *goutils.ErrorDet
 			results := make([]string, len(parts))
 
 			for i, part := range parts {
-				value, found := strings.CutPrefix(part, prefix)
+				value, found := strings.CutPrefix(strings.TrimSpace(part), prefix)
 				if !found {
 					return nil, &goutils.ErrorDetail{
 						Code:      oasvalidator.ErrCodeInvalidURLParam,
@@ -426,18 +413,30 @@ func (ppe *pathParamDecoder) parseExplodeObject(
 	rawValue string,
 	separator string,
 ) (map[string]any, *goutils.ErrorDetail) {
+	result, ok := parseExplodeObjectParam(rawValue, separator)
+	if !ok {
+		return nil, ppe.newInvalidObjectError()
+	}
+
+	return result, nil
+}
+
+func parseExplodeObjectParam(rawValue string, separator string) (map[string]any, bool) {
 	result := make(map[string]any)
 
 	for part := range strings.SplitSeq(rawValue, separator) {
 		key, value, found := strings.Cut(part, oaschema.Equals)
+
+		key = strings.TrimSpace(key)
+
 		if !found || key == "" {
-			return nil, ppe.newInvalidObjectError()
+			return nil, false
 		}
 
 		result[key] = value
 	}
 
-	return result, nil
+	return result, true
 }
 
 func (ppe *pathParamDecoder) parseNonExplodeObject(
@@ -446,17 +445,9 @@ func (ppe *pathParamDecoder) parseNonExplodeObject(
 ) (map[string]any, *goutils.ErrorDetail) {
 	result := make(map[string]any)
 
-	parts := strings.Split(rawValue, separator)
-	if len(parts)%2 != 0 {
+	ok := parseNonExplodeObjectParam(result, rawValue, separator)
+	if !ok {
 		return nil, ppe.newInvalidObjectError()
-	}
-
-	for i := 0; i < len(parts); i += 2 {
-		if parts[i] == "" {
-			return nil, ppe.newInvalidObjectError()
-		}
-
-		result[parts[i]] = parts[i+1]
 	}
 
 	return result, nil

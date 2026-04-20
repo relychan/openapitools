@@ -17,9 +17,6 @@ const (
 	XRelyOAuth2RefreshURLEnv = "x-rely-oauth2-refresh-url-env"
 )
 
-// Type represents an enum of JSON schema type.
-type Type string
-
 const (
 	// Integer represents the constant of an integer type.
 	Integer = "integer"

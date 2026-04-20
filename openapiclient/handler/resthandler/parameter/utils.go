@@ -97,7 +97,10 @@ func EvaluateParameterValue(value any, parentKeys ParamKeys) ParameterItems {
 	}
 }
 
-func evaluateParameterValueReflection(value reflect.Value, parentKeys ParamKeys) ParameterItems {
+func evaluateParameterValueReflection(
+	value reflect.Value,
+	parentKeys ParamKeys,
+) ParameterItems {
 	reflectValue, notNull := goutils.UnwrapPointerFromReflectValue(value)
 	if !notNull {
 		return nil
@@ -301,4 +304,89 @@ func evalParamStyleAndExplode(
 	default:
 		return 255, false
 	}
+}
+
+// parses the deep object string to param paths.
+func parseDeepObjectKey(input string) (ParamKeys, bool) {
+	var results ParamKeys
+
+	inputLength := len(input)
+	tempKey := make([]byte, 0, inputLength)
+	isOpen := false
+
+	for i := 0; i < inputLength; i++ {
+		c := input[i]
+		if c == '[' {
+			if len(tempKey) > 0 {
+				results = append(results, NewKey(string(tempKey)))
+				tempKey = tempKey[:0]
+			}
+
+			isOpen = true
+
+			continue
+		}
+
+		if c == ']' {
+			// close bracket must not be in the head.
+			if !isOpen {
+				return nil, false
+			}
+
+			if len(tempKey) > 0 {
+				results = append(results, NewKey(string(tempKey)))
+				tempKey = tempKey[:0]
+			} else {
+				results = append(results, NewIndex(-1))
+			}
+
+			// close bracket at the end.
+			if i == inputLength-1 {
+				isOpen = false
+
+				break
+			}
+
+			if input[i+1] != '[' {
+				return nil, false
+			}
+
+			i++
+
+			continue
+		}
+
+		tempKey = append(tempKey, c)
+	}
+
+	if isOpen {
+		return nil, false
+	}
+
+	if len(tempKey) > 0 {
+		results = append(results, NewKey(string(tempKey)))
+	}
+
+	return results, true
+}
+
+func parseNonExplodeObjectParam(result map[string]any, rawValue string, separator string) bool {
+	if rawValue == "" {
+		return true
+	}
+
+	parts := strings.Split(rawValue, separator)
+	if len(parts)%2 != 0 {
+		return false
+	}
+
+	for i := 0; i < len(parts); i += 2 {
+		if parts[i] == "" {
+			return false
+		}
+
+		result[parts[i]] = parts[i+1]
+	}
+
+	return true
 }

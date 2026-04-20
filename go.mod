@@ -12,7 +12,7 @@ require (
 	github.com/pb33f/libopenapi v0.36.1
 	github.com/relychan/gohttpc v0.0.0-20260412101208-b0b28074e188
 	github.com/relychan/gotransform v0.0.0-20260404192235-bcef8d71746d
-	github.com/relychan/goutils v0.0.0-20260417160432-2d0a34cfc77a
+	github.com/relychan/goutils v0.0.0-20260419083824-e42364c73ad0
 	github.com/stretchr/testify v1.11.1
 	github.com/vektah/gqlparser/v2 v2.5.32
 	go.opentelemetry.io/otel v1.43.0

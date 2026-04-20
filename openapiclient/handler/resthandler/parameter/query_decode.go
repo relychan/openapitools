@@ -1,0 +1,589 @@
+// Copyright 2026 RelyChan Pte. Ltd
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package parameter
+
+import (
+	"cmp"
+	"fmt"
+	"slices"
+	"strings"
+
+	"github.com/pb33f/libopenapi/datamodel/high/base"
+	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/relychan/goutils"
+	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
+)
+
+type queryParamDecoder struct {
+	Name      string
+	RawValues []string
+	Schema    *base.Schema
+	Style     oaschema.ParameterEncodingStyle
+	Explode   bool
+}
+
+// DecodeQueryValuesFromParameters decodes the query parameters from string values.
+// The value is encoded differently on each style, according to the [OpenAPI specification].
+//
+// [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
+func DecodeQueryValuesFromParameters(
+	definitions []*highv3.Parameter,
+	values map[string][]string,
+) (map[string]any, []goutils.ErrorDetail) {
+	if len(definitions) == 0 {
+		return goutils.ToAnyMap(values), nil
+	}
+
+	var (
+		results = make(map[string]any)
+		errs    []goutils.ErrorDetail
+	)
+
+	var deepObjectParams []*highv3.Parameter
+
+	for _, definition := range definitions {
+		if definition.In != oaschema.InQuery.String() {
+			continue
+		}
+
+		style, explode, styleErr := getParamStyleAndExplodeFromRawStyle(
+			oaschema.InQuery,
+			definition.Style,
+			definition.Explode,
+		)
+		if styleErr != nil {
+			return nil, []goutils.ErrorDetail{
+				{
+					Code:      oasvalidator.ErrCodeInvalidQueryParam,
+					Detail:    styleErr.Error(),
+					Parameter: definition.Name,
+				},
+			}
+		}
+
+		if style == oaschema.EncodingStyleDeepObject {
+			deepObjectParams = append(deepObjectParams, definition)
+
+			continue
+		}
+
+		var paramSchema *base.Schema
+
+		if definition.Schema != nil {
+			paramSchema = definition.Schema.Schema()
+		}
+
+		decoder := &queryParamDecoder{
+			Name:    definition.Name,
+			Style:   style,
+			Explode: explode,
+			Schema:  paramSchema,
+		}
+
+		// Properties in exploded object are flatten.
+		// Because the schema can not have enough information, this parameter should be optional.
+		if explode && paramSchema != nil && slices.Contains(paramSchema.Type, oaschema.Object) {
+			itemResults, decodeErr := decoder.DecodeExplodeObject(values)
+			if len(decodeErr) > 0 {
+				errs = append(errs, decodeErr...)
+			} else {
+				results[definition.Name] = itemResults
+			}
+
+			continue
+		}
+
+		rawValues, present := values[definition.Name]
+		if !present {
+			if definition.Required != nil && *definition.Required {
+				err := oasvalidator.ObjectRequiredPropertyError(definition.Name)
+				err.Code = oasvalidator.ErrCodeInvalidQueryParam
+				errs = append(errs, *err)
+			}
+
+			continue
+		}
+
+		if paramSchema == nil {
+			results[definition.Name] = rawValues
+
+			continue
+		}
+
+		decoder.RawValues = rawValues
+
+		itemResults, decodeErr := decoder.Decode()
+		if len(decodeErr) > 0 {
+			errs = append(errs, decodeErr...)
+		} else {
+			results[definition.Name] = itemResults
+		}
+	}
+
+	if len(deepObjectParams) > 0 {
+		deErrs := decodeQueryDeepObjectFromParameters(deepObjectParams, values, results)
+		if len(deErrs) > 0 {
+			errs = append(errs, deErrs...)
+		}
+	}
+
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	if len(results) == 0 {
+		results = goutils.ToAnyMap(values)
+	}
+
+	return results, nil
+}
+
+// Decode evaluates and decodes URL parameters.
+func (qpe *queryParamDecoder) Decode() (any, []goutils.ErrorDetail) {
+	result, _, errs := qpe.DecodeFromSchemaTypes()
+
+	return result, errs
+}
+
+// DecodeFromSchemaTypes decode a path parameter value from types of schema.
+// Returns the decoded value, a matched type and an error.
+// Prefer string if exists.
+func (qpe *queryParamDecoder) DecodeFromSchemaTypes() (any, string, []goutils.ErrorDetail) {
+	if slices.Contains(qpe.Schema.Type, oaschema.String) {
+		var result string
+
+		if len(qpe.Schema.Type) > 0 {
+			result = qpe.RawValues[0]
+		}
+
+		return result, oaschema.String, nil
+	}
+
+	var finalErrors []goutils.ErrorDetail
+
+	for _, typeName := range qpe.Schema.Type {
+		if typeName == "" || typeName == oaschema.Null {
+			continue
+		}
+
+		result, primitiveType, errs := qpe.DecodeFromSchemaType(typeName)
+		if len(errs) == 0 {
+			return result, primitiveType, nil
+		}
+
+		finalErrors = errs
+	}
+
+	return nil, "", finalErrors
+}
+
+// DecodeFromSchemaType decodes a path parameter value from a type of the schema.
+// Returns the decoded value, a matched type and an error.
+func (qpe *queryParamDecoder) DecodeFromSchemaType(
+	typeName string,
+) (any, string, []goutils.ErrorDetail) {
+	switch typeName {
+	case oaschema.Array:
+		result, err := qpe.DecodeFromArray()
+
+		return result, typeName, err
+	case oaschema.Object:
+		result, err := qpe.DecodeFromObject()
+
+		return result, typeName, err
+	default:
+		return decodePrimitiveQueryValuesFromSchemaType(qpe.Name, typeName, qpe.RawValues)
+	}
+}
+
+func (qpe *queryParamDecoder) DecodeFromArray() ([]any, []goutils.ErrorDetail) {
+	strValues := qpe.splitArrayFromString()
+
+	errFuncs := oasvalidator.ValidateArray(qpe.Schema, strValues, cmp.Compare)
+	errs := oasvalidator.CollectErrorsFunc(errFuncs, func(ed *goutils.ErrorDetail) {
+		ed.Code = oasvalidator.ErrCodeInvalidQueryParam
+		ed.Parameter = qpe.Name
+	})
+
+	if len(strValues) == 0 || qpe.Schema.Items.A == nil {
+		return []any{}, errs
+	}
+
+	itemSchema := qpe.Schema.Items.A.Schema()
+	if oaschema.IsSchemaEmpty(itemSchema) {
+		return goutils.ToAnySlice(strValues), errs
+	}
+
+	results := make([]any, len(strValues))
+
+	for i, value := range strValues {
+		itemValue, _, err := qpe.DecodeItemValueFromSchemaTypes(itemSchema, value)
+		if err != nil {
+			errs = append(errs, *err)
+
+			return nil, errs
+		}
+
+		results[i] = itemValue
+	}
+
+	return results, errs
+}
+
+func (qpe *queryParamDecoder) DecodeFromObject() (map[string]any, []goutils.ErrorDetail) {
+	values, err := qpe.splitObjectFromString()
+	if err != nil {
+		return nil, []goutils.ErrorDetail{*err}
+	}
+
+	errFuncs := oasvalidator.ValidateObject(qpe.Schema, values)
+	errs := oasvalidator.CollectErrors(errFuncs)
+
+	if len(values) == 0 || qpe.Schema.Properties == nil || qpe.Schema.Properties.Len() == 0 {
+		return values, errs
+	}
+
+	for iter := qpe.Schema.Properties.First(); iter != nil; iter = iter.Next() {
+		key := iter.Key()
+
+		propSchemaProxy := iter.Value()
+		if propSchemaProxy == nil {
+			continue
+		}
+
+		propSchema := propSchemaProxy.Schema()
+		if propSchema == nil {
+			continue
+		}
+
+		value, ok := values[key]
+		if !ok {
+			continue
+		}
+
+		parsedValue, _, err := qpe.DecodeItemValueFromSchemaTypes(propSchema, value)
+		if err != nil {
+			errs = append(errs, *err)
+		} else {
+			values[key] = parsedValue
+		}
+	}
+
+	return values, errs
+}
+
+func (qpe *queryParamDecoder) splitArrayFromString() []string {
+	if qpe.Explode || len(qpe.RawValues) == 0 {
+		// The format of array queries is the same for all style if explode=true
+		// The url library already parsed the query values. Therefore, no action here.
+		// /users?id=3&id=4&id=5
+		return qpe.RawValues
+	}
+
+	switch qpe.Style {
+	case oaschema.EncodingStyleSpaceDelimited:
+		// /users?id=3 4 5
+		return qpe.parseArrayDelimitedStyle(oaschema.Space)
+	case oaschema.EncodingStylePipeDelimited:
+		// /users?id=3|4|5
+		return qpe.parseArrayDelimitedStyle(oaschema.Pipe)
+	default:
+		// /users?id=3,4,5
+		return qpe.parseArrayDelimitedStyle(oaschema.Comma)
+	}
+}
+
+// Set delimited-separated array values for array params.
+// For example: /users?id=3|4|5.
+func (qpe *queryParamDecoder) parseArrayDelimitedStyle(separator string) []string {
+	var results []string
+
+	for _, value := range qpe.RawValues {
+		if value == "" {
+			continue
+		}
+
+		items := strings.Split(value, separator)
+
+		if len(results) == 0 {
+			results = items
+		} else {
+			results = append(results, items...)
+		}
+	}
+
+	return results
+}
+
+func (qpe *queryParamDecoder) splitObjectFromString() (map[string]any, *goutils.ErrorDetail) {
+	switch qpe.Style {
+	case oaschema.EncodingStyleSpaceDelimited:
+		// /users?id=3 4 5
+		return qpe.parseNonExplodeObject(oaschema.Space)
+	case oaschema.EncodingStylePipeDelimited:
+		// /users?id=3|4|5
+		return qpe.parseNonExplodeObject(oaschema.Pipe)
+	default:
+		// /users?id=3,4,5
+		return qpe.parseNonExplodeObject(oaschema.Comma)
+	}
+}
+
+// DecodeItemValueFromSchemaTypes decode a path parameter value from types of schema.
+// Returns the decoded value, a matched type and an error.
+// Prefer string if exists.
+func (qpe *queryParamDecoder) DecodeItemValueFromSchemaTypes(
+	itemSchema *base.Schema,
+	value any,
+) (any, string, *goutils.ErrorDetail) {
+	if len(itemSchema.Type) == 0 {
+		return value, "", nil
+	}
+
+	if slices.Contains(itemSchema.Type, oaschema.String) {
+		return value, oaschema.String, nil
+	}
+
+	var finalError *goutils.ErrorDetail
+
+	for _, typeName := range qpe.Schema.Type {
+		if typeName == "" {
+			continue
+		}
+
+		result, primitiveType, err := oasvalidator.DecodePrimitiveValueFromType(
+			qpe.RawValues,
+			typeName,
+		)
+		if err != nil {
+			finalError = &goutils.ErrorDetail{
+				Code:      oasvalidator.ErrCodeInvalidQueryParam,
+				Detail:    err.Error(),
+				Parameter: qpe.Name,
+			}
+		} else if primitiveType != "" {
+			return result, primitiveType, nil
+		}
+	}
+
+	if finalError != nil {
+		return nil, "", finalError
+	}
+
+	return nil, "", &goutils.ErrorDetail{
+		Code: oasvalidator.ErrCodeInvalidQueryParam,
+		Detail: fmt.Sprintf(
+			"Unsupported types or nested fields in URL path parameter: %v",
+			itemSchema.Type,
+		),
+		Parameter: qpe.Name,
+	}
+}
+
+func (qpe *queryParamDecoder) DecodeExplodeObject(
+	queryValues map[string][]string,
+) (map[string]any, []goutils.ErrorDetail) {
+	// /users?role=admin&firstName=Alex
+	var (
+		result     = make(map[string]any)
+		parsedKeys = make([]string, 0, len(queryValues))
+		errs       []goutils.ErrorDetail
+	)
+
+	if qpe.Schema.Properties != nil {
+		for iter := qpe.Schema.Properties.First(); iter != nil; iter = iter.Next() {
+			key := iter.Key()
+
+			rawValues, present := queryValues[key]
+			if !present {
+				if len(qpe.Schema.Required) > 0 && slices.Contains(qpe.Schema.Required, key) {
+					err := oasvalidator.ObjectRequiredPropertyError(key)
+					err.Parameter = qpe.Name
+
+					errs = append(errs, *err)
+				}
+
+				continue
+			}
+
+			parsedKeys = append(parsedKeys, key)
+
+			schemaProxy := iter.Value()
+			if schemaProxy == nil {
+				result[key] = rawValues
+
+				continue
+			}
+
+			propSchema := schemaProxy.Schema()
+			if propSchema == nil {
+				result[key] = rawValues
+
+				continue
+			}
+
+			propDecoder := &queryParamDecoder{
+				Name:      key,
+				Style:     qpe.Style,
+				Explode:   qpe.Explode,
+				RawValues: rawValues,
+				Schema:    propSchema,
+			}
+
+			value, decodeErrs := propDecoder.Decode()
+			if len(decodeErrs) == 0 {
+				result[key] = value
+
+				continue
+			}
+
+			errs = addParameterErrors(errs, decodeErrs, key)
+		}
+	}
+
+	if qpe.Schema.AdditionalProperties != nil &&
+		(qpe.Schema.AdditionalProperties.B || qpe.Schema.AdditionalProperties.A != nil) {
+		var propSchema *base.Schema
+
+		if qpe.Schema.AdditionalProperties.N == 0 && qpe.Schema.AdditionalProperties.A != nil {
+			propSchema = qpe.Schema.AdditionalProperties.A.Schema()
+		}
+
+		for key, rawValues := range queryValues {
+			if slices.Contains(parsedKeys, key) {
+				continue
+			}
+
+			if propSchema == nil {
+				result[key] = rawValues
+
+				continue
+			}
+
+			propDecoder := &queryParamDecoder{
+				Name:      key,
+				Style:     qpe.Style,
+				Explode:   qpe.Explode,
+				RawValues: rawValues,
+				Schema:    propSchema,
+			}
+
+			value, decodeErrs := propDecoder.Decode()
+			if len(decodeErrs) == 0 {
+				result[key] = value
+
+				continue
+			}
+
+			errs = addParameterErrors(errs, decodeErrs, key)
+		}
+	}
+
+	// TODO: patternProperties
+
+	return result, errs
+}
+
+func (qpe *queryParamDecoder) parseNonExplodeObject(
+	separator string,
+) (map[string]any, *goutils.ErrorDetail) {
+	result := make(map[string]any)
+
+	for _, value := range qpe.RawValues {
+		ok := parseNonExplodeObjectParam(result, value, separator)
+		if !ok {
+			return nil, qpe.newInvalidObjectError()
+		}
+	}
+
+	return result, nil
+}
+
+func (qpe *queryParamDecoder) newInvalidObjectError() *goutils.ErrorDetail {
+	message := "Invalid syntax for the form style in parameter value. The object value must follow this format: queryKey=key1,value1,key2,value2"
+
+	switch qpe.Style {
+	case oaschema.EncodingStyleSpaceDelimited:
+		message = "Invalid syntax for non-exploded label style in parameter value. The object value must follow this format: queryKey=key1 value1 key2 value2"
+	case oaschema.EncodingStylePipeDelimited:
+		message = "Invalid syntax for non-exploded matrix style in parameter value. The object value must follow this format: ;id=key1|value1|key2|value2"
+	default:
+	}
+
+	return &goutils.ErrorDetail{
+		Code:      oasvalidator.ErrCodeInvalidQueryParam,
+		Detail:    message,
+		Parameter: qpe.Name,
+	}
+}
+
+func decodePrimitiveQueryValuesFromSchemaType(
+	name string,
+	typeName string,
+	values []string,
+) (any, string, []goutils.ErrorDetail) {
+	// Because the DecodeFromSchemaTypes function already checked the string type,
+	// the value should be converted to null for the empty string.
+	if len(values) == 0 || (len(values) == 1 && values[0] == "") {
+		normalizedType, _ := oaschema.NormalizeType(typeName)
+
+		return nil, normalizedType, nil
+	}
+
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+
+		result, primitiveType, err := oasvalidator.DecodePrimitiveValueFromType(
+			value,
+			typeName,
+		)
+		if err != nil {
+			return nil, "", []goutils.ErrorDetail{
+				{
+					Code:      oasvalidator.ErrCodeInvalidQueryParam,
+					Detail:    err.Error(),
+					Parameter: name,
+				},
+			}
+		}
+
+		return result, primitiveType, nil
+	}
+
+	return values, typeName, nil
+}
+
+func addParameterErrors(
+	dest []goutils.ErrorDetail,
+	src []goutils.ErrorDetail,
+	name string,
+) []goutils.ErrorDetail {
+	dest = slices.Grow(dest, len(src))
+
+	for _, de := range src {
+		if de.Parameter != "" {
+			de.Pointer = "/" + de.Parameter
+		}
+
+		de.Parameter = name
+
+		dest = append(dest, de)
+	}
+
+	return dest
+}

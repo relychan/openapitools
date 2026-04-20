@@ -536,9 +536,9 @@ func validateURLParams(
 			continue
 		}
 
-		value, err := parameter.DecodePathValue(param, rawValue)
-		if err != nil {
-			errs = append(errs, *err)
+		value, decodeErrors := parameter.DecodePathValue(param, rawValue)
+		if len(decodeErrors) > 0 {
+			errs = append(errs, decodeErrors...)
 		} else {
 			result[param.Name] = value
 		}

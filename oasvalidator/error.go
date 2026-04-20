@@ -106,50 +106,6 @@ func CollectErrorsFunc(
 	return results
 }
 
-// InvalidParamArrayMaxItemsError returns a validation error for max items array.
-func InvalidParamArrayMaxItemsError(
-	name string,
-	code string,
-	expected, actual int64,
-) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
-		Code:      code,
-		Parameter: name,
-		Detail: "Array parameter '" + name + "' has a maximum items length of " +
-			strconv.FormatInt(expected, 10) + ", however the request provided " +
-			strconv.FormatInt(actual, 10) + " items",
-	}
-}
-
-// InvalidParamArrayMinItemsError returns a validation error for min items array.
-func InvalidParamArrayMinItemsError(
-	name string,
-	code string,
-	expected, actual int64,
-) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
-		Code:      code,
-		Parameter: name,
-		Detail: "Array parameter '" + name + "' has a minimum items length of " +
-			strconv.FormatInt(expected, 10) + ", however the request provided " +
-			strconv.FormatInt(actual, 10) + " items",
-	}
-}
-
-// InvalidParamArrayUniqueItemsError returns a validation error for unique items array.
-func InvalidParamArrayUniqueItemsError(
-	name string,
-	code string,
-	duplicates []string,
-) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
-		Code:      code,
-		Parameter: name,
-		Detail: "Array parameter " + name + "' contains the following duplicates: " +
-			strings.Join(duplicates, ", "),
-	}
-}
-
 func MinContainsError(expected int64, actual int64) *goutils.ErrorDetail {
 	return &goutils.ErrorDetail{
 		Code: ErrCodeValidationError,

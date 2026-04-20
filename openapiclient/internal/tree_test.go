@@ -1413,7 +1413,7 @@ func TestRegexpNodeWithDifferentPatterns(t *testing.T) {
 // pkg: github.com/relychan/openapitools/openapiclient/internal
 // cpu: Apple M3 Pro
 // BenchmarkTree/insert_routes-11         	  258915	      4612 ns/op	   14736 B/op	     156 allocs/op
-// BenchmarkTree/find_route-11            	 5705500	       209.3 ns/op	     392 B/op	       4 allocs/op
+// BenchmarkTree/find_route-11            	 3123817	       383.0 ns/op	     408 B/op	       5 allocs/op
 func BenchmarkTree(b *testing.B) {
 	routes := map[string]*highv3.PathItem{
 		"/posts":                   {Get: &highv3.Operation{}},

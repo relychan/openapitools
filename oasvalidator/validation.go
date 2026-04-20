@@ -136,61 +136,61 @@ func ValidateValue( //nolint:gocyclo,cyclop,funlen
 
 		return ValidateNullableString(typeSchema, new(""))
 	case []bool:
-		return ValidateArray(typeSchema, val, CompareBoolean)
+		return ValidateArrayAndItems(typeSchema, val, CompareBoolean)
 	case []*bool:
-		return ValidateArray(typeSchema, val, CompareNullableBoolean)
+		return ValidateArrayAndItems(typeSchema, val, CompareNullableBoolean)
 	case []string:
-		return ValidateArray(typeSchema, val, cmp.Compare)
+		return ValidateArrayAndItems(typeSchema, val, cmp.Compare)
 	case []*string:
-		return ValidateArray(typeSchema, val, CompareNullable)
+		return ValidateArrayAndItems(typeSchema, val, CompareNullable)
 	case []int:
-		return ValidateArray(typeSchema, val, cmp.Compare)
+		return ValidateArrayAndItems(typeSchema, val, cmp.Compare)
 	case []int8:
-		return ValidateArray(typeSchema, val, cmp.Compare)
+		return ValidateArrayAndItems(typeSchema, val, cmp.Compare)
 	case []int16:
-		return ValidateArray(typeSchema, val, cmp.Compare)
+		return ValidateArrayAndItems(typeSchema, val, cmp.Compare)
 	case []int32:
-		return ValidateArray(typeSchema, val, cmp.Compare)
+		return ValidateArrayAndItems(typeSchema, val, cmp.Compare)
 	case []uint:
-		return ValidateArray(typeSchema, val, cmp.Compare)
+		return ValidateArrayAndItems(typeSchema, val, cmp.Compare)
 	case []uint16:
-		return ValidateArray(typeSchema, val, cmp.Compare)
+		return ValidateArrayAndItems(typeSchema, val, cmp.Compare)
 	case []*int:
-		return ValidateArray(typeSchema, val, CompareNullable)
+		return ValidateArrayAndItems(typeSchema, val, CompareNullable)
 	case []*int8:
-		return ValidateArray(typeSchema, val, CompareNullable)
+		return ValidateArrayAndItems(typeSchema, val, CompareNullable)
 	case []*int16:
-		return ValidateArray(typeSchema, val, CompareNullable)
+		return ValidateArrayAndItems(typeSchema, val, CompareNullable)
 	case []*int32:
-		return ValidateArray(typeSchema, val, CompareNullable)
+		return ValidateArrayAndItems(typeSchema, val, CompareNullable)
 	case []*uint:
-		return ValidateArray(typeSchema, val, CompareNullable)
+		return ValidateArrayAndItems(typeSchema, val, CompareNullable)
 	case []*uint8:
-		return ValidateArray(typeSchema, val, CompareNullable)
+		return ValidateArrayAndItems(typeSchema, val, CompareNullable)
 	case []*uint16:
-		return ValidateArray(typeSchema, val, CompareNullable)
+		return ValidateArrayAndItems(typeSchema, val, CompareNullable)
 	case []int64:
-		return ValidateArray(typeSchema, val, cmp.Compare)
+		return ValidateArrayAndItems(typeSchema, val, cmp.Compare)
 	case []uint32:
-		return ValidateArray(typeSchema, val, cmp.Compare)
+		return ValidateArrayAndItems(typeSchema, val, cmp.Compare)
 	case []uint64:
-		return ValidateArray(typeSchema, val, cmp.Compare)
+		return ValidateArrayAndItems(typeSchema, val, cmp.Compare)
 	case []*int64:
-		return ValidateArray(typeSchema, val, CompareNullable)
+		return ValidateArrayAndItems(typeSchema, val, CompareNullable)
 	case []*uint32:
-		return ValidateArray(typeSchema, val, CompareNullable)
+		return ValidateArrayAndItems(typeSchema, val, CompareNullable)
 	case []*uint64:
-		return ValidateArray(typeSchema, val, CompareNullable)
+		return ValidateArrayAndItems(typeSchema, val, CompareNullable)
 	case []float32:
-		return ValidateArray(typeSchema, val, cmp.Compare)
+		return ValidateArrayAndItems(typeSchema, val, cmp.Compare)
 	case []*float32:
-		return ValidateArray(typeSchema, val, CompareNullable)
+		return ValidateArrayAndItems(typeSchema, val, CompareNullable)
 	case []float64:
-		return ValidateArray(typeSchema, val, cmp.Compare)
+		return ValidateArrayAndItems(typeSchema, val, cmp.Compare)
 	case []*float64:
-		return ValidateArray(typeSchema, val, CompareNullable)
+		return ValidateArrayAndItems(typeSchema, val, CompareNullable)
 	case []any:
-		return ValidateArray(typeSchema, val, nil)
+		return ValidateArrayAndItems(typeSchema, val, nil)
 	case map[string]any:
 		return ValidateObject(typeSchema, val)
 	default:
@@ -351,10 +351,6 @@ func ValidateArray[T any](
 		return []ErrorFunc{NotNullError}
 	}
 
-	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Array) {
-		return []ErrorFunc{InvalidTypeErrorFunc(typeSchema.Type, oaschema.Array)}
-	}
-
 	valueLength := int64(len(value))
 
 	var errs []ErrorFunc
@@ -373,7 +369,22 @@ func ValidateArray[T any](
 		}
 	}
 
-	if valueLength == 0 || typeSchema.Items.A == nil {
+	return errs
+}
+
+// ValidateArrayAndItems validates an array value and its items against an OpenAPI schema.
+func ValidateArrayAndItems[T any](
+	typeSchema *base.Schema,
+	value []T,
+	compare func(a T, b T) int,
+) []ErrorFunc {
+	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Array) {
+		return []ErrorFunc{InvalidTypeErrorFunc(typeSchema.Type, oaschema.Array)}
+	}
+
+	errs := ValidateArray(typeSchema, value, compare)
+
+	if len(value) == 0 || typeSchema.Items.A == nil {
 		return errs
 	}
 
@@ -422,9 +433,15 @@ func ValidateObject[T any](typeSchema *base.Schema, value map[string]T) []ErrorF
 	var errs []ErrorFunc
 
 	if typeSchema.MaxProperties != nil && *typeSchema.MaxProperties < propertiesLength {
-		errs = append(errs, ObjectMaxPropertiesValidationErrorFunc(*typeSchema.MaxProperties, propertiesLength))
+		errs = append(
+			errs,
+			ObjectMaxPropertiesValidationErrorFunc(*typeSchema.MaxProperties, propertiesLength),
+		)
 	} else if typeSchema.MinProperties != nil && *typeSchema.MinProperties > propertiesLength {
-		errs = append(errs, ObjectMinPropertiesValidationErrorFunc(*typeSchema.MinProperties, propertiesLength))
+		errs = append(
+			errs,
+			ObjectMinPropertiesValidationErrorFunc(*typeSchema.MinProperties, propertiesLength),
+		)
 	}
 
 	for _, requiredKey := range typeSchema.Required {

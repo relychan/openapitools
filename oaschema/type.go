@@ -23,7 +23,7 @@ import (
 
 // NormalizeType normalize a schema type.
 // Returns the type name and whether if it is a primitive type.
-func NormalizeType(typeName string) (Type, bool) {
+func NormalizeType(typeName string) (string, bool) {
 	lowerTypeName := strings.ToLower(typeName)
 
 	switch lowerTypeName {
@@ -37,7 +37,7 @@ func NormalizeType(typeName string) (Type, bool) {
 		return Number, true
 	default:
 		// array, object and unknown type.
-		return Type(lowerTypeName), false
+		return lowerTypeName, false
 	}
 }
 
