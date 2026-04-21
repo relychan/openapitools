@@ -5,7 +5,6 @@ import (
 
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/goutils"
-	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
 )
 
@@ -19,167 +18,52 @@ func decodeQueryDeepObjectFromParameters(
 		return errs
 	}
 
-	queryDefs := make([]*highv3.Parameter, 0, len(definitions))
-
-	for _, def := range definitions {
-		if def.In == oaschema.InQuery.String() {
-			queryDefs = append(queryDefs, def)
+	if len(definitions) == 0 {
+		for _, node := range rawNodes {
+			node.decodeArbitraryObject(results)
 		}
-	}
-
-	if len(queryDefs) == 0 {
-		decodeArbitraryQueryDeepObjectMap(results, rawNodes)
 
 		return nil
 	}
 
-	// TODO
-	return nil
-
-	// var (
-	// 	results     = make(map[string]any)
-	// 	parsedKeys = make([]string, 0, len(queryValues))
-	// )
-
-	// for _, def := range queryDefs {
-
-	// }
-
-	// if qpe.Schema.Properties != nil {
-	// 	for iter := qpe.Schema.Properties.First(); iter != nil; iter = iter.Next() {
-	// 		key := iter.Key()
-
-	// 		rawValues, present := qpe.QueryValues[key]
-	// 		if !present {
-	// 			if len(qpe.Schema.Required) > 0 && slices.Contains(qpe.Schema.Required, key) {
-	// 				err := oasvalidator.ObjectRequiredPropertyError(key)
-	// 				err.Parameter = qpe.Name
-
-	// 				errs = append(errs, *err)
-	// 			}
-
-	// 			continue
-	// 		}
-
-	// 		parsedKeys = append(parsedKeys, key)
-
-	// 		schemaProxy := iter.Value()
-	// 		if schemaProxy == nil {
-	// 			result[key] = rawValues
-
-	// 			continue
-	// 		}
-
-	// 		propSchema := schemaProxy.Schema()
-	// 		if propSchema == nil {
-	// 			result[key] = rawValues
-
-	// 			continue
-	// 		}
-
-	// 		propDecoder := &queryParamDecoder{
-	// 			Name:      key,
-	// 			Style:     qpe.Style,
-	// 			Explode:   qpe.Explode,
-	// 			RawValues: rawValues,
-	// 			Schema:    propSchema,
-	// 		}
-
-	// 		value, decodeErrs := propDecoder.Decode()
-	// 		if len(decodeErrs) == 0 {
-	// 			result[key] = value
-
-	// 			continue
-	// 		}
-
-	// 		errs = addParameterErrors(errs, decodeErrs, key)
-	// 	}
-	// }
-
-	// if qpe.Schema.AdditionalProperties != nil &&
-	// 	(qpe.Schema.AdditionalProperties.B || qpe.Schema.AdditionalProperties.A != nil) {
-	// 	var propSchema *base.Schema
-
-	// 	if qpe.Schema.AdditionalProperties.N == 0 && qpe.Schema.AdditionalProperties.A != nil {
-	// 		propSchema = qpe.Schema.AdditionalProperties.A.Schema()
-	// 	}
-
-	// 	for key, rawValues := range qpe.QueryValues {
-	// 		if slices.Contains(parsedKeys, key) {
-	// 			continue
-	// 		}
-
-	// 		if propSchema == nil {
-	// 			result[key] = rawValues
-
-	// 			continue
-	// 		}
-
-	// 		propDecoder := &queryParamDecoder{
-	// 			Name:      key,
-	// 			Style:     qpe.Style,
-	// 			Explode:   qpe.Explode,
-	// 			RawValues: rawValues,
-	// 			Schema:    propSchema,
-	// 		}
-
-	// 		value, decodeErrs := propDecoder.Decode()
-	// 		if len(decodeErrs) == 0 {
-	// 			result[key] = value
-
-	// 			continue
-	// 		}
-
-	// 		errs = addParameterErrors(errs, decodeErrs, key)
-	// 	}
-	// }
-
-	// // TODO: patternProperties
-
-	// return result, errs
-}
-
-// func decodeArbitraryQueryDeepObject(rawNodes ParameterNodes) any {
-// 	nodeLength := len(rawNodes)
-// 	if nodeLength == 0 {
-// 		return nil
-// 	}
-
-// 	if rawNodes[0].key.index != nil {
-// 		slices.SortFunc(rawNodes, compareParameterNodes)
-
-// 		results := make([]any, 0, len(rawNodes))
-
-// 		for i, node := range rawNodes {
-// 			switch len(node.values) {
-// 			case 0:
-// 			case 1:
-// 				results[i] = node.values[0]
-// 			default:
-// 				results[i] = node.values
-// 			}
-// 		}
-
-// 		return results
-// 	}
-
-// 	results := make(map[string]any)
-
-// 	decodeArbitraryQueryDeepObjectMap(results, rawNodes)
-
-// 	return results
-// }
-
-func decodeArbitraryQueryDeepObjectMap(results map[string]any, rawNodes ParameterNodes) {
-	for _, node := range rawNodes {
-		switch len(node.values) {
-		case 0:
-		case 1:
-			results[node.key.String()] = node.values[0]
-		default:
-			results[node.key.String()] = node.values
+	for _, def := range definitions {
+		value, decodeErrs := decodeQueryDeepObjectFromParameter(def, rawNodes)
+		if len(decodeErrs) > 0 {
+			errs = append(errs, decodeErrs...)
+		} else {
+			results[def.Name] = value
 		}
 	}
+
+	return errs
+}
+
+func decodeQueryDeepObjectFromParameter(
+	definition *highv3.Parameter,
+	rawNodes ParameterNodes,
+) (any, []goutils.ErrorDetail) {
+	node := rawNodes.Find(NewKey(definition.Name))
+	if node == nil {
+		if definition.Required != nil && *definition.Required {
+			err := oasvalidator.ParameterRequiredError(definition.Name)
+			err.Code = oasvalidator.ErrCodeInvalidQueryParam
+
+			return nil, []goutils.ErrorDetail{*err}
+		}
+
+		return nil, nil
+	}
+
+	if definition.Schema == nil {
+		return node.decodeArbitrary(), nil
+	}
+
+	schemaDef := definition.Schema.Schema()
+	if schemaDef == nil {
+		return node.decodeArbitrary(), nil
+	}
+
+	return node.Decode(schemaDef)
 }
 
 func parseDeepObjectNodes(queryValues map[string][]string) (ParameterNodes, []goutils.ErrorDetail) {
@@ -204,7 +88,7 @@ func parseDeepObjectNodes(queryValues map[string][]string) (ParameterNodes, []go
 			continue
 		}
 
-		err := rawNodes.InsertNode(parsedKeys, values)
+		err := rawNodes.Insert(parsedKeys, values)
 		if err != nil {
 			err.Parameter = key
 
@@ -216,44 +100,13 @@ func parseDeepObjectNodes(queryValues map[string][]string) (ParameterNodes, []go
 		return nil, errs
 	}
 
+	// Normalize array elements in the tree.
+	for _, node := range rawNodes {
+		node.Normalize()
+	}
+
 	return slices.Clip(rawNodes), nil
 }
-
-// func compareParameterNodes(a, b *ParameterNode) int {
-// 	if a.key.index == nil && b.key.index != nil {
-// 		return 1
-// 	}
-
-// 	if a.key.index != nil && b.key.index == nil {
-// 		return -1
-// 	}
-
-// 	if a.key.index != nil && b.key.index != nil {
-// 		if *a.key.index == -1 {
-// 			return 1
-// 		}
-
-// 		if *b.key.index == -1 {
-// 			return 1
-// 		}
-
-// 		return *a.key.index - *b.key.index
-// 	}
-
-// 	if a.key.key == nil && b.key.key != nil {
-// 		return 1
-// 	}
-
-// 	if a.key.key != nil && b.key.key == nil {
-// 		return -1
-// 	}
-
-// 	if a.key.key != nil && b.key.key != nil {
-// 		return strings.Compare(*a.key.key, *b.key.key)
-// 	}
-
-// 	return 0
-// }
 
 func newMixedArrayAndObjectError() *goutils.ErrorDetail {
 	return &goutils.ErrorDetail{

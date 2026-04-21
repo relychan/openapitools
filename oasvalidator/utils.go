@@ -106,10 +106,14 @@ func FindDuplicatedItemsFunc[S ~[]E, E any](values S, compare func(a E, b E) int
 		return []E{}
 	}
 
-	sortedSlice := make([]E, len(values))
+	sortedSlice := values
 
-	copy(sortedSlice, values)
-	slices.SortFunc(sortedSlice, compare)
+	if !slices.IsSortedFunc(values, compare) {
+		sortedSlice = make([]E, len(values))
+
+		copy(sortedSlice, values)
+		slices.SortFunc(sortedSlice, compare)
+	}
 
 	results := make([]E, 0, len(sortedSlice)/2)
 

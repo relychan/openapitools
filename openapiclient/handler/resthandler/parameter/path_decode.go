@@ -232,18 +232,22 @@ func (ppe *pathParamDecoder) DecodeFromObject() (map[string]any, []goutils.Error
 	for iter := ppe.Schema.Properties.First(); iter != nil; iter = iter.Next() {
 		key := iter.Key()
 
+		value, ok := values[key]
+		if !ok {
+			continue
+		}
+
 		propSchemaProxy := iter.Value()
 		if propSchemaProxy == nil {
+			values[key] = value
+
 			continue
 		}
 
 		propSchema := propSchemaProxy.Schema()
-		if propSchema == nil {
-			continue
-		}
+		if oaschema.IsSchemaEmpty(propSchema) {
+			values[key] = value
 
-		value, ok := values[key]
-		if !ok {
 			continue
 		}
 

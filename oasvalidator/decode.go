@@ -42,7 +42,7 @@ func DecodePrimitiveValueFromType(value any, typeName string) (any, string, erro
 		}
 
 		return result, oaschema.String, nil
-	case "int", "int8", "int16", "int32", "int64":
+	case "integer", "int", "int8", "int16", "int32", "int64":
 		result, err = goutils.DecodeNumber[int64](value)
 		if err != nil {
 			return nil, "", err

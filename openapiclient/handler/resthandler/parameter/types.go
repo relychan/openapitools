@@ -156,6 +156,10 @@ func (ks ParamKeys) String() string {
 	return ks.Format("", false)
 }
 
+type ParamSelector interface {
+	~int | ~string
+}
+
 // ParamKey represents a key string or index.
 type ParamKey struct {
 	key   *string
@@ -260,85 +264,4 @@ func (pi ParameterItem) Keys() ParamKeys {
 // Value return the value of the item.
 func (pi ParameterItem) Value() string {
 	return pi.value
-}
-
-type ParameterNodes []*ParameterNode
-
-func (pn *ParameterNodes) InsertNode(keys ParamKeys, values []string) *goutils.ErrorDetail {
-	if len(keys) == 0 {
-		return nil
-	}
-
-	for _, vs := range *pn {
-		if vs.key.Equal(keys[0]) {
-			err := vs.InsertNode(keys[1:], values)
-			if err != nil {
-				err.Parameter = keys[0].String()
-
-				return err
-			}
-
-			return nil
-		}
-	}
-
-	node := &ParameterNode{
-		key: keys[0],
-	}
-
-	*pn = append(*pn, node)
-
-	err := node.InsertNode(keys[1:], values)
-	if err != nil {
-		err.Parameter = keys[0].String()
-
-		return err
-	}
-
-	return nil
-}
-
-type ParameterNode struct {
-	key    ParamKey
-	values []string
-	items  []*ParameterNode
-}
-
-func (pn *ParameterNode) InsertNode(keys ParamKeys, values []string) *goutils.ErrorDetail {
-	if len(keys) == 0 {
-		pn.values = values
-
-		return nil
-	}
-
-	// best-effort to converting the key to index if other keys in the list are indexes.
-	if len(pn.items) == 1 && pn.items[0].key.key != nil && keys[0].index != nil {
-		indexKey, err := strconv.Atoi(*pn.items[0].key.key)
-		if err != nil {
-			return newMixedArrayAndObjectError()
-		}
-
-		pn.items[0].key = NewIndex(indexKey)
-	} else if len(pn.items) > 1 && pn.items[0].key.index != nil && keys[0].key != nil {
-		indexKey, err := strconv.Atoi(*keys[0].key)
-		if err != nil {
-			return newMixedArrayAndObjectError()
-		}
-
-		keys[0] = NewIndex(indexKey)
-	}
-
-	for _, item := range pn.items {
-		if item.key.Equal(keys[0]) {
-			return item.InsertNode(keys[1:], values)
-		}
-	}
-
-	item := &ParameterNode{
-		key: keys[0],
-	}
-
-	pn.items = append(pn.items, item)
-
-	return item.InsertNode(keys[1:], values)
 }

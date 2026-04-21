@@ -427,3 +427,18 @@ func ObjectDependentRequiredErrorFunc(name string, dependent string) ErrorFunc {
 		return ObjectDependentRequiredError(name, dependent)
 	}
 }
+
+// ParameterRequiredError returns a validation error for a missing required parameter.
+func ParameterRequiredError(name string) *goutils.ErrorDetail {
+	return &goutils.ErrorDetail{
+		Code:      ErrCodeValidationError,
+		Parameter: name,
+		Detail:    "Required parameter '" + name + "' is missing in the object",
+	}
+}
+
+func ParameterRequiredErrorFunc(name string) ErrorFunc {
+	return func() *goutils.ErrorDetail {
+		return ParameterRequiredError(name)
+	}
+}
