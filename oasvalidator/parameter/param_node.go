@@ -15,6 +15,7 @@
 package parameter
 
 import (
+	"log/slog"
 	"slices"
 	"strconv"
 	"strings"
@@ -23,11 +24,12 @@ import (
 	"github.com/relychan/goutils"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
+	"github.com/relychan/openapitools/oasvalidator/regexps"
 )
 
 type ParameterNodes []*ParameterNode
 
-func (pn ParameterNodes) Find(key ParamKey) *ParameterNode {
+func (pn ParameterNodes) Find(key ParamSelector) *ParameterNode {
 	for _, node := range pn {
 		if node.key.Equal(key) {
 			return node
@@ -90,12 +92,12 @@ func (pn ParameterNodes) String() string {
 }
 
 type ParameterNode struct {
-	key    ParamKey
+	key    ParamSelector
 	values []string
 	items  ParameterNodes
 }
 
-func (pn *ParameterNode) FindNode(key ParamKey) *ParameterNode {
+func (pn *ParameterNode) FindNode(key ParamSelector) *ParameterNode {
 	if len(pn.items) == 0 {
 		return nil
 	}
@@ -109,17 +111,20 @@ func (pn *ParameterNode) Normalize() {
 	}
 
 	if len(pn.items) == 1 {
-		if (pn.items[0].key.index != nil || pn.items[0].key.key == nil) &&
-			len(pn.items[0].items) == 0 {
-			pn.values = pn.items[0].values
-			pn.items = nil
+		switch key := pn.items[0].key.(type) {
+		case ParamIndex:
+			if len(pn.items[0].items) == 0 {
+				pn.values = pn.items[0].values
+				pn.items = nil
 
-			return
-		}
-
-		index, err := strconv.ParseInt(*pn.items[0].key.key, 10, 32)
-		if err == nil {
-			pn.items[0].key = NewIndex(int(index))
+				return
+			}
+		case ParamKey:
+			index, err := strconv.Atoi(string(key))
+			if err == nil {
+				pn.items[0].key = ParamIndex(index)
+			}
+		default:
 		}
 
 		pn.items[0].Normalize()
@@ -128,7 +133,7 @@ func (pn *ParameterNode) Normalize() {
 	}
 
 	// skip sorting object keys.
-	if pn.items[0].key.index != nil {
+	if IsParamIndex(pn.items[0].key) {
 		slices.SortFunc(pn.items, compareParameterNodes)
 	}
 
@@ -145,20 +150,32 @@ func (pn *ParameterNode) InsertNode(keys ParamKeys, values []string) *goutils.Er
 	}
 
 	// best-effort to converting the key to index if other keys in the list are indexes.
-	if len(pn.items) == 1 && pn.items[0].key.key != nil && keys[0].index != nil {
-		indexKey, err := strconv.Atoi(*pn.items[0].key.key)
-		if err != nil {
-			return newMixedArrayAndObjectError()
-		}
+	switch selector := keys[0].(type) {
+	case ParamIndex:
+		if len(pn.items) == 1 {
+			key, ok := pn.items[0].key.(ParamKey)
+			if ok {
+				indexKey, err := strconv.Atoi(string(key))
+				if err != nil {
+					return newMixedArrayAndObjectError()
+				}
 
-		pn.items[0].key = NewIndex(indexKey)
-	} else if len(pn.items) > 1 && pn.items[0].key.index != nil && keys[0].key != nil {
-		indexKey, err := strconv.Atoi(*keys[0].key)
-		if err != nil {
-			return newMixedArrayAndObjectError()
+				pn.items[0].key = ParamIndex(indexKey)
+			}
 		}
+	case ParamKey:
+		if len(pn.items) > 1 {
+			_, ok := pn.items[0].key.(ParamIndex)
+			if ok {
+				indexKey, err := strconv.Atoi(string(selector))
+				if err != nil {
+					return newMixedArrayAndObjectError()
+				}
 
-		keys[0] = NewIndex(indexKey)
+				keys[0] = ParamIndex(indexKey)
+			}
+		}
+	default:
 	}
 
 	for _, item := range pn.items {
@@ -272,16 +289,15 @@ func (pn *ParameterNode) decodeFromObject(
 	schemaDef *base.Schema,
 ) (map[string]any, []goutils.ErrorDetail) {
 	var (
-		results    = make(map[string]any)
-		parsedKeys = make([]string, 0, len(pn.items))
-		errs       []goutils.ErrorDetail
+		results = make(map[string]any)
+		errs    []goutils.ErrorDetail
 	)
 
 	if schemaDef.Properties != nil {
 		for iter := schemaDef.Properties.First(); iter != nil; iter = iter.Next() {
 			key := iter.Key()
 
-			propNode := pn.FindNode(NewKey(key))
+			propNode := pn.FindNode(ParamKey(key))
 			if propNode == nil {
 				if len(schemaDef.Required) > 0 && slices.Contains(schemaDef.Required, key) {
 					err := oasvalidator.ObjectRequiredPropertyError(key)
@@ -292,8 +308,6 @@ func (pn *ParameterNode) decodeFromObject(
 
 				continue
 			}
-
-			parsedKeys = append(parsedKeys, key)
 
 			schemaProxy := iter.Value()
 			if schemaProxy == nil {
@@ -324,28 +338,87 @@ func (pn *ParameterNode) decodeFromObject(
 		return nil, slices.Clip(errs)
 	}
 
-	if schemaDef.AdditionalProperties != nil &&
-		(schemaDef.AdditionalProperties.B || schemaDef.AdditionalProperties.A != nil) {
+	errs = pn.decodeObjectAdditionalProperties(schemaDef, results)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	errs = pn.decodeObjectPatternProperties(schemaDef, results)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	return results, nil
+}
+
+func (pn *ParameterNode) decodeObjectPatternProperties(
+	schemaDef *base.Schema,
+	results map[string]any,
+) []goutils.ErrorDetail {
+	if schemaDef.PatternProperties == nil && schemaDef.PatternProperties.Len() == 0 {
+		return nil
+	}
+
+	var errs []goutils.ErrorDetail
+
+	for iter := schemaDef.PatternProperties.First(); iter != nil; iter = iter.Next() {
+		key := iter.Key()
+
+		pattern, err := regexps.Get(key)
+		if err != nil {
+			// ignore compile error on runtime.
+			slog.Warn(
+				"failed to compile regular expression: "+err.Error(),
+				slog.String("pattern", key),
+			)
+
+			continue
+		}
+
 		var propSchema *base.Schema
 
-		if schemaDef.AdditionalProperties.N == 0 && schemaDef.AdditionalProperties.A != nil {
-			propSchema = schemaDef.AdditionalProperties.A.Schema()
+		schemaProxy := iter.Value()
+		if schemaProxy != nil {
+			propSchema = schemaProxy.Schema()
 		}
 
 		for _, propNode := range pn.items {
-			if propNode.key.key != nil && slices.Contains(parsedKeys, *propNode.key.key) {
+			maybePropKey, ok := propNode.key.(ParamKey)
+			if !ok {
+				continue
+			}
+
+			propKey := string(maybePropKey)
+
+			_, present := results[propKey]
+			if present {
+				continue
+			}
+
+			matched, err := pattern.MatchString(propKey)
+			if err != nil {
+				slog.Warn(
+					"failed to compile pattern property: "+err.Error(),
+					slog.String("pattern", key),
+					slog.String("name", propKey),
+				)
+
+				continue
+			}
+
+			if !matched {
 				continue
 			}
 
 			if oaschema.IsSchemaEmpty(propSchema) {
-				results[propNode.key.String()] = propNode.decodeArbitrary()
+				results[propKey] = propNode.decodeArbitrary()
 
 				continue
 			}
 
 			value, decodeErrs := propNode.Decode(propSchema)
 			if len(decodeErrs) == 0 {
-				results[propNode.key.String()] = value
+				results[propKey] = value
 
 				continue
 			}
@@ -354,21 +427,65 @@ func (pn *ParameterNode) decodeFromObject(
 		}
 	}
 
-	// TODO: patternProperties
+	return errs
+}
 
-	if len(errs) > 0 {
-		return nil, errs
+func (pn *ParameterNode) decodeObjectAdditionalProperties(
+	schemaDef *base.Schema,
+	results map[string]any,
+) []goutils.ErrorDetail {
+	if schemaDef.AdditionalProperties == nil ||
+		(!schemaDef.AdditionalProperties.B && schemaDef.AdditionalProperties.A == nil) {
+		return nil
 	}
 
-	return results, nil
+	var (
+		propSchema *base.Schema
+		errs       []goutils.ErrorDetail
+	)
+
+	if schemaDef.AdditionalProperties.N == 0 && schemaDef.AdditionalProperties.A != nil {
+		propSchema = schemaDef.AdditionalProperties.A.Schema()
+	}
+
+	for _, propNode := range pn.items {
+		maybePropKey, ok := propNode.key.(ParamKey)
+		if !ok {
+			continue
+		}
+
+		propKey := string(maybePropKey)
+
+		_, present := results[propKey]
+		if present {
+			continue
+		}
+
+		if oaschema.IsSchemaEmpty(propSchema) {
+			results[propKey] = propNode.decodeArbitrary()
+
+			continue
+		}
+
+		value, decodeErrs := propNode.Decode(propSchema)
+		if len(decodeErrs) == 0 {
+			results[propKey] = value
+
+			continue
+		}
+
+		errs = append(errs, decodeErrs...)
+	}
+
+	return errs
 }
 
 func (pn *ParameterNode) decodeArbitrary() any {
 	if len(pn.items) == 0 {
-		return pn.getValue()
+		return getValue(pn.values)
 	}
 
-	if pn.items[0].key.index != nil {
+	if IsParamIndex(pn.items[0].key) {
 		return pn.decodeArbitraryArray()
 	}
 
@@ -392,17 +509,6 @@ func (pn *ParameterNode) decodeArbitraryArray() []any {
 func (pn *ParameterNode) decodeArbitraryObject(results map[string]any) {
 	for _, node := range pn.items {
 		results[node.key.String()] = node.decodeArbitrary()
-	}
-}
-
-func (pn *ParameterNode) getValue() any {
-	switch len(pn.values) {
-	case 0:
-		return nil
-	case 1:
-		return pn.values[0]
-	default:
-		return pn.values
 	}
 }
 
@@ -430,37 +536,30 @@ func (pn ParameterNode) printIndent(indent int) string {
 }
 
 func compareParameterNodes(a, b *ParameterNode) int {
-	if a.key.index == nil && b.key.index != nil {
-		return 1
-	}
+	switch sa := a.key.(type) {
+	case ParamIndex:
+		indexB, ok := b.key.(ParamIndex)
+		if !ok {
+			return -1
+		}
 
-	if a.key.index != nil && b.key.index == nil {
-		return -1
-	}
-
-	if a.key.index != nil && b.key.index != nil {
-		if *a.key.index == -1 {
+		if sa == -1 {
 			return 1
 		}
 
-		if *b.key.index == -1 {
+		if indexB == -1 {
+			return -1
+		}
+
+		return int(sa - indexB)
+	case ParamKey:
+		keyB, ok := b.key.(ParamKey)
+		if !ok {
 			return 1
 		}
 
-		return *a.key.index - *b.key.index
+		return strings.Compare(string(sa), string(keyB))
+	default:
+		return 0
 	}
-
-	if a.key.key == nil && b.key.key != nil {
-		return 1
-	}
-
-	if a.key.key != nil && b.key.key == nil {
-		return -1
-	}
-
-	if a.key.key != nil && b.key.key != nil {
-		return strings.Compare(*a.key.key, *b.key.key)
-	}
-
-	return 0
 }

@@ -26,8 +26,8 @@ import (
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator/parameter"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

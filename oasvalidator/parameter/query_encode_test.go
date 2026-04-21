@@ -289,7 +289,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 	}
 }
 
-// BenchmarkSetQueryParam-11    	  751687	      1525 ns/op	    2304 B/op	      35 allocs/op
+// BenchmarkSetQueryParam-11    	  741129	      1507 ns/op	    2136 B/op	      34 allocs/op
 func BenchmarkSetQueryParam(b *testing.B) {
 	value := map[any]any{
 		"role": []any{

@@ -449,9 +449,21 @@ func (ppe *pathParamDecoder) parseNonExplodeObject(
 ) (map[string]any, *goutils.ErrorDetail) {
 	result := make(map[string]any)
 
-	ok := parseNonExplodeObjectParam(result, rawValue, separator)
-	if !ok {
+	if rawValue == "" {
+		return result, nil
+	}
+
+	parts := strings.Split(rawValue, separator)
+	if len(parts)%2 != 0 {
 		return nil, ppe.newInvalidObjectError()
+	}
+
+	for i := 0; i < len(parts); i += 2 {
+		if parts[i] == "" {
+			return nil, ppe.newInvalidObjectError()
+		}
+
+		result[parts[i]] = parts[i+1]
 	}
 
 	return result, nil

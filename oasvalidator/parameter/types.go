@@ -103,13 +103,11 @@ func (conf BaseParameter) GetStyleAndExplode() (oaschema.ParameterEncodingStyle,
 }
 
 // ParamKeys represent a key slice.
-type ParamKeys []ParamKey
+type ParamKeys []ParamSelector
 
 // Equal checks if the target value is equal.
 func (ks ParamKeys) Equal(target ParamKeys) bool {
-	return slices.EqualFunc(ks, target, func(a, b ParamKey) bool {
-		return a.Equal(b)
-	})
+	return slices.Equal(ks, target)
 }
 
 // Format prints parameter keys with format.
@@ -129,7 +127,7 @@ func (ks ParamKeys) Format(root string, isDeepObject bool) string {
 
 	for i, key := range ks {
 		// skip the last array element except the deep object style
-		if i == lenKeys-1 && key.index != nil {
+		if i == lenKeys-1 && IsParamIndex(key) {
 			if isDeepObject {
 				sb.WriteString("[]")
 			}
@@ -157,57 +155,65 @@ func (ks ParamKeys) String() string {
 }
 
 type ParamSelector interface {
-	~int | ~string
+	goutils.Equaler[ParamSelector]
+	goutils.IsZeroer
+	fmt.Stringer
 }
 
-// ParamKey represents a key string or index.
-type ParamKey struct {
-	key   *string
-	index *int
-}
+// ParamKey represents a parameter key string.
+type ParamKey string
 
-// NewIndex creates an index key.
-func NewIndex(index int) ParamKey {
-	return ParamKey{index: &index}
-}
-
-// NewKey creates a string key.
-func NewKey(key string) ParamKey {
-	return ParamKey{key: &key}
-}
+var _ ParamSelector = ParamKey("")
 
 // Equal checks if the target value is equal.
-func (k ParamKey) Equal(target ParamKey) bool {
-	return goutils.EqualComparablePtr(k.key, target.key) &&
-		goutils.EqualComparablePtr(k.index, target.index)
+func (k ParamKey) Equal(target ParamSelector) bool {
+	value, isString := target.(ParamKey)
+
+	return isString && k == value
 }
 
 // IsZero checks if the key is empty.
 func (k ParamKey) IsZero() bool {
-	return k.key != nil && k.index == nil
-}
-
-// Key gets the string key.
-func (k ParamKey) Key() *string {
-	return k.key
-}
-
-// Index gets the integer key.
-func (k ParamKey) Index() *int {
-	return k.index
+	return k == ""
 }
 
 // String implements fmt.Stringer interface.
 func (k ParamKey) String() string {
-	if k.index != nil {
-		return strconv.Itoa(*k.index)
-	}
+	return string(k)
+}
 
-	if k.key != nil {
-		return *k.key
-	}
+// ParamIndex represents a parameter index.
+type ParamIndex int
 
-	return ""
+var _ ParamSelector = ParamIndex(0)
+
+// Equal checks if the target value is equal.
+func (k ParamIndex) Equal(target ParamSelector) bool {
+	value, isIndex := target.(ParamIndex)
+
+	return isIndex && k == value
+}
+
+// IsZero checks if the key is empty.
+func (k ParamIndex) IsZero() bool {
+	return k == -1
+}
+
+// String implements fmt.Stringer interface.
+func (k ParamIndex) String() string {
+	return strconv.Itoa(int(k))
+}
+
+func IsParamKey(selector ParamSelector) bool {
+	_, ok := selector.(ParamKey)
+
+	return ok
+}
+
+func IsParamIndex(selector ParamSelector) bool {
+	_, ok := selector.(ParamIndex)
+
+	return ok
 }
 
 type ParameterItems []ParameterItem
@@ -251,9 +257,14 @@ func NewParameterItem(keys ParamKeys, value string) ParameterItem {
 
 // IsNested checks if the parameter is a nested object field.
 func (pi ParameterItem) IsNested() bool {
-	keyLength := len(pi.keys)
-
-	return keyLength > 1 || (keyLength == 1 && pi.keys[0].index == nil)
+	switch len(pi.keys) {
+	case 0:
+		return false
+	case 1:
+		return IsParamKey(pi.keys[0])
+	default:
+		return true
+	}
 }
 
 // Keys return key fragments of the parameter item.

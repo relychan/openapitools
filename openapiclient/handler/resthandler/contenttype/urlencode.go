@@ -20,7 +20,7 @@ import (
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
+	"github.com/relychan/openapitools/oasvalidator/parameter"
 )
 
 // implement the encoder of application/x-www-form-urlencoded content type.
@@ -65,7 +65,7 @@ func (fue *formURLEncoder) Encode(params parameter.ParameterItems) string {
 		}
 
 		// Encode array element with index
-		if len(keys) == 1 && keys[0].Index() != nil {
+		if len(keys) == 1 && parameter.IsParamIndex(keys[0]) {
 			fue.builder.WriteByte('[')
 			fue.builder.WriteString(keys[0].String())
 			fue.builder.WriteString("]=")

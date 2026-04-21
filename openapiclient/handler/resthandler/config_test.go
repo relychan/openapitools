@@ -21,7 +21,7 @@ import (
 	"github.com/relychan/gotransform"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/openapitools/oaschema"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
+	"github.com/relychan/openapitools/oasvalidator/parameter"
 	"github.com/stretchr/testify/assert"
 )
 

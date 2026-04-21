@@ -47,7 +47,7 @@ func EvaluateParameterValue(value any, parentKeys ParamKeys) ParameterItems {
 		for i, item := range v {
 			if item != "" {
 				results = append(results, NewParameterItem(
-					ParamKeys{NewIndex(i)},
+					ParamKeys{ParamIndex(i)},
 					item,
 				))
 			}
@@ -58,7 +58,7 @@ func EvaluateParameterValue(value any, parentKeys ParamKeys) ParameterItems {
 		results := make(ParameterItems, 0, len(v))
 
 		for i, item := range v {
-			params := EvaluateParameterValue(item, append(parentKeys, NewIndex(i)))
+			params := EvaluateParameterValue(item, append(parentKeys, ParamIndex(i)))
 			if len(params) > 0 {
 				results = append(results, params...)
 			}
@@ -69,7 +69,7 @@ func EvaluateParameterValue(value any, parentKeys ParamKeys) ParameterItems {
 		results := make(ParameterItems, 0, len(v))
 
 		for key, item := range v {
-			params := EvaluateParameterValue(item, append(parentKeys, NewKey(key)))
+			params := EvaluateParameterValue(item, append(parentKeys, ParamKey(key)))
 			if len(params) > 0 {
 				results = append(results, params...)
 			}
@@ -85,7 +85,7 @@ func EvaluateParameterValue(value any, parentKeys ParamKeys) ParameterItems {
 				continue
 			}
 
-			params := EvaluateParameterValue(item, append(parentKeys, NewKey(key)))
+			params := EvaluateParameterValue(item, append(parentKeys, ParamKey(key)))
 			if len(params) > 0 {
 				results = append(results, params...)
 			}
@@ -158,7 +158,7 @@ func evaluateParameterValueReflection(
 		for i := range valueLength {
 			elem := reflectValue.Index(i)
 
-			params := evaluateParameterValueReflection(elem, append(parentKeys, NewIndex(i)))
+			params := evaluateParameterValueReflection(elem, append(parentKeys, ParamIndex(i)))
 			if len(params) > 0 {
 				results = append(results, params...)
 			}
@@ -178,7 +178,7 @@ func evaluateParameterValueReflection(
 			keyStr := key.String()
 			elem := reflectValue.MapIndex(key)
 
-			params := evaluateParameterValueReflection(elem, append(parentKeys, NewKey(keyStr)))
+			params := evaluateParameterValueReflection(elem, append(parentKeys, ParamKey(keyStr)))
 			if len(params) > 0 {
 				results = append(results, params...)
 			}
@@ -318,7 +318,7 @@ func parseDeepObjectKey(input string) (ParamKeys, bool) {
 		c := input[i]
 		if c == '[' {
 			if len(tempKey) > 0 {
-				results = append(results, NewKey(string(tempKey)))
+				results = append(results, ParamKey(tempKey))
 				tempKey = tempKey[:0]
 			}
 
@@ -334,10 +334,10 @@ func parseDeepObjectKey(input string) (ParamKeys, bool) {
 			}
 
 			if len(tempKey) > 0 {
-				results = append(results, NewKey(string(tempKey)))
+				results = append(results, ParamKey(tempKey))
 				tempKey = tempKey[:0]
 			} else {
-				results = append(results, NewIndex(-1))
+				results = append(results, ParamIndex(-1))
 			}
 
 			// close bracket at the end.
@@ -364,29 +364,19 @@ func parseDeepObjectKey(input string) (ParamKeys, bool) {
 	}
 
 	if len(tempKey) > 0 {
-		results = append(results, NewKey(string(tempKey)))
+		results = append(results, ParamKey(tempKey))
 	}
 
 	return results, true
 }
 
-func parseNonExplodeObjectParam(result map[string]any, rawValue string, separator string) bool {
-	if rawValue == "" {
-		return true
+func getValue(values []string) any {
+	switch len(values) {
+	case 0:
+		return nil
+	case 1:
+		return values[0]
+	default:
+		return values
 	}
-
-	parts := strings.Split(rawValue, separator)
-	if len(parts)%2 != 0 {
-		return false
-	}
-
-	for i := 0; i < len(parts); i += 2 {
-		if parts[i] == "" {
-			return false
-		}
-
-		result[parts[i]] = parts[i+1]
-	}
-
-	return true
 }

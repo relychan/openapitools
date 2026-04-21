@@ -337,7 +337,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 	}
 }
 
-// BenchmarkEncodePath-11    	 3745680	       316.0 ns/op	     320 B/op	       9 allocs/op
+// BenchmarkEncodePath-11    	 3355124	       351.6 ns/op	     336 B/op	      11 allocs/op
 func BenchmarkEncodePath(b *testing.B) {
 	value := map[string]any{
 		"role":      "admin",

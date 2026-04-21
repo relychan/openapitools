@@ -17,6 +17,7 @@ package parameter
 import (
 	"cmp"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/relychan/goutils"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
+	"github.com/relychan/openapitools/oasvalidator/regexps"
 )
 
 type queryParamDecoder struct {
@@ -261,49 +263,85 @@ func (qpe *queryParamDecoder) decodeFromArray() ([]any, []goutils.ErrorDetail) {
 }
 
 func (qpe *queryParamDecoder) decodeFromObject() (map[string]any, []goutils.ErrorDetail) {
-	values, err := qpe.splitObjectFromString()
+	rawValues, err := qpe.splitObjectFromString()
 	if err != nil {
 		return nil, []goutils.ErrorDetail{*err}
 	}
 
-	errFuncs := oasvalidator.ValidateObject(qpe.Schema, values)
-	errs := oasvalidator.CollectErrors(errFuncs)
-
-	if len(values) == 0 || qpe.Schema.Properties == nil || qpe.Schema.Properties.Len() == 0 {
-		return values, errs
+	errFuncs := oasvalidator.ValidateObject(qpe.Schema, rawValues)
+	if len(errFuncs) > 0 {
+		return nil, oasvalidator.CollectErrors(errFuncs)
 	}
 
-	for iter := qpe.Schema.Properties.First(); iter != nil; iter = iter.Next() {
-		key := iter.Key()
+	var (
+		results = make(map[string]any)
+		errs    []goutils.ErrorDetail
+	)
 
-		value, ok := values[key]
-		if !ok {
-			continue
-		}
+	if qpe.Schema.Properties != nil {
+		for iter := qpe.Schema.Properties.First(); iter != nil; iter = iter.Next() {
+			key := iter.Key()
 
-		propSchemaProxy := iter.Value()
-		if propSchemaProxy == nil {
-			values[key] = value
+			value, ok := rawValues[key]
+			if !ok {
+				continue
+			}
 
-			continue
-		}
+			propSchemaProxy := iter.Value()
+			if propSchemaProxy == nil {
+				results[key] = value
 
-		propSchema := propSchemaProxy.Schema()
-		if oaschema.IsSchemaEmpty(propSchema) {
-			values[key] = value
+				continue
+			}
 
-			continue
-		}
+			propSchema := propSchemaProxy.Schema()
+			if oaschema.IsSchemaEmpty(propSchema) {
+				results[key] = value
 
-		parsedValue, _, err := qpe.decodeItemValueFromSchemaTypes(propSchema, value)
-		if err != nil {
-			errs = append(errs, *err)
-		} else {
-			values[key] = parsedValue
+				continue
+			}
+
+			propDecoder := &queryParamDecoder{
+				Name:      key,
+				Style:     qpe.Style,
+				Explode:   qpe.Explode,
+				RawValues: value,
+				Schema:    propSchema,
+			}
+
+			propValue, decodeErrs := propDecoder.Decode()
+			if len(decodeErrs) == 0 {
+				results[key] = propValue
+
+				continue
+			}
+
+			errs = append(errs, decodeErrs...)
 		}
 	}
 
-	return values, errs
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	errs = qpe.decodeObjectAdditionalProperties(rawValues, results, nil)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	errs = qpe.decodeObjectPatternProperties(rawValues, results)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	if len(results) == 0 {
+		// fallback to return all raw values.
+		for key, values := range rawValues {
+			results[key] = getValue(values)
+		}
+	}
+
+	return results, nil
 }
 
 func (qpe *queryParamDecoder) splitArrayFromString() []string {
@@ -349,7 +387,7 @@ func (qpe *queryParamDecoder) parseDelimitedStyle(separator string) []string {
 	return slices.Clip(results)
 }
 
-func (qpe *queryParamDecoder) splitObjectFromString() (map[string]any, *goutils.ErrorDetail) {
+func (qpe *queryParamDecoder) splitObjectFromString() (map[string][]string, *goutils.ErrorDetail) {
 	switch qpe.Style {
 	case oaschema.EncodingStyleSpaceDelimited:
 		// color=R%20100%20G%20200%20B%20150
@@ -475,21 +513,77 @@ func (qpe *queryParamDecoder) decodeExplodeObject(
 		}
 	}
 
-	if qpe.Schema.AdditionalProperties != nil &&
-		(qpe.Schema.AdditionalProperties.B || qpe.Schema.AdditionalProperties.A != nil) {
-		var propSchema *base.Schema
+	if len(errs) > 0 {
+		return nil, errs
+	}
 
-		if qpe.Schema.AdditionalProperties.N == 0 && qpe.Schema.AdditionalProperties.A != nil {
-			propSchema = qpe.Schema.AdditionalProperties.A.Schema()
+	errs = qpe.decodeObjectAdditionalProperties(queryValues, result, parsedKeys)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	errs = qpe.decodeObjectPatternProperties(queryValues, result)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	return result, nil
+}
+
+func (qpe *queryParamDecoder) decodeObjectPatternProperties(
+	queryValues map[string][]string,
+	results map[string]any,
+) []goutils.ErrorDetail {
+	if qpe.Schema.PatternProperties == nil || qpe.Schema.PatternProperties.Len() == 0 {
+		return nil
+	}
+
+	var errs []goutils.ErrorDetail
+
+	for iter := qpe.Schema.PatternProperties.First(); iter != nil; iter = iter.Next() {
+		key := iter.Key()
+
+		pattern, err := regexps.Get(key)
+		if err != nil {
+			// ignore compile error on runtime.
+			slog.Warn(
+				"failed to compile regular expression: "+err.Error(),
+				slog.String("pattern", key),
+			)
+
+			continue
 		}
 
-		for key, rawValues := range queryValues {
-			if slices.Contains(parsedKeys, key) {
+		var propSchema *base.Schema
+
+		schemaProxy := iter.Value()
+		if schemaProxy != nil {
+			propSchema = schemaProxy.Schema()
+		}
+
+		for key, values := range queryValues {
+			_, present := results[key]
+			if present {
+				continue
+			}
+
+			matched, err := pattern.MatchString(key)
+			if err != nil {
+				slog.Warn(
+					"failed to compile pattern property: "+err.Error(),
+					slog.String("pattern", key),
+					slog.String("name", key),
+				)
+
+				continue
+			}
+
+			if !matched {
 				continue
 			}
 
 			if oaschema.IsSchemaEmpty(propSchema) {
-				result[key] = rawValues
+				results[key] = values
 
 				continue
 			}
@@ -498,13 +592,13 @@ func (qpe *queryParamDecoder) decodeExplodeObject(
 				Name:      key,
 				Style:     qpe.Style,
 				Explode:   qpe.Explode,
-				RawValues: rawValues,
+				RawValues: values,
 				Schema:    propSchema,
 			}
 
 			value, decodeErrs := propDecoder.Decode()
 			if len(decodeErrs) == 0 {
-				result[key] = value
+				results[key] = value
 
 				continue
 			}
@@ -513,20 +607,86 @@ func (qpe *queryParamDecoder) decodeExplodeObject(
 		}
 	}
 
-	// TODO: patternProperties
+	return errs
+}
 
-	return result, errs
+func (qpe *queryParamDecoder) decodeObjectAdditionalProperties(
+	queryValues map[string][]string,
+	result map[string]any,
+	parsedKeys []string,
+) []goutils.ErrorDetail {
+	if qpe.Schema.AdditionalProperties == nil ||
+		(!qpe.Schema.AdditionalProperties.B && qpe.Schema.AdditionalProperties.A == nil) {
+		return nil
+	}
+
+	var (
+		propSchema *base.Schema
+		errs       []goutils.ErrorDetail
+	)
+
+	if qpe.Schema.AdditionalProperties.N == 0 && qpe.Schema.AdditionalProperties.A != nil {
+		propSchema = qpe.Schema.AdditionalProperties.A.Schema()
+	}
+
+	for key, rawValues := range queryValues {
+		if len(parsedKeys) > 0 && slices.Contains(parsedKeys, key) {
+			continue
+		}
+
+		_, present := result[key]
+		if present {
+			continue
+		}
+
+		if oaschema.IsSchemaEmpty(propSchema) {
+			result[key] = rawValues
+
+			continue
+		}
+
+		propDecoder := &queryParamDecoder{
+			Name:      key,
+			Style:     qpe.Style,
+			Explode:   qpe.Explode,
+			RawValues: rawValues,
+			Schema:    propSchema,
+		}
+
+		value, decodeErrs := propDecoder.Decode()
+		if len(decodeErrs) == 0 {
+			result[key] = value
+
+			continue
+		}
+
+		errs = addParameterErrors(errs, decodeErrs, key)
+	}
+
+	return errs
 }
 
 func (qpe *queryParamDecoder) parseNonExplodeObject(
 	separator string,
-) (map[string]any, *goutils.ErrorDetail) {
-	result := make(map[string]any)
+) (map[string][]string, *goutils.ErrorDetail) {
+	result := make(map[string][]string)
 
-	for _, value := range qpe.RawValues {
-		ok := parseNonExplodeObjectParam(result, value, separator)
-		if !ok {
+	for _, rawValue := range qpe.RawValues {
+		if rawValue == "" {
+			continue
+		}
+
+		parts := strings.Split(rawValue, separator)
+		if len(parts)%2 != 0 {
 			return nil, qpe.newInvalidObjectError()
+		}
+
+		for i := 0; i < len(parts); i += 2 {
+			if parts[i] == "" {
+				return nil, qpe.newInvalidObjectError()
+			}
+
+			result[parts[i]] = append(result[parts[i]], parts[i+1])
 		}
 	}
 

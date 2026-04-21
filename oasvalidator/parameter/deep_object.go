@@ -42,7 +42,7 @@ func decodeQueryDeepObjectFromParameter(
 	definition *highv3.Parameter,
 	rawNodes ParameterNodes,
 ) (any, []goutils.ErrorDetail) {
-	node := rawNodes.Find(NewKey(definition.Name))
+	node := rawNodes.Find(ParamKey(definition.Name))
 	if node == nil {
 		if definition.Required != nil && *definition.Required {
 			err := oasvalidator.ParameterRequiredError(definition.Name)

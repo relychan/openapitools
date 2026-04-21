@@ -364,9 +364,9 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 	}
 }
 
-// BenchmarkDecodeQueryFromParameters/parse_deep_object-11         	 1202402	       981.7 ns/op	    1071 B/op	      37 allocs/op
-// BenchmarkDecodeQueryFromParameters/decode_deep_object-11        	  808624	      1490 ns/op	    2231 B/op	      50 allocs/op
-// BenchmarkDecodeQueryFromParameters/parse_deep_object_complex-11 	   15681	     77054 ns/op	   64170 B/op	    1984 allocs/op
+// BenchmarkDecodeQueryFromParameters/parse_deep_object-11         	 1323890	       914.3 ns/op	    1036 B/op	      34 allocs/op
+// BenchmarkDecodeQueryFromParameters/decode_deep_object-11        	  802162	      1435 ns/op	    2212 B/op	      48 allocs/op
+// BenchmarkDecodeQueryFromParameters/parse_deep_object_complex-11 	   14733	     81442 ns/op	   63993 B/op	    1966 allocs/op
 func BenchmarkDecodeQueryFromParameters(b *testing.B) {
 	value := "id[role][0][user][0][]=admin&id[role][0][user][0][]=anonymous&name=foo&bar=baz"
 	parameters := []*highv3.Parameter{
