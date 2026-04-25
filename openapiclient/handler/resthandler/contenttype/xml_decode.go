@@ -18,7 +18,7 @@ import (
 	"encoding/xml"
 	"io"
 
-	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oasvalidator"
 )
 
@@ -141,7 +141,7 @@ L:
 }
 
 func newMalformedXMLError(err error, pointer string) error {
-	return &goutils.ErrorDetail{
+	return &httperror.ValidationError{
 		Detail:  err.Error(),
 		Code:    oasvalidator.ErrCodeMalformedXML,
 		Pointer: pointer,

@@ -26,7 +26,6 @@ import (
 	"github.com/hasura/gotel"
 	"github.com/hasura/gotel/otelutils"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
-	"github.com/relychan/gohttpc"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
@@ -161,7 +160,7 @@ func (ge *GraphQLHandler) Handle(
 		return nil, nil, err
 	}
 
-	defer gohttpc.CloseResponse(resp)
+	defer goutils.CloseResponse(resp)
 
 	if ge.customResponse == nil || ge.customResponse.IsZero() {
 		var respBody any
@@ -241,7 +240,7 @@ func (ge *GraphQLHandler) Stream(
 
 		err := json.NewDecoder(resp.Body).Decode(&respBody)
 
-		gohttpc.CloseResponse(resp)
+		goutils.CloseResponse(resp)
 
 		if err != nil {
 			ge.printLog(

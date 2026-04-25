@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	"github.com/pb33f/libopenapi/datamodel/high/base"
-	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"go.yaml.in/yaml/v4"
 )
 
@@ -72,26 +72,28 @@ const (
 	ErrCodeGraphQLResponseEmpty = "graphql_response_empty"
 	// ErrCodeRemoteServerError represents a code for remote server errors.
 	ErrCodeRemoteServerError = "remote_server_error"
+	// ErrCodeOpenAPISchemaError represents a code for OpenAPI schema errors.
+	ErrCodeOpenAPISchemaError = "openapi_schema_error"
 )
 
 // ErrorFunc abstracts a function to create an error detail lazily.
-type ErrorFunc func() *goutils.ErrorDetail
+type ErrorFunc func() *httperror.ValidationError
 
 // CollectErrors collects error functions to error details.
-func CollectErrors(errFuncs []ErrorFunc) []goutils.ErrorDetail {
+func CollectErrors(errFuncs []ErrorFunc) []httperror.ValidationError {
 	return CollectErrorsFunc(errFuncs, nil)
 }
 
 // CollectErrorsFunc collects error functions to error details.
 func CollectErrorsFunc(
 	errFuncs []ErrorFunc,
-	modifyFunc func(*goutils.ErrorDetail),
-) []goutils.ErrorDetail {
+	modifyFunc func(*httperror.ValidationError),
+) []httperror.ValidationError {
 	if len(errFuncs) == 0 {
 		return nil
 	}
 
-	results := make([]goutils.ErrorDetail, len(errFuncs))
+	results := make([]httperror.ValidationError, len(errFuncs))
 
 	for i, fn := range errFuncs {
 		err := fn()
@@ -106,8 +108,8 @@ func CollectErrorsFunc(
 	return results
 }
 
-func MinContainsError(expected int64, actual int64) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
+func MinContainsError(expected int64, actual int64) *httperror.ValidationError {
+	return &httperror.ValidationError{
 		Code: ErrCodeValidationError,
 		Detail: "Require at least " + strconv.FormatInt(expected, 10) +
 			" items to match contains schema, but got: " +
@@ -116,13 +118,13 @@ func MinContainsError(expected int64, actual int64) *goutils.ErrorDetail {
 }
 
 func MinContainsErrorFunc(expected int64, actual int64) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return MinContainsError(expected, actual)
 	}
 }
 
-func MaxContainsError(expected int64, actual int64) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
+func MaxContainsError(expected int64, actual int64) *httperror.ValidationError {
+	return &httperror.ValidationError{
 		Code: ErrCodeValidationError,
 		Detail: "Require maximum " + strconv.FormatInt(expected, 10) +
 			" items to match contains schema, but got: " +
@@ -131,7 +133,7 @@ func MaxContainsError(expected int64, actual int64) *goutils.ErrorDetail {
 }
 
 func MaxContainsErrorFunc(expected int64, actual int64) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return MaxContainsError(expected, actual)
 	}
 }
@@ -139,8 +141,8 @@ func MaxContainsErrorFunc(expected int64, actual int64) ErrorFunc {
 func InvalidTypeError(
 	expected []string,
 	actual string,
-) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
+) *httperror.ValidationError {
+	return &httperror.ValidationError{
 		Code: ErrCodeValidationError,
 		Detail: "Invalid type or syntax. Expected the type of value to be one of [" +
 			strings.Join(expected, ", ") + "], however the request provided '" +
@@ -148,18 +150,25 @@ func InvalidTypeError(
 	}
 }
 
+// func TypeMismatchedError(expected []string, actual string) *httperror.ValidationError {
+// 	return &httperror.ValidationError{
+// 		Code:   ErrCodeInvalidQueryParam,
+// 		Detail: "Invalid data types. Expected one of [" + strings.Join(expected, ", ") + "], but got: " + actual,
+// 	}
+// }
+
 func InvalidTypeErrorFunc(
 	expected []string,
 	actual string,
 ) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return InvalidTypeError(expected, actual)
 	}
 }
 
 // NotNullError returns a validation error for not-null value.
-func NotNullError() *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
+func NotNullError() *httperror.ValidationError {
+	return &httperror.ValidationError{
 		Code:   ErrCodeValidationError,
 		Detail: "The value must not be null",
 	}
@@ -168,7 +177,7 @@ func NotNullError() *goutils.ErrorDetail {
 func EnumValidationError(
 	typeSchema *base.Schema,
 	actual string,
-) *goutils.ErrorDetail {
+) *httperror.ValidationError {
 	enums := typeSchema.Enum
 
 	if typeSchema.Const != nil {
@@ -191,7 +200,7 @@ func EnumValidationError(
 		detail += ": [" + strings.Join(enumValues, ", ") + "]"
 	}
 
-	return &goutils.ErrorDetail{
+	return &httperror.ValidationError{
 		Code:   ErrCodeValidationError,
 		Detail: detail,
 	}
@@ -201,7 +210,7 @@ func EnumValidationErrorFunc(
 	typeSchema *base.Schema,
 	actual string,
 ) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return EnumValidationError(typeSchema, actual)
 	}
 }
@@ -209,12 +218,12 @@ func EnumValidationErrorFunc(
 func MultipleOfValidationError(
 	multipleOf float64,
 	actual float64,
-) *goutils.ErrorDetail {
+) *httperror.ValidationError {
 	detail := "Value must be a multiple of '" +
 		strconv.FormatFloat(multipleOf, 'f', -1, 64) +
 		"', but got: " + strconv.FormatFloat(actual, 'f', -1, 64)
 
-	return &goutils.ErrorDetail{
+	return &httperror.ValidationError{
 		Code:   ErrCodeValidationError,
 		Detail: detail,
 	}
@@ -224,12 +233,12 @@ func MultipleOfValidationErrorFunc(
 	multipleOf float64,
 	actual float64,
 ) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return MultipleOfValidationError(multipleOf, actual)
 	}
 }
 
-func MaximumValidationError(expected float64, actual float64, exclusive bool) *goutils.ErrorDetail {
+func MaximumValidationError(expected float64, actual float64, exclusive bool) *httperror.ValidationError {
 	detail := "Number value must be less than "
 
 	if !exclusive {
@@ -239,19 +248,19 @@ func MaximumValidationError(expected float64, actual float64, exclusive bool) *g
 	detail += strconv.FormatFloat(expected, 'f', -1, 64) +
 		", but got: " + strconv.FormatFloat(actual, 'f', -1, 64)
 
-	return &goutils.ErrorDetail{
+	return &httperror.ValidationError{
 		Code:   ErrCodeValidationError,
 		Detail: detail,
 	}
 }
 
 func MaximumValidationErrorFunc(expected float64, actual float64, exclusive bool) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return MaximumValidationError(expected, actual, exclusive)
 	}
 }
 
-func MinimumValidationError(expected float64, actual float64, exclusive bool) *goutils.ErrorDetail {
+func MinimumValidationError(expected float64, actual float64, exclusive bool) *httperror.ValidationError {
 	detail := "Number value must be greater than "
 
 	if !exclusive {
@@ -261,68 +270,68 @@ func MinimumValidationError(expected float64, actual float64, exclusive bool) *g
 	detail += strconv.FormatFloat(expected, 'f', -1, 64) +
 		", but got: " + strconv.FormatFloat(actual, 'f', -1, 64)
 
-	return &goutils.ErrorDetail{
+	return &httperror.ValidationError{
 		Code:   ErrCodeValidationError,
 		Detail: detail,
 	}
 }
 
 func MinimumValidationErrorFunc(expected float64, actual float64, exclusive bool) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return MinimumValidationError(expected, actual, exclusive)
 	}
 }
 
-func MaxLengthValidationError(expected int64, actual int64) *goutils.ErrorDetail {
+func MaxLengthValidationError(expected int64, actual int64) *httperror.ValidationError {
 	detail := "The length of the string value must be less than " +
 		strconv.FormatInt(expected, 10) +
 		", but got: " + strconv.FormatInt(actual, 10)
 
-	return &goutils.ErrorDetail{
+	return &httperror.ValidationError{
 		Code:   ErrCodeValidationError,
 		Detail: detail,
 	}
 }
 
 func MaxLengthValidationErrorFunc(expected int64, actual int64) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return MaxLengthValidationError(expected, actual)
 	}
 }
 
-func MinLengthValidationError(expected int64, actual int64) *goutils.ErrorDetail {
+func MinLengthValidationError(expected int64, actual int64) *httperror.ValidationError {
 	detail := "The length of the string value must be less than " +
 		strconv.FormatInt(expected, 10) +
 		", but got: " + strconv.FormatInt(actual, 10)
 
-	return &goutils.ErrorDetail{
+	return &httperror.ValidationError{
 		Code:   ErrCodeValidationError,
 		Detail: detail,
 	}
 }
 
 func MinLengthValidationErrorFunc(expected int64, actual int64) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return MinLengthValidationError(expected, actual)
 	}
 }
 
-func PatternValidationError(expected string) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
+func PatternValidationError(expected string) *httperror.ValidationError {
+	return &httperror.ValidationError{
 		Code:   ErrCodeValidationError,
 		Detail: "The value does not match pattern: " + expected,
 	}
 }
 
 func PatternValidationErrorFunc(expected string) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return PatternValidationError(expected)
 	}
 }
 
 // ArrayMaxItemsValidationError returns a validation error for maximum items in array.
-func ArrayMaxItemsValidationError(expected, actual int64) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
+func ArrayMaxItemsValidationError(expected, actual int64) *httperror.ValidationError {
+	return &httperror.ValidationError{
 		Code: ErrCodeValidationError,
 		Detail: "Array must have a maximum items length of " +
 			strconv.FormatInt(expected, 10) + ", but got " +
@@ -331,14 +340,14 @@ func ArrayMaxItemsValidationError(expected, actual int64) *goutils.ErrorDetail {
 }
 
 func ArrayMaxItemsValidationErrorFunc(expected, actual int64) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return ArrayMaxItemsValidationError(expected, actual)
 	}
 }
 
 // ArrayMinItemsValidationError returns a validation error for minimum items in array.
-func ArrayMinItemsValidationError(expected, actual int64) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
+func ArrayMinItemsValidationError(expected, actual int64) *httperror.ValidationError {
+	return &httperror.ValidationError{
 		Code: ErrCodeValidationError,
 		Detail: "Array must have a minimum items length of " +
 			strconv.FormatInt(expected, 10) + ", but got " +
@@ -347,28 +356,28 @@ func ArrayMinItemsValidationError(expected, actual int64) *goutils.ErrorDetail {
 }
 
 func ArrayMinItemsValidationErrorFunc(expected, actual int64) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return ArrayMinItemsValidationError(expected, actual)
 	}
 }
 
 // ArrayUniqueItemsValidationError returns a validation error for unique items array.
-func ArrayUniqueItemsValidationError[T any](duplicates []T) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
+func ArrayUniqueItemsValidationError[T any](duplicates []T) *httperror.ValidationError {
+	return &httperror.ValidationError{
 		Code:   ErrCodeValidationError,
 		Detail: fmt.Sprintf("Array contains the following duplicates: %v", duplicates),
 	}
 }
 
 func ArrayUniqueItemsValidationErrorFunc[T any](duplicates []T) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return ArrayUniqueItemsValidationError(duplicates)
 	}
 }
 
 // ObjectMinPropertiesValidationError returns a validation error for minimum properties in object.
-func ObjectMinPropertiesValidationError(expected, actual int64) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
+func ObjectMinPropertiesValidationError(expected, actual int64) *httperror.ValidationError {
+	return &httperror.ValidationError{
 		Code: ErrCodeValidationError,
 		Detail: "Object must have a minimum properties of " +
 			strconv.FormatInt(expected, 10) + ", but got " +
@@ -377,14 +386,14 @@ func ObjectMinPropertiesValidationError(expected, actual int64) *goutils.ErrorDe
 }
 
 func ObjectMinPropertiesValidationErrorFunc(expected, actual int64) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return ObjectMinPropertiesValidationError(expected, actual)
 	}
 }
 
 // ObjectMaxPropertiesValidationError returns a validation error for maximum properties in object.
-func ObjectMaxPropertiesValidationError(expected, actual int64) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
+func ObjectMaxPropertiesValidationError(expected, actual int64) *httperror.ValidationError {
+	return &httperror.ValidationError{
 		Code: ErrCodeValidationError,
 		Detail: "Object must have a maximum properties of " +
 			strconv.FormatInt(expected, 10) + ", but got " +
@@ -393,14 +402,14 @@ func ObjectMaxPropertiesValidationError(expected, actual int64) *goutils.ErrorDe
 }
 
 func ObjectMaxPropertiesValidationErrorFunc(expected, actual int64) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return ObjectMinPropertiesValidationError(expected, actual)
 	}
 }
 
 // ObjectRequiredPropertyError returns a validation error for a missing required property in object.
-func ObjectRequiredPropertyError(name string) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
+func ObjectRequiredPropertyError(name string) *httperror.ValidationError {
+	return &httperror.ValidationError{
 		Code:    ErrCodeValidationError,
 		Pointer: "/" + name,
 		Detail:  "Required property '" + name + "' is missing in the object",
@@ -408,14 +417,14 @@ func ObjectRequiredPropertyError(name string) *goutils.ErrorDetail {
 }
 
 func ObjectRequiredPropertyErrorFunc(name string) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return ObjectRequiredPropertyError(name)
 	}
 }
 
 // ObjectDependentRequiredError returns a validation error for a missing dependent required property in object.
-func ObjectDependentRequiredError(name string, dependent string) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
+func ObjectDependentRequiredError(name string, dependent string) *httperror.ValidationError {
+	return &httperror.ValidationError{
 		Code:    ErrCodeValidationError,
 		Pointer: "/" + dependent,
 		Detail:  "Property '" + dependent + "' is required if '" + name + "' exists in the object",
@@ -423,14 +432,14 @@ func ObjectDependentRequiredError(name string, dependent string) *goutils.ErrorD
 }
 
 func ObjectDependentRequiredErrorFunc(name string, dependent string) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return ObjectDependentRequiredError(name, dependent)
 	}
 }
 
 // ParameterRequiredError returns a validation error for a missing required parameter.
-func ParameterRequiredError(name string) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
+func ParameterRequiredError(name string) *httperror.ValidationError {
+	return &httperror.ValidationError{
 		Code:      ErrCodeValidationError,
 		Parameter: name,
 		Detail:    "Required parameter '" + name + "' is missing in the object",
@@ -438,7 +447,7 @@ func ParameterRequiredError(name string) *goutils.ErrorDetail {
 }
 
 func ParameterRequiredErrorFunc(name string) ErrorFunc {
-	return func() *goutils.ErrorDetail {
+	return func() *httperror.ValidationError {
 		return ParameterRequiredError(name)
 	}
 }

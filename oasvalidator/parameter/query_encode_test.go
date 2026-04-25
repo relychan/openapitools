@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	"github.com/relychan/openapitools/oaschema"
-	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -284,7 +283,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			qValues := url.Values{}
 			SetQueryParam(qValues, tc.encoding, tc.value)
-			assert.Equal(t, tc.expected, oasvalidator.EncodeQueryValuesUnescape(qValues))
+			assert.Equal(t, tc.expected, EncodeQueryValuesUnescape(qValues))
 		})
 	}
 }
@@ -312,6 +311,6 @@ func BenchmarkSetQueryParam(b *testing.B) {
 	for b.Loop() {
 		qValues := url.Values{}
 		SetQueryParam(qValues, encoding, value)
-		oasvalidator.EncodeQueryValuesUnescape(qValues)
+		EncodeQueryValuesUnescape(qValues)
 	}
 }

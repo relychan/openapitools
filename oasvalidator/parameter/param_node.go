@@ -21,12 +21,14 @@ import (
 	"strings"
 
 	"github.com/pb33f/libopenapi/datamodel/high/base"
-	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/oasvalidator/regexps"
 )
 
+// ParameterNodes is a flat list of root-level ParameterNode entries, one per distinct top-level key.
+// It is used as the working set when inserting and decoding deep-object query parameters.
 type ParameterNodes []*ParameterNode
 
 func (pn ParameterNodes) Find(key ParamSelector) *ParameterNode {
@@ -39,7 +41,7 @@ func (pn ParameterNodes) Find(key ParamSelector) *ParameterNode {
 	return nil
 }
 
-func (pn *ParameterNodes) Insert(keys ParamKeys, values []string) *goutils.ErrorDetail {
+func (pn *ParameterNodes) Insert(keys ParamKeys, values []string) *httperror.ValidationError {
 	if len(keys) == 0 {
 		return nil
 	}
@@ -91,6 +93,9 @@ func (pn ParameterNodes) String() string {
 	return sb.String()
 }
 
+// ParameterNode is a single node in the decoded parameter tree.
+// Leaf nodes (no items) carry raw string values; branch nodes carry child nodes keyed by
+// ParamKey (object property) or ParamIndex (array element).
 type ParameterNode struct {
 	key    ParamSelector
 	values []string
@@ -105,6 +110,12 @@ func (pn *ParameterNode) FindNode(key ParamSelector) *ParameterNode {
 	return pn.items.Find(key)
 }
 
+// Normalize resolves ambiguities that arise from deep-object query parsing:
+//   - A single numeric ParamKey child ("0") is promoted to ParamIndex so the node is
+//     treated as an array element rather than an object property.
+//   - A single ParamIndex child with no further children is collapsed: its values are
+//     hoisted into the parent, flattening a one-element array.
+//   - Multi-element arrays are sorted by index so later schema validation sees items in order.
 func (pn *ParameterNode) Normalize() {
 	if len(pn.items) == 0 {
 		return
@@ -142,7 +153,10 @@ func (pn *ParameterNode) Normalize() {
 	}
 }
 
-func (pn *ParameterNode) InsertNode(keys ParamKeys, values []string) *goutils.ErrorDetail {
+// InsertNode walks (or creates) the path described by keys and stores values at the leaf.
+// When mixing ParamKey and ParamIndex siblings it tries to coerce the odd type so that
+// the whole level is consistently typed; it returns an error if coercion is impossible.
+func (pn *ParameterNode) InsertNode(keys ParamKeys, values []string) *httperror.ValidationError {
 	if len(keys) == 0 {
 		pn.values = values
 
@@ -197,8 +211,8 @@ func (pn ParameterNode) String() string {
 	return pn.printIndent(0)
 }
 
-func (pn *ParameterNode) Decode(typeSchema *base.Schema) (any, []goutils.ErrorDetail) {
-	if oaschema.IsSchemaEmpty(typeSchema) {
+func (pn *ParameterNode) Decode(typeSchema *base.Schema) (any, []httperror.ValidationError) {
+	if oaschema.IsSchemaTypeEmpty(typeSchema) {
 		return pn.decodeArbitrary(), nil
 	}
 
@@ -207,10 +221,13 @@ func (pn *ParameterNode) Decode(typeSchema *base.Schema) (any, []goutils.ErrorDe
 	return result, errs
 }
 
+// decodeFromSchemaTypes tries each declared schema type in order and returns the first
+// successful decode. The empty type and "null" are skipped; errors from the last failing
+// type are surfaced when all types fail.
 func (pn *ParameterNode) decodeFromSchemaTypes(
 	schemaDef *base.Schema,
-) (any, string, []goutils.ErrorDetail) {
-	var finalErrors []goutils.ErrorDetail
+) (any, string, []httperror.ValidationError) {
+	var finalErrors []httperror.ValidationError
 
 	for _, typeName := range schemaDef.Type {
 		if typeName == "" || typeName == oaschema.Null {
@@ -231,7 +248,7 @@ func (pn *ParameterNode) decodeFromSchemaTypes(
 func (pn *ParameterNode) decodeFromSchemaType(
 	schemaDef *base.Schema,
 	typeName string,
-) (any, string, []goutils.ErrorDetail) {
+) (any, string, []httperror.ValidationError) {
 	switch typeName {
 	case oaschema.Array:
 		result, errs := pn.decodeFromArray(schemaDef)
@@ -250,7 +267,7 @@ func (pn *ParameterNode) decodeFromSchemaType(
 	}
 }
 
-func (pn *ParameterNode) decodeFromArray(schemaDef *base.Schema) (any, []goutils.ErrorDetail) {
+func (pn *ParameterNode) decodeFromArray(schemaDef *base.Schema) (any, []httperror.ValidationError) {
 	errFuncs := oasvalidator.ValidateArray(schemaDef, pn.items, compareParameterNodes)
 
 	errs := oasvalidator.CollectErrors(errFuncs)
@@ -267,7 +284,7 @@ func (pn *ParameterNode) decodeFromArray(schemaDef *base.Schema) (any, []goutils
 	}
 
 	itemSchema := schemaDef.Items.A.Schema()
-	if oaschema.IsSchemaEmpty(itemSchema) {
+	if oaschema.IsSchemaTypeEmpty(itemSchema) {
 		return pn.decodeArbitraryArray(), nil
 	}
 
@@ -287,10 +304,10 @@ func (pn *ParameterNode) decodeFromArray(schemaDef *base.Schema) (any, []goutils
 
 func (pn *ParameterNode) decodeFromObject(
 	schemaDef *base.Schema,
-) (map[string]any, []goutils.ErrorDetail) {
+) (map[string]any, []httperror.ValidationError) {
 	var (
 		results = make(map[string]any)
-		errs    []goutils.ErrorDetail
+		errs    []httperror.ValidationError
 	)
 
 	if schemaDef.Properties != nil {
@@ -317,7 +334,7 @@ func (pn *ParameterNode) decodeFromObject(
 			}
 
 			propSchema := schemaProxy.Schema()
-			if oaschema.IsSchemaEmpty(propSchema) {
+			if oaschema.IsSchemaTypeEmpty(propSchema) {
 				results[key] = propNode.decodeArbitrary()
 
 				continue
@@ -351,15 +368,19 @@ func (pn *ParameterNode) decodeFromObject(
 	return results, nil
 }
 
+// decodeObjectPatternProperties matches node children against schema patternProperties.
+// Keys already present in results (decoded from explicit properties) are skipped to avoid
+// double-processing. Regex compile failures are logged and the pattern is skipped rather
+// than failing the entire request.
 func (pn *ParameterNode) decodeObjectPatternProperties(
 	schemaDef *base.Schema,
 	results map[string]any,
-) []goutils.ErrorDetail {
+) []httperror.ValidationError {
 	if schemaDef.PatternProperties == nil && schemaDef.PatternProperties.Len() == 0 {
 		return nil
 	}
 
-	var errs []goutils.ErrorDetail
+	var errs []httperror.ValidationError
 
 	for iter := schemaDef.PatternProperties.First(); iter != nil; iter = iter.Next() {
 		key := iter.Key()
@@ -410,7 +431,7 @@ func (pn *ParameterNode) decodeObjectPatternProperties(
 				continue
 			}
 
-			if oaschema.IsSchemaEmpty(propSchema) {
+			if oaschema.IsSchemaTypeEmpty(propSchema) {
 				results[propKey] = propNode.decodeArbitrary()
 
 				continue
@@ -430,10 +451,14 @@ func (pn *ParameterNode) decodeObjectPatternProperties(
 	return errs
 }
 
+// decodeObjectAdditionalProperties decodes node children that were not matched by
+// explicit properties or patternProperties. When AdditionalProperties carries a schema
+// (N==0, A!=nil) each extra key is decoded against it; when it is simply true (B) keys
+// are decoded arbitrarily.
 func (pn *ParameterNode) decodeObjectAdditionalProperties(
 	schemaDef *base.Schema,
 	results map[string]any,
-) []goutils.ErrorDetail {
+) []httperror.ValidationError {
 	if schemaDef.AdditionalProperties == nil ||
 		(!schemaDef.AdditionalProperties.B && schemaDef.AdditionalProperties.A == nil) {
 		return nil
@@ -441,7 +466,7 @@ func (pn *ParameterNode) decodeObjectAdditionalProperties(
 
 	var (
 		propSchema *base.Schema
-		errs       []goutils.ErrorDetail
+		errs       []httperror.ValidationError
 	)
 
 	if schemaDef.AdditionalProperties.N == 0 && schemaDef.AdditionalProperties.A != nil {
@@ -461,7 +486,7 @@ func (pn *ParameterNode) decodeObjectAdditionalProperties(
 			continue
 		}
 
-		if oaschema.IsSchemaEmpty(propSchema) {
+		if oaschema.IsSchemaTypeEmpty(propSchema) {
 			results[propKey] = propNode.decodeArbitrary()
 
 			continue
@@ -535,6 +560,10 @@ func (pn ParameterNode) printIndent(indent int) string {
 	return sb.String()
 }
 
+// compareParameterNodes sorts ParameterNodes so that ParamIndex nodes are ordered
+// numerically (index -1, used as a placeholder for bare "[]", sorts last) and
+// ParamKey nodes are ordered lexicographically.  Mixed-type siblings should not
+// occur after normalization, but a ParamIndex always sorts before a ParamKey.
 func compareParameterNodes(a, b *ParameterNode) int {
 	switch sa := a.key.(type) {
 	case ParamIndex:

@@ -25,7 +25,7 @@ import (
 
 	"github.com/hasura/goenvconf"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
-	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
@@ -104,7 +104,7 @@ func parseHTTPRequestBody(
 			return nil, nil
 		}
 
-		err := goutils.NewBadRequestError()
+		err := httperror.NewBadRequestError()
 		err.Detail = "request body is required"
 
 		writeErrorResponse(writer, err.Status, err)
@@ -117,15 +117,15 @@ func parseHTTPRequestBody(
 		return decodedBody, nil
 	}
 
-	errorDetail, ok := errors.AsType[*goutils.ErrorDetail](err)
+	errorDetail, ok := errors.AsType[*httperror.ValidationError](err)
 	if !ok {
-		errorDetail = &goutils.ErrorDetail{
+		errorDetail = &httperror.ValidationError{
 			Detail: err.Error(),
 			Code:   oasvalidator.ErrCodeRequestDecodeBodyError,
 		}
 	}
 
-	respErr := goutils.NewBadRequestError(*errorDetail)
+	respErr := httperror.NewBadRequestError(*errorDetail)
 	respErr.Detail = "failed to decode request"
 
 	writeErrorResponse(writer, respErr.Status, respErr)
@@ -137,7 +137,7 @@ func newUnsupportedContentTypeError(
 	route *internal.Route,
 	urlPath string,
 	contentType string,
-) *goutils.RFC9457Error {
+) *httperror.HTTPError {
 	var sb strings.Builder
 
 	sb.WriteString("Unsupported Content-Type ")
@@ -158,7 +158,7 @@ func newUnsupportedContentTypeError(
 	}
 
 	statusCode := http.StatusUnsupportedMediaType
-	err := goutils.NewRFC9457Error(statusCode, sb.String())
+	err := httperror.NewHTTPError(statusCode, sb.String())
 	err.Code = "415-01"
 	err.Instance = urlPath
 

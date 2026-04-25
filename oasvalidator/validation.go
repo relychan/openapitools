@@ -24,6 +24,7 @@ import (
 	"github.com/dlclark/regexp2"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
 	"go.yaml.in/yaml/v4"
 )
@@ -257,8 +258,8 @@ func ValidateString(typeSchema *base.Schema, value string) []ErrorFunc {
 
 	matched, err := pattern.MatchString(value)
 	if err != nil {
-		errs = append(errs, func() *goutils.ErrorDetail {
-			return &goutils.ErrorDetail{
+		errs = append(errs, func() *httperror.ValidationError {
+			return &httperror.ValidationError{
 				Code:   ErrCodeValidationError,
 				Detail: "Failed to validate string value against regular expression: " + err.Error(),
 			}
@@ -389,7 +390,7 @@ func ValidateArrayAndItems[T any](
 	}
 
 	itemSchema := typeSchema.Items.A.Schema()
-	if oaschema.IsSchemaEmpty(itemSchema) {
+	if oaschema.IsSchemaTypeEmpty(itemSchema) {
 		return errs
 	}
 
@@ -401,7 +402,7 @@ func ValidateArrayAndItems[T any](
 			for j := range itemErrors {
 				itemError := itemErrors[j]
 
-				errs = append(errs, func() *goutils.ErrorDetail {
+				errs = append(errs, func() *httperror.ValidationError {
 					result := itemError()
 					if result.Pointer == "" {
 						result.Pointer = "/" + strconv.Itoa(i)

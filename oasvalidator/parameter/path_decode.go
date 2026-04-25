@@ -23,10 +23,13 @@ import (
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
 )
 
+// pathParamDecoder holds the resolved configuration and raw string value for a single
+// path parameter and drives all style-aware decoding.
 type pathParamDecoder struct {
 	Name     string
 	RawValue string
@@ -39,9 +42,9 @@ type pathParamDecoder struct {
 // The value is encoded differently on each style, according to the [OpenAPI specification].
 //
 // [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
-func DecodePathValue(definition *highv3.Parameter, value string) (any, []goutils.ErrorDetail) {
+func DecodePathValue(definition *highv3.Parameter, value string) (any, []httperror.ValidationError) {
 	if value == "" {
-		return nil, []goutils.ErrorDetail{
+		return nil, []httperror.ValidationError{
 			{
 				Code:      oasvalidator.ErrCodeInvalidURLParam,
 				Detail:    "URL parameter is required",
@@ -60,7 +63,7 @@ func DecodePathValue(definition *highv3.Parameter, value string) (any, []goutils
 		definition.Explode,
 	)
 	if err != nil {
-		return nil, []goutils.ErrorDetail{
+		return nil, []httperror.ValidationError{
 			{
 				Code:      oasvalidator.ErrCodeInvalidURLParam,
 				Detail:    err.Error(),
@@ -81,21 +84,22 @@ func DecodePathValue(definition *highv3.Parameter, value string) (any, []goutils
 }
 
 // Decode evaluates and decodes URL parameters.
-func (ppe *pathParamDecoder) Decode() (any, []goutils.ErrorDetail) {
-	result, _, errs := ppe.DecodeFromSchemaTypes()
+func (ppe *pathParamDecoder) Decode() (any, []httperror.ValidationError) {
+	result, _, errs := ppe.decodeFromSchemaTypes()
 
 	return result, errs
 }
 
-// DecodeFromSchemaTypes decode a path parameter value from types of schema.
-// Returns the decoded value, a matched type and an error.
-// Prefer string if exists.
-func (ppe *pathParamDecoder) DecodeFromSchemaTypes() (any, string, []goutils.ErrorDetail) {
+// decodes the raw path segment value by trying each declared schema type in order.
+// String is given priority to avoid lossy parsing.  Before type dispatch
+// the style prefix ("." for label, ";" for matrix) is stripped from RawValue so downstream
+// split helpers receive the plain payload.
+func (ppe *pathParamDecoder) decodeFromSchemaTypes() (any, string, []httperror.ValidationError) {
 	// remove the symbol prefix from raw value string
 	switch ppe.Style {
 	case oaschema.EncodingStyleLabel:
 		if ppe.RawValue[0] != oaschema.Dot[0] {
-			return nil, "", []goutils.ErrorDetail{
+			return nil, "", []httperror.ValidationError{
 				{
 					Code:      oasvalidator.ErrCodeInvalidURLParam,
 					Detail:    "The label style of parameter value must start with a dot",
@@ -107,7 +111,7 @@ func (ppe *pathParamDecoder) DecodeFromSchemaTypes() (any, string, []goutils.Err
 		ppe.RawValue = ppe.RawValue[1:]
 	case oaschema.EncodingStyleMatrix:
 		if ppe.RawValue[0] != oaschema.SemiColon[0] {
-			return nil, "", []goutils.ErrorDetail{
+			return nil, "", []httperror.ValidationError{
 				{
 					Code:      oasvalidator.ErrCodeInvalidURLParam,
 					Detail:    "The matrix style of parameter value must start with a semicolon",
@@ -124,14 +128,14 @@ func (ppe *pathParamDecoder) DecodeFromSchemaTypes() (any, string, []goutils.Err
 		return ppe.RawValue, oaschema.String, nil
 	}
 
-	var finalErrors []goutils.ErrorDetail
+	var finalErrors []httperror.ValidationError
 
 	for _, typeName := range ppe.Schema.Type {
 		if typeName == "" || typeName == oaschema.Null {
 			continue
 		}
 
-		result, primitiveType, errs := ppe.DecodeFromSchemaType(typeName)
+		result, primitiveType, errs := ppe.decodeFromSchemaType(typeName)
 		if len(errs) == 0 {
 			return result, primitiveType, nil
 		}
@@ -142,17 +146,17 @@ func (ppe *pathParamDecoder) DecodeFromSchemaTypes() (any, string, []goutils.Err
 	return nil, "", finalErrors
 }
 
-// DecodeFromSchemaType decodes a path parameter value from a type of the schema.
+// decodes a path parameter value from a type of the schema.
 // Returns the decoded value, a matched type and an error.
-func (ppe *pathParamDecoder) DecodeFromSchemaType(
+func (ppe *pathParamDecoder) decodeFromSchemaType(
 	typeName string,
-) (any, string, []goutils.ErrorDetail) {
+) (any, string, []httperror.ValidationError) {
 	result, primitiveType, err := oasvalidator.DecodePrimitiveValueFromType(
 		ppe.RawValue,
 		typeName,
 	)
 	if err != nil {
-		return nil, "", []goutils.ErrorDetail{
+		return nil, "", []httperror.ValidationError{
 			{
 				Code:      oasvalidator.ErrCodeInvalidURLParam,
 				Detail:    err.Error(),
@@ -167,11 +171,11 @@ func (ppe *pathParamDecoder) DecodeFromSchemaType(
 
 	switch typeName {
 	case oaschema.Array:
-		result, err := ppe.DecodeFromArray()
+		result, err := ppe.decodeFromArray()
 
 		return result, typeName, err
 	case oaschema.Object:
-		result, err := ppe.DecodeFromObject()
+		result, err := ppe.decodeFromObject()
 
 		return result, typeName, err
 	default:
@@ -179,14 +183,14 @@ func (ppe *pathParamDecoder) DecodeFromSchemaType(
 	}
 }
 
-func (ppe *pathParamDecoder) DecodeFromArray() ([]any, []goutils.ErrorDetail) {
-	strValues, err := ppe.SplitArrayFromString()
+func (ppe *pathParamDecoder) decodeFromArray() ([]any, []httperror.ValidationError) {
+	strValues, err := ppe.splitArrayFromString()
 	if err != nil {
-		return nil, []goutils.ErrorDetail{*err}
+		return nil, []httperror.ValidationError{*err}
 	}
 
 	errFuncs := oasvalidator.ValidateArray(ppe.Schema, strValues, cmp.Compare)
-	errs := oasvalidator.CollectErrorsFunc(errFuncs, func(ed *goutils.ErrorDetail) {
+	errs := oasvalidator.CollectErrorsFunc(errFuncs, func(ed *httperror.ValidationError) {
 		ed.Code = oasvalidator.ErrCodeInvalidURLParam
 		ed.Parameter = ppe.Name
 	})
@@ -196,14 +200,14 @@ func (ppe *pathParamDecoder) DecodeFromArray() ([]any, []goutils.ErrorDetail) {
 	}
 
 	itemSchema := ppe.Schema.Items.A.Schema()
-	if oaschema.IsSchemaEmpty(itemSchema) {
+	if oaschema.IsSchemaTypeEmpty(itemSchema) {
 		return goutils.ToAnySlice(strValues), errs
 	}
 
 	results := make([]any, len(strValues))
 
 	for i, value := range strValues {
-		itemValue, _, err := ppe.DecodeItemValueFromSchemaTypes(itemSchema, value)
+		itemValue, _, err := ppe.decodeItemValueFromSchemaTypes(itemSchema, value)
 		if err != nil {
 			errs = append(errs, *err)
 
@@ -216,10 +220,10 @@ func (ppe *pathParamDecoder) DecodeFromArray() ([]any, []goutils.ErrorDetail) {
 	return results, errs
 }
 
-func (ppe *pathParamDecoder) DecodeFromObject() (map[string]any, []goutils.ErrorDetail) {
-	values, err := ppe.SplitObjectFromString()
+func (ppe *pathParamDecoder) decodeFromObject() (map[string]any, []httperror.ValidationError) {
+	values, err := ppe.splitObjectFromString()
 	if err != nil {
-		return nil, []goutils.ErrorDetail{*err}
+		return nil, []httperror.ValidationError{*err}
 	}
 
 	errFuncs := oasvalidator.ValidateObject(ppe.Schema, values)
@@ -245,13 +249,13 @@ func (ppe *pathParamDecoder) DecodeFromObject() (map[string]any, []goutils.Error
 		}
 
 		propSchema := propSchemaProxy.Schema()
-		if oaschema.IsSchemaEmpty(propSchema) {
+		if oaschema.IsSchemaTypeEmpty(propSchema) {
 			values[key] = value
 
 			continue
 		}
 
-		parsedValue, _, err := ppe.DecodeItemValueFromSchemaTypes(propSchema, value)
+		parsedValue, _, err := ppe.decodeItemValueFromSchemaTypes(propSchema, value)
 		if err != nil {
 			errs = append(errs, *err)
 		} else {
@@ -262,7 +266,9 @@ func (ppe *pathParamDecoder) DecodeFromObject() (map[string]any, []goutils.Error
 	return values, errs
 }
 
-func (ppe *pathParamDecoder) SplitArrayFromString() ([]string, *goutils.ErrorDetail) {
+// Splits RawValue into individual array elements according to the serialization style.
+// The style prefix has already been stripped by DecodeFromSchemaTypes.
+func (ppe *pathParamDecoder) splitArrayFromString() ([]string, *httperror.ValidationError) {
 	switch ppe.Style {
 	case oaschema.EncodingStyleLabel:
 		if ppe.RawValue == "" {
@@ -289,7 +295,7 @@ func (ppe *pathParamDecoder) SplitArrayFromString() ([]string, *goutils.ErrorDet
 			for i, part := range parts {
 				value, found := strings.CutPrefix(strings.TrimSpace(part), prefix)
 				if !found {
-					return nil, &goutils.ErrorDetail{
+					return nil, &httperror.ValidationError{
 						Code:      oasvalidator.ErrCodeInvalidURLParam,
 						Detail:    "Invalid matrix style in parameter value. The array value must follow this format: ;key1=value1;key2=value2",
 						Parameter: ppe.Name,
@@ -306,7 +312,7 @@ func (ppe *pathParamDecoder) SplitArrayFromString() ([]string, *goutils.ErrorDet
 		// /users/;id=role,admin,firstName,Alex
 		value, found := strings.CutPrefix(ppe.RawValue, prefix)
 		if !found {
-			return nil, &goutils.ErrorDetail{
+			return nil, &httperror.ValidationError{
 				Code:      oasvalidator.ErrCodeInvalidURLParam,
 				Detail:    "Invalid matrix style in parameter value. The array value must follow this format: ;key1=value1,value2",
 				Parameter: ppe.Name,
@@ -320,7 +326,9 @@ func (ppe *pathParamDecoder) SplitArrayFromString() ([]string, *goutils.ErrorDet
 	}
 }
 
-func (ppe *pathParamDecoder) SplitObjectFromString() (map[string]any, *goutils.ErrorDetail) {
+// Splits RawValue into a key→value map according to the serialization style.
+// The style prefix has already been stripped by DecodeFromSchemaTypes.
+func (ppe *pathParamDecoder) splitObjectFromString() (map[string]any, *httperror.ValidationError) {
 	switch ppe.Style {
 	case oaschema.EncodingStyleLabel:
 		if ppe.RawValue == "" {
@@ -362,13 +370,12 @@ func (ppe *pathParamDecoder) SplitObjectFromString() (map[string]any, *goutils.E
 	}
 }
 
-// DecodeItemValueFromSchemaTypes decode a path parameter value from types of schema.
-// Returns the decoded value, a matched type and an error.
-// Prefer string if exists.
-func (ppe *pathParamDecoder) DecodeItemValueFromSchemaTypes(
+// Decodes a single split element (array item or object property value) against itemSchema.
+// String is given priority to avoid lossy parsing.
+func (ppe *pathParamDecoder) decodeItemValueFromSchemaTypes(
 	itemSchema *base.Schema,
 	value any,
-) (any, string, *goutils.ErrorDetail) {
+) (any, string, *httperror.ValidationError) {
 	if len(itemSchema.Type) == 0 {
 		return value, "", nil
 	}
@@ -377,9 +384,9 @@ func (ppe *pathParamDecoder) DecodeItemValueFromSchemaTypes(
 		return value, oaschema.String, nil
 	}
 
-	var finalError *goutils.ErrorDetail
+	var finalError *httperror.ValidationError
 
-	for _, typeName := range ppe.Schema.Type {
+	for _, typeName := range itemSchema.Type {
 		if typeName == "" {
 			continue
 		}
@@ -389,7 +396,7 @@ func (ppe *pathParamDecoder) DecodeItemValueFromSchemaTypes(
 			typeName,
 		)
 		if err != nil {
-			finalError = &goutils.ErrorDetail{
+			finalError = &httperror.ValidationError{
 				Code:      oasvalidator.ErrCodeInvalidURLParam,
 				Detail:    err.Error(),
 				Parameter: ppe.Name,
@@ -403,7 +410,7 @@ func (ppe *pathParamDecoder) DecodeItemValueFromSchemaTypes(
 		return nil, "", finalError
 	}
 
-	return nil, "", &goutils.ErrorDetail{
+	return nil, "", &httperror.ValidationError{
 		Code: oasvalidator.ErrCodeInvalidURLParam,
 		Detail: fmt.Sprintf(
 			"Unsupported types or nested fields in URL path parameter: %v",
@@ -416,7 +423,7 @@ func (ppe *pathParamDecoder) DecodeItemValueFromSchemaTypes(
 func (ppe *pathParamDecoder) parseExplodeObject(
 	rawValue string,
 	separator string,
-) (map[string]any, *goutils.ErrorDetail) {
+) (map[string]any, *httperror.ValidationError) {
 	result, ok := parseExplodeObjectParam(rawValue, separator)
 	if !ok {
 		return nil, ppe.newInvalidObjectError()
@@ -446,7 +453,7 @@ func parseExplodeObjectParam(rawValue string, separator string) (map[string]any,
 func (ppe *pathParamDecoder) parseNonExplodeObject(
 	rawValue string,
 	separator string,
-) (map[string]any, *goutils.ErrorDetail) {
+) (map[string]any, *httperror.ValidationError) {
 	result := make(map[string]any)
 
 	if rawValue == "" {
@@ -469,7 +476,7 @@ func (ppe *pathParamDecoder) parseNonExplodeObject(
 	return result, nil
 }
 
-func (ppe *pathParamDecoder) newInvalidObjectError() *goutils.ErrorDetail {
+func (ppe *pathParamDecoder) newInvalidObjectError() *httperror.ValidationError {
 	message := "Invalid syntax for simple style in parameter value. The object value must follow this format: key1,value1,key2,value2"
 
 	switch ppe.Style {
@@ -491,7 +498,7 @@ func (ppe *pathParamDecoder) newInvalidObjectError() *goutils.ErrorDetail {
 		}
 	}
 
-	return &goutils.ErrorDetail{
+	return &httperror.ValidationError{
 		Code:      oasvalidator.ErrCodeInvalidURLParam,
 		Detail:    message,
 		Parameter: ppe.Name,

@@ -102,7 +102,9 @@ func (conf BaseParameter) GetStyleAndExplode() (oaschema.ParameterEncodingStyle,
 	return evalParamStyleAndExplode(conf.In, conf.Style, conf.Explode)
 }
 
-// ParamKeys represent a key slice.
+// ParamKeys is an ordered path of selectors that locates a value within a nested
+// parameter tree, e.g. [ParamKey("address"), ParamKey("city")] or
+// [ParamKey("ids"), ParamIndex(0)].
 type ParamKeys []ParamSelector
 
 // Equal checks if the target value is equal.
@@ -154,6 +156,9 @@ func (ks ParamKeys) String() string {
 	return ks.Format("", false)
 }
 
+// ParamSelector is the discriminated union for a single path segment: either a
+// string key (ParamKey) for object properties or a numeric index (ParamIndex) for
+// array elements.
 type ParamSelector interface {
 	goutils.Equaler[ParamSelector]
 	goutils.IsZeroer
@@ -182,7 +187,9 @@ func (k ParamKey) String() string {
 	return string(k)
 }
 
-// ParamIndex represents a parameter index.
+// ParamIndex represents a parameter index. The sentinel value -1 is used when a
+// bare "[]" suffix is parsed from a deep-object key (e.g. "ids[]"), meaning the
+// position within the array is not known until Normalize resolves it.
 type ParamIndex int
 
 var _ ParamSelector = ParamIndex(0)
@@ -216,6 +223,9 @@ func IsParamIndex(selector ParamSelector) bool {
 	return ok
 }
 
+// ParameterItems is the flattened representation of a (potentially nested) parameter
+// value produced by EvaluateParameterValue.  Each item carries the full key path and
+// the serialized leaf value so encoders can reconstruct any OpenAPI serialization style.
 type ParameterItems []ParameterItem
 
 // Build build parameter items to a key-values map and estimate the length of the string will be built.

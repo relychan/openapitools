@@ -19,7 +19,6 @@ import (
 
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/openapitools/oaschema"
-	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/oasvalidator/parameter"
 )
 
@@ -219,8 +218,8 @@ func (fue *formURLEncoder) addParam(key string, value string, allowReserved bool
 		fue.builder.WriteByte('&')
 	}
 
-	encodedKey := oasvalidator.EncodeQueryEscape(key, allowReserved)
-	encodedValue := oasvalidator.EncodeQueryEscape(value, allowReserved)
+	encodedKey := parameter.EncodeQueryEscape(key, allowReserved)
+	encodedValue := parameter.EncodeQueryEscape(value, allowReserved)
 
 	fue.builder.WriteString(encodedKey)
 	fue.builder.WriteByte('=')

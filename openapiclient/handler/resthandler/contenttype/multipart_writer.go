@@ -25,6 +25,7 @@ import (
 	"strconv"
 
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oasvalidator"
 )
@@ -172,7 +173,7 @@ func createFieldMIMEHeader(fieldName string, headers http.Header) textproto.MIME
 }
 
 func newMultipartWriteError(name string, err error) error {
-	return &goutils.ErrorDetail{
+	return &httperror.ValidationError{
 		Detail:  err.Error(),
 		Pointer: "/" + name,
 		Code:    oasvalidator.ErrCodeMultipartFormEncodeError,

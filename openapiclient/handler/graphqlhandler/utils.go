@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/parser"
@@ -117,7 +118,7 @@ func convertVariableTypeFromUnknownValue(varDef *ast.VariableDefinition, value a
 }
 
 func newGraphQLResponseEncodeError(code string, err error) error {
-	respErr := goutils.NewServerError(goutils.ErrorDetail{
+	respErr := httperror.NewServerError(httperror.ValidationError{
 		Detail: err.Error(),
 		Code:   code,
 	})

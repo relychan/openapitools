@@ -104,15 +104,15 @@ Each OpenAPI operation gets exactly one handler, selected by the `x-rely-proxy-a
 
 ### OpenAPI extensions
 
-| Extension | Scope | Purpose |
-|---|---|---|
-| `x-rely-server-weight` | server object | Weighted round-robin weight |
-| `x-rely-server-headers` | server object | Per-server injected headers |
-| `x-rely-proxy-action` | operation object | Handler config (REST params, GraphQL query/variables) |
-| `x-rely-server-tls` | server object | TLS configuration |
-| `x-rely-security-credentials` | operation object | Per-operation credential overrides |
-| `x-rely-oauth2-token-url-env` | security scheme | Env var for OAuth2 token URL |
-| `x-rely-oauth2-refresh-url-env` | security scheme | Env var for OAuth2 refresh URL |
+| Extension                       | Scope            | Purpose                                               |
+| ------------------------------- | ---------------- | ----------------------------------------------------- |
+| `x-rely-server-weight`          | server object    | Weighted round-robin weight                           |
+| `x-rely-server-headers`         | server object    | Per-server injected headers                           |
+| `x-rely-proxy-action`           | operation object | Handler config (REST params, GraphQL query/variables) |
+| `x-rely-server-tls`             | server object    | TLS configuration                                     |
+| `x-rely-security-credentials`   | operation object | Per-operation credential overrides                    |
+| `x-rely-oauth2-token-url-env`   | security scheme  | Env var for OAuth2 token URL                          |
+| `x-rely-oauth2-refresh-url-env` | security scheme  | Env var for OAuth2 refresh URL                        |
 
 ### GraphQL handler configuration
 
@@ -133,7 +133,7 @@ Each OpenAPI operation gets exactly one handler, selected by the `x-rely-proxy-a
 
 ### Error handling
 
-All errors returned from `Execute` are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `goutils.RFC9457Error` values. Internal errors use `fmt.Errorf("context: %w", err)`. `writeErrorResponse()` checks `tracingResponseWriter.BytesWritten()` to avoid writing a response twice.
+All errors returned from `Execute` are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `httperror.HTTPError` values. Internal errors use `fmt.Errorf("context: %w", err)`. `writeErrorResponse()` checks `tracingResponseWriter.BytesWritten()` to avoid writing a response twice.
 
 ### Observability
 

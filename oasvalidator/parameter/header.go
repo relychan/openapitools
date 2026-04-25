@@ -26,7 +26,9 @@ func EncodeHeader(definition BaseParameter, value any) string {
 	return encodeParamWithSimpleStyle(items, explode)
 }
 
-// encodes the evaluated values to string using the simple style.
+// encodeParamWithSimpleStyle serializes items using the OpenAPI simple style.
+// With explode=true object properties use '=' as the key/value separator (key=value,key=value);
+// without explode both keys and values are comma-separated (key,value,key,value).
 func encodeParamWithSimpleStyle(
 	items ParameterItems,
 	explode bool,

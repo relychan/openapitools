@@ -22,8 +22,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
@@ -46,7 +46,7 @@ func (re *RESTfulHandler) transformResponse(
 
 	originalBody, err := contenttype.Decode(contentTypeFrom, resp.Body)
 
-	gohttpc.CloseResponse(resp)
+	goutils.CloseResponse(resp)
 
 	if err != nil {
 		return nil, re.postTransformedResponse(
@@ -128,15 +128,15 @@ func (*RESTfulHandler) postTransformedResponse(
 
 	logger.LogAttrs(ctx, slog.LevelError, err.Error(), logAttrs...)
 
-	errorDetail, ok := errors.AsType[*goutils.ErrorDetail](err)
+	errorDetail, ok := errors.AsType[*httperror.ValidationError](err)
 	if !ok {
-		errorDetail = &goutils.ErrorDetail{
+		errorDetail = &httperror.ValidationError{
 			Detail: err.Error(),
 			Code:   oasvalidator.ErrCodeResponseTransformError,
 		}
 	}
 
-	respErr := goutils.NewServerError(*errorDetail)
+	respErr := httperror.NewServerError(*errorDetail)
 	respErr.Detail = "failed to transform response"
 
 	return respErr
@@ -177,10 +177,10 @@ func (re *RESTfulHandler) writeRawResponse(
 		goutils.CatchWarnErrorFunc(response.Body.Close)
 	} else {
 		decodedBody, decodeError := contenttype.Decode(contentType, response.Body)
-		gohttpc.CloseResponse(response)
+		goutils.CloseResponse(response)
 
 		if decodeError != nil {
-			respErr := goutils.NewServerError(goutils.ErrorDetail{
+			respErr := httperror.NewServerError(httperror.ValidationError{
 				Code:   oasvalidator.ErrCodeWriteResponseError,
 				Detail: decodeError.Error(),
 			})
@@ -200,7 +200,7 @@ func (re *RESTfulHandler) writeRawResponse(
 	}
 
 	if err != nil {
-		respErr := goutils.NewServerError(goutils.ErrorDetail{
+		respErr := httperror.NewServerError(httperror.ValidationError{
 			Code:   oasvalidator.ErrCodeWriteResponseError,
 			Detail: err.Error(),
 		})
@@ -225,13 +225,13 @@ func (*RESTfulHandler) decodeRawResponse(
 	_, span := tracer.Start(ctx, "decode_raw_response", trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
 
-	defer gohttpc.CloseResponse(response)
+	defer goutils.CloseResponse(response)
 
 	contentType := httpheader.GetHeaderValue(response.Header, httpheader.ContentType)
 
 	decodedBody, err := contenttype.Decode(contentType, response.Body)
 	if err != nil {
-		respErr := goutils.NewServerError(goutils.ErrorDetail{
+		respErr := httperror.NewServerError(httperror.ValidationError{
 			Code:   oasvalidator.ErrCodeResponseDecodeBodyError,
 			Detail: err.Error(),
 		})

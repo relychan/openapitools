@@ -18,10 +18,10 @@ import (
 	"net/url"
 
 	"github.com/relychan/openapitools/oaschema"
-	"github.com/relychan/openapitools/oasvalidator"
 )
 
-// queryParamSetter represents an encoder for query params in URL.
+// queryParamSetter encodes a single query parameter into a url.Values map using the
+// style and explode settings resolved from the OpenAPI parameter definition.
 type queryParamSetter struct {
 	params        url.Values
 	rootKey       string
@@ -135,23 +135,20 @@ func (qre *queryParamSetter) setParamDeepObject(param ParameterItem) {
 	qre.addParam(queryKey, param.value)
 }
 
+// addParam appends a key/value pair.  When allowReserved is set, RFC 3986 reserved
+// characters (e.g. ":", "/", "?") are left unescaped as permitted by the OpenAPI spec.
 func (qre *queryParamSetter) addParam(key string, value string) {
 	if qre.allowReserved {
-		qre.params.Add(
-			oasvalidator.QueryEscapeAllowReserved(key),
-			oasvalidator.QueryEscapeAllowReserved(value),
-		)
+		qre.params.Add(QueryEscapeAllowReserved(key), QueryEscapeAllowReserved(value))
 	} else {
 		qre.params.Add(url.QueryEscape(key), url.QueryEscape(value))
 	}
 }
 
+// setParam overwrites any existing value for the key (vs addParam which appends).
 func (qre *queryParamSetter) setParam(key string, value string) {
 	if qre.allowReserved {
-		qre.params.Set(
-			oasvalidator.QueryEscapeAllowReserved(key),
-			oasvalidator.QueryEscapeAllowReserved(value),
-		)
+		qre.params.Set(QueryEscapeAllowReserved(key), QueryEscapeAllowReserved(value))
 	} else {
 		qre.params.Set(url.QueryEscape(key), url.QueryEscape(value))
 	}

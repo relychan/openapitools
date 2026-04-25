@@ -24,7 +24,7 @@ import (
 
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
-	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
 )
@@ -73,7 +73,7 @@ func (jd *jsonDecoder) Decode() (any, error) {
 
 	if jd.Media.Schema == nil {
 		if rootToken != '[' {
-			return nil, &goutils.ErrorDetail{
+			return nil, &httperror.ValidationError{
 				Code:   oasvalidator.ErrCodeMalformedJSON,
 				Detail: fmt.Sprintf("Invalid syntax. Expected an array, got %v", rootToken),
 			}
@@ -95,7 +95,7 @@ func (jd *jsonDecoder) DecodeToken(
 		if tok == '[' {
 			if typeSchema != nil && len(typeSchema.Type) > 0 &&
 				!slices.Contains(typeSchema.Type, oaschema.Array) {
-				return nil, &goutils.ErrorDetail{
+				return nil, &httperror.ValidationError{
 					Code: oasvalidator.ErrCodeMalformedJSON,
 					Detail: fmt.Sprintf(
 						"Invalid syntax. Expected one of %v, got array",
@@ -118,7 +118,7 @@ func (jd *jsonDecoder) DecodeToken(
 
 				nextTok, err := jd.Decoder.Token()
 				if err != nil {
-					return nil, &goutils.ErrorDetail{
+					return nil, &httperror.ValidationError{
 						Code:    oasvalidator.ErrCodeMalformedJSON,
 						Detail:  err.Error(),
 						Pointer: itemPointer,
@@ -175,7 +175,7 @@ func (jd *jsonDecoder) DecodeArray(
 
 		nextTok, err := jd.Decoder.Token()
 		if err != nil {
-			return nil, &goutils.ErrorDetail{
+			return nil, &httperror.ValidationError{
 				Code:    oasvalidator.ErrCodeMalformedJSON,
 				Detail:  err.Error(),
 				Pointer: itemPointer,
@@ -202,7 +202,7 @@ func (jd *jsonDecoder) DecodeObject(
 	pointer string,
 ) (any, error) {
 	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Object) {
-		return nil, &goutils.ErrorDetail{
+		return nil, &httperror.ValidationError{
 			Code:    oasvalidator.ErrCodeMalformedJSON,
 			Detail:  fmt.Sprintf("Invalid syntax. Expected one of %v, got object", typeSchema.Type),
 			Pointer: pointer,
@@ -227,7 +227,7 @@ func (jd *jsonDecoder) DecodeObject(
 	for {
 		keyTok, err := jd.Decoder.Token()
 		if err != nil {
-			return nil, &goutils.ErrorDetail{
+			return nil, &httperror.ValidationError{
 				Code:    oasvalidator.ErrCodeMalformedJSON,
 				Detail:  err.Error(),
 				Pointer: pointer,
@@ -240,7 +240,7 @@ func (jd *jsonDecoder) DecodeObject(
 
 		key, ok := keyTok.(string)
 		if !ok {
-			return nil, &goutils.ErrorDetail{
+			return nil, &httperror.ValidationError{
 				Code: oasvalidator.ErrCodeMalformedJSON,
 				Detail: fmt.Sprintf(
 					"Invalid object syntax. Expected a key string, got: %v",
@@ -254,7 +254,7 @@ func (jd *jsonDecoder) DecodeObject(
 
 		valueTok, err := jd.Decoder.Token()
 		if err != nil {
-			return nil, &goutils.ErrorDetail{
+			return nil, &httperror.ValidationError{
 				Code:    oasvalidator.ErrCodeMalformedJSON,
 				Detail:  err.Error(),
 				Pointer: itemPointer,
@@ -297,7 +297,7 @@ func (*jsonDecoder) DecodeString(
 		return token, nil
 	}
 
-	return nil, &goutils.ErrorDetail{
+	return nil, &httperror.ValidationError{
 		Code:    oasvalidator.ErrCodeMalformedJSON,
 		Detail:  fmt.Sprintf("Expected one of %s; got number", strings.Join(typeSchema.Type, ", ")),
 		Pointer: pointer,
@@ -316,7 +316,7 @@ func (*jsonDecoder) DecodeNumber(
 		}) {
 		result, err := token.Float64()
 		if err != nil {
-			return nil, &goutils.ErrorDetail{
+			return nil, &httperror.ValidationError{
 				Code:    oasvalidator.ErrCodeMalformedJSON,
 				Detail:  err.Error(),
 				Pointer: pointer,
@@ -331,7 +331,7 @@ func (*jsonDecoder) DecodeNumber(
 	}) {
 		result, err := token.Int64()
 		if err != nil {
-			return nil, &goutils.ErrorDetail{
+			return nil, &httperror.ValidationError{
 				Code:    oasvalidator.ErrCodeMalformedJSON,
 				Detail:  err.Error(),
 				Pointer: pointer,
@@ -341,7 +341,7 @@ func (*jsonDecoder) DecodeNumber(
 		return result, nil
 	}
 
-	return nil, &goutils.ErrorDetail{
+	return nil, &httperror.ValidationError{
 		Code:    oasvalidator.ErrCodeMalformedJSON,
 		Detail:  fmt.Sprintf("Expected one of %s; got number", strings.Join(typeSchema.Type, ", ")),
 		Pointer: pointer,

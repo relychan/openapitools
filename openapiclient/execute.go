@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/internal"
 	"go.opentelemetry.io/otel/attribute"
@@ -39,7 +40,7 @@ func (pc *ProxyClient) Execute(
 ) (*http.Response, any, error) {
 	requestURL, err := goutils.ParsePathOrHTTPURL(requestPath)
 	if err != nil {
-		respErr := goutils.NewBadRequestError()
+		respErr := httperror.NewBadRequestError()
 		respErr.Detail = err.Error()
 
 		return nil, nil, respErr
@@ -75,7 +76,7 @@ func (pc *ProxyClient) Execute(
 func (pc *ProxyClient) findRoute(
 	span trace.Span,
 	request *proxyhandler.Request,
-) (*internal.Route, *proxyhandler.ProxyHandleOptions, *goutils.RFC9457Error) {
+) (*internal.Route, *proxyhandler.ProxyHandleOptions, *httperror.HTTPError) {
 	if pc.CustomAttributesFunc != nil {
 		span.SetAttributes(pc.CustomAttributesFunc(request)...)
 	}
@@ -128,21 +129,21 @@ func (*ProxyClient) handleError(
 	span.SetStatus(codes.Error, "proxy failed")
 	span.RecordError(err)
 
-	rfc9457Error, ok := errors.AsType[*goutils.RFC9457Error](err)
+	rfc9457Error, ok := errors.AsType[*httperror.HTTPError](err)
 	if ok {
 		rfc9457Error.Instance = requestPath
 
 		return rfc9457Error.Status, rfc9457Error
 	}
 
-	exError, ok := errors.AsType[*goutils.RFC9457ErrorWithExtensions](err)
+	exError, ok := errors.AsType[*goutils.HTTPErrorWithExtensions](err)
 	if ok {
 		exError.Instance = requestPath
 
 		return exError.Status, exError
 	}
 
-	respError := goutils.NewServerError()
+	respError := httperror.NewServerError()
 	respError.Detail = err.Error()
 	respError.Instance = requestPath
 

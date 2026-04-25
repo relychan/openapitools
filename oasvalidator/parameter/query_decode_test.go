@@ -364,9 +364,10 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 	}
 }
 
-// BenchmarkDecodeQueryFromParameters/parse_deep_object-11         	 1323890	       914.3 ns/op	    1036 B/op	      34 allocs/op
-// BenchmarkDecodeQueryFromParameters/decode_deep_object-11        	  802162	      1435 ns/op	    2212 B/op	      48 allocs/op
-// BenchmarkDecodeQueryFromParameters/parse_deep_object_complex-11 	   14733	     81442 ns/op	   63993 B/op	    1966 allocs/op
+// BenchmarkDecodeQueryFromParameters/parse_deep_object-11         	 1330220	       899.0 ns/op	    1036 B/op	      34 allocs/op
+// BenchmarkDecodeQueryFromParameters/decode_spaceDelimited_object-11         	 2498127	       480.0 ns/op	     816 B/op	      10 allocs/op
+// BenchmarkDecodeQueryFromParameters/decode_deep_object-11                   	  837478	      1419 ns/op	    2212 B/op	      48 allocs/op
+// BenchmarkDecodeQueryFromParameters/parse_deep_object_complex-11            	   14704	     81540 ns/op	   63932 B/op	    1966 allocs/op
 func BenchmarkDecodeQueryFromParameters(b *testing.B) {
 	value := "id[role][0][user][0][]=admin&id[role][0][user][0][]=anonymous&name=foo&bar=baz"
 	parameters := []*highv3.Parameter{
@@ -396,6 +397,31 @@ func BenchmarkDecodeQueryFromParameters(b *testing.B) {
 	b.Run("parse_deep_object", func(b *testing.B) {
 		for b.Loop() {
 			_, errs := parseDeepObjectNodes(qValues)
+			if len(errs) > 0 {
+				panic(errs)
+			}
+		}
+	})
+
+	b.Run("decode_spaceDelimited_object", func(b *testing.B) {
+		value := map[string][]string{
+			"color": {"G|200|R|100"},
+		}
+
+		params := []*highv3.Parameter{
+			{
+				Name:    "color",
+				In:      oaschema.InQuery.String(),
+				Explode: new(false),
+				Style:   oaschema.EncodingStylePipeDelimited.String(),
+				Schema: base.CreateSchemaProxy(&base.Schema{
+					Type: []string{oaschema.Object},
+				}),
+			},
+		}
+
+		for b.Loop() {
+			_, errs := DecodeQueryFromParameters(params, value)
 			if len(errs) > 0 {
 				panic(errs)
 			}

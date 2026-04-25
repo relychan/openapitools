@@ -21,7 +21,7 @@ import (
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gotransform"
 	"github.com/relychan/gotransform/jmes"
-	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/oasvalidator/parameter"
@@ -158,7 +158,7 @@ func newCustomRESTRequestFromConfig(
 	switch result.Method {
 	case "", http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodPatch, http.MethodPut:
 	default:
-		return nil, &goutils.ErrorDetail{
+		return nil, &httperror.ValidationError{
 			Detail:  "invalid HTTP method to transform. Expected one of GET, POST, PUT, PATCH, DELETE, got: " + result.Method,
 			Code:    oasvalidator.ErrCodeInvalidRESTfulRequestConfig,
 			Pointer: "/method",
@@ -168,7 +168,7 @@ func newCustomRESTRequestFromConfig(
 	for i, param := range conf.Parameters {
 		field, err := param.EvaluateEntry(getEnvFunc)
 		if err != nil {
-			return nil, &goutils.ErrorDetail{
+			return nil, &httperror.ValidationError{
 				Detail:  "failed to evaluate the parameter: " + err.Error(),
 				Code:    oasvalidator.ErrCodeInvalidRESTfulRequestConfig,
 				Pointer: "/parameters/" + param.Name,
@@ -184,7 +184,7 @@ func newCustomRESTRequestFromConfig(
 	if conf.Body != nil {
 		customBody, err := gotransform.NewTransformerFromConfig("", *conf.Body, getEnvFunc)
 		if err != nil {
-			return nil, &goutils.ErrorDetail{
+			return nil, &httperror.ValidationError{
 				Detail:  "failed to transform custom request body: " + err.Error(),
 				Code:    oasvalidator.ErrCodeInvalidRESTfulRequestConfig,
 				Pointer: "/body",
@@ -211,7 +211,7 @@ func parseRequestContentType(
 
 	result, err := oasvalidator.ValidateContentType(contentType)
 	if err != nil {
-		return "", &goutils.ErrorDetail{
+		return "", &httperror.ValidationError{
 			Detail:  err.Error() + " " + contentType,
 			Pointer: "/contentType",
 			Code:    oasvalidator.ErrCodeInvalidRESTfulRequestConfig,
@@ -235,7 +235,7 @@ func parseResponseContentType(
 
 	result, err := oasvalidator.ValidateContentType(contentType)
 	if err != nil {
-		return "", &goutils.ErrorDetail{
+		return "", &httperror.ValidationError{
 			Detail:  err.Error() + " " + contentType,
 			Pointer: "/contentType",
 			Code:    oasvalidator.ErrCodeProxyRESTfulResponseConfig,

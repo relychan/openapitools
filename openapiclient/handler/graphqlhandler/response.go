@@ -24,6 +24,7 @@ import (
 
 	"github.com/buger/jsonparser"
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
@@ -67,21 +68,23 @@ func (ge *GraphQLHandler) handleTransformResponse(
 				span.SetStatus(codes.Error, "failed to decode graphql error")
 				span.RecordError(err)
 
-				respErr := goutils.NewServerError()
+				respErr := httperror.NewServerError()
 				respErr.Detail = err.Error()
 
 				return nil, respErr
 			}
 
-			respError := goutils.NewRFC9457ErrorWithExtensions(
-				goutils.RFC9457Error{
-					Type:   "about:blank",
-					Status: status,
-					Title:  http.StatusText(status),
-					Detail: "Received errors from the remote server",
-				},
-				extensions,
-			)
+			httpError := httperror.HTTPError{
+				Status: status,
+				Title:  http.StatusText(status),
+				Detail: "Received errors from the remote server",
+			}
+
+			if len(extensions) == 0 {
+				return nil, &httpError
+			}
+
+			respError := goutils.NewHTTPErrorWithExtensions(httpError, extensions)
 
 			return nil, respError
 		}
@@ -155,8 +158,8 @@ func (ge *GraphQLHandler) writeTransformResponse(
 		span.SetStatus(codes.Error, message)
 		span.RecordError(gqlError)
 
-		err := goutils.NewRFC9457Error(status, message)
-		err.Errors = []goutils.ErrorDetail{*gqlError}
+		err := httperror.NewHTTPError(status, message)
+		err.Errors = []httperror.ValidationError{*gqlError}
 
 		return nil, err
 	}
@@ -245,13 +248,13 @@ func (ge *GraphQLHandler) writeTransformResponse(
 // A status < 400 with nil error means no actionable GraphQL error was found.
 func (ge *GraphQLHandler) evaluateGraphQLError(
 	resp *http.Response,
-) (int, []byte, *goutils.ErrorDetail) {
+) (int, []byte, *httperror.ValidationError) {
 	rawBytes, err := io.ReadAll(resp.Body)
 
 	goutils.CatchWarnErrorFunc(resp.Body.Close)
 
 	if err != nil {
-		respErr := &goutils.ErrorDetail{
+		respErr := &httperror.ValidationError{
 			Detail: err.Error(),
 			Code:   oasvalidator.ErrCodeRemoteServerError,
 		}
@@ -266,7 +269,7 @@ func (ge *GraphQLHandler) evaluateGraphQLError(
 			return http.StatusOK, rawBytes, nil
 		}
 
-		respErr := &goutils.ErrorDetail{
+		respErr := &httperror.ValidationError{
 			Detail: err.Error(),
 			Code:   oasvalidator.ErrCodeRemoteServerError,
 		}
@@ -279,7 +282,7 @@ func (ge *GraphQLHandler) evaluateGraphQLError(
 	}
 
 	if fieldType != jsonparser.Array {
-		err := &goutils.ErrorDetail{
+		err := &httperror.ValidationError{
 			Detail: "Invalid errors in GraphQL response. Expected an array, got: " + fieldType.String(),
 			Code:   oasvalidator.ErrCodeRemoteServerError,
 		}
@@ -301,7 +304,7 @@ func (ge *GraphQLHandler) evaluateGraphQLError(
 
 	err = json.Unmarshal(rawErrors, &gqlErrors)
 	if err != nil {
-		respErr := &goutils.ErrorDetail{
+		respErr := &httperror.ValidationError{
 			Detail: err.Error(),
 			Code:   oasvalidator.ErrCodeRemoteServerError,
 		}

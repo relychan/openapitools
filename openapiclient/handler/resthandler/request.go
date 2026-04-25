@@ -23,6 +23,7 @@ import (
 
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
@@ -84,7 +85,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 		case oaschema.InHeader:
 			rawValue, err := param.Evaluate(rawRequestData)
 			if err != nil {
-				respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+				respErr := httperror.NewBadRequestError(httperror.ValidationError{
 					Code:   oasvalidator.ErrCodeRequestTransformError,
 					Detail: err.Error(),
 					Header: param.Name,
@@ -103,7 +104,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 
 			value, err := param.Evaluate(rawRequestData)
 			if err != nil {
-				respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+				respErr := httperror.NewBadRequestError(httperror.ValidationError{
 					Code:      oasvalidator.ErrCodeRequestTransformError,
 					Detail:    err.Error(),
 					Parameter: param.Name,
@@ -139,7 +140,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	if len(queryValues) > 0 {
 		requestURL, err := goutils.ParsePathOrHTTPURL(resolvedRequestPath)
 		if err != nil {
-			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+			respErr := httperror.NewBadRequestError(httperror.ValidationError{
 				Code:   oasvalidator.ErrCodeInvalidRequestURL,
 				Detail: err.Error(),
 			})
@@ -148,7 +149,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 			return nil, respErr
 		}
 
-		requestURL.RawQuery = oasvalidator.EncodeQueryValuesUnescape(queryValues)
+		requestURL.RawQuery = parameter.EncodeQueryValuesUnescape(queryValues)
 		req.SetURL(requestURL.String())
 	}
 
@@ -157,7 +158,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	if re.customRequest.Body != nil {
 		newBody, err = re.customRequest.Body.Transform(rawRequestData)
 		if err != nil {
-			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+			respErr := httperror.NewBadRequestError(httperror.ValidationError{
 				Code:   oasvalidator.ErrCodeRequestTransformError,
 				Detail: err.Error(),
 			})
@@ -176,15 +177,15 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	} else {
 		newBodyBytes, err := contenttype.Encode(contentType, newBody)
 		if err != nil {
-			errDetail, ok := errors.AsType[*goutils.ErrorDetail](err)
+			errDetail, ok := errors.AsType[*httperror.ValidationError](err)
 			if !ok {
-				errDetail = &goutils.ErrorDetail{
+				errDetail = &httperror.ValidationError{
 					Detail: err.Error(),
 					Code:   oasvalidator.ErrCodeRequestTransformError,
 				}
 			}
 
-			respErr := goutils.NewBadRequestError(*errDetail)
+			respErr := httperror.NewBadRequestError(*errDetail)
 			respErr.Detail = "failed to encode transformed request body"
 
 			return nil, respErr
@@ -229,7 +230,7 @@ func (re *RESTfulHandler) evaluateRequestPath(
 
 				value, err := param.Evaluate(rawRequestData)
 				if err != nil {
-					respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+					respErr := httperror.NewBadRequestError(httperror.ValidationError{
 						Detail:    err.Error(),
 						Pointer:   "/" + param.Name,
 						Parameter: key,
@@ -249,7 +250,7 @@ func (re *RESTfulHandler) evaluateRequestPath(
 				return goutils.ToString(value), nil
 			}
 
-			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+			respErr := httperror.NewBadRequestError(httperror.ValidationError{
 				Detail:    "the parameter can not be resolved",
 				Parameter: key,
 				Code:      oasvalidator.ErrCodeInvalidURLParam,
@@ -277,7 +278,7 @@ func extractQueryValuesFromPath(
 
 	q, err := url.ParseQuery(query)
 	if err != nil {
-		respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+		respErr := httperror.NewBadRequestError(httperror.ValidationError{
 			Detail: err.Error(),
 			Code:   oasvalidator.ErrCodeInvalidRequestURL,
 		})

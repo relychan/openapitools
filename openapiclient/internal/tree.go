@@ -23,6 +23,7 @@ import (
 
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/oasvalidator/parameter"
@@ -84,7 +85,7 @@ func (n *Node) InsertRoute(
 	return node, err
 }
 
-func (n *Node) FindRoute(path string, method string) (*Route, *goutils.RFC9457Error) {
+func (n *Node) FindRoute(path string, method string) (*Route, *httperror.HTTPError) {
 	route := &Route{}
 	rawParams := make(map[string]string)
 
@@ -97,7 +98,7 @@ func (n *Node) FindRoute(path string, method string) (*Route, *goutils.RFC9457Er
 	)
 
 	if m == nil {
-		return nil, goutils.NewNotFoundError()
+		return nil, httperror.NewNotFoundError()
 	}
 
 	route.Method = m
@@ -106,7 +107,7 @@ func (n *Node) FindRoute(path string, method string) (*Route, *goutils.RFC9457Er
 	if m.Operation != nil {
 		params, errs := validateURLParams(m.Operation, rawParams)
 		if len(errs) > 0 {
-			return nil, goutils.NewBadRequestError(errs...)
+			return nil, httperror.NewBadRequestError(errs...)
 		}
 
 		route.ParamValues = params
@@ -509,14 +510,14 @@ func patNextSegment(pattern string) (*patNextSegmentResult, error) {
 func validateURLParams(
 	operation *highv3.Operation,
 	values map[string]string,
-) (map[string]any, []goutils.ErrorDetail) {
+) (map[string]any, []httperror.ValidationError) {
 	result := goutils.ToAnyMap(values)
 
 	if operation == nil || len(operation.Parameters) == 0 {
 		return result, nil
 	}
 
-	var errs []goutils.ErrorDetail
+	var errs []httperror.ValidationError
 
 	for _, param := range operation.Parameters {
 		if param.In != oaschema.InPath.String() {
@@ -526,7 +527,7 @@ func validateURLParams(
 		rawValue, ok := values[param.Name]
 		if !ok {
 			if param.Required != nil && *param.Required {
-				errs = append(errs, goutils.ErrorDetail{
+				errs = append(errs, httperror.ValidationError{
 					Code:      oasvalidator.ErrCodeInvalidURLParam,
 					Detail:    "Parameter is required",
 					Parameter: param.Name,

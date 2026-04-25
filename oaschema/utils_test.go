@@ -17,6 +17,7 @@ package oaschema
 import (
 	"testing"
 
+	"github.com/pb33f/libopenapi/datamodel/high/base"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/stretchr/testify/assert"
 )
@@ -205,4 +206,49 @@ func TestMergeParameters(t *testing.T) {
 			assert.Equal(t, tc.expected, result)
 		})
 	}
+}
+
+// BenchmarkSchemaTypes/ExtractSchemaTypes-11         	 3055024	       386.3 ns/op	     160 B/op	       4 allocs/op
+// BenchmarkSchemaTypes/ValidateAllOf-11              	 5838295	       206.4 ns/op	     176 B/op	       4 allocs/op
+func BenchmarkSchemaTypes(b *testing.B) {
+	schema := &base.Schema{
+		Type: []string{Object},
+		AllOf: []*base.SchemaProxy{
+			base.CreateSchemaProxy(&base.Schema{
+				Type: []string{Array, Object},
+			}),
+			base.CreateSchemaProxy(&base.Schema{
+				Type: []string{Array, "int", "float"},
+			}),
+		},
+		AnyOf: []*base.SchemaProxy{
+			base.CreateSchemaProxy(&base.Schema{
+				Type: []string{String, Integer},
+			}),
+			base.CreateSchemaProxy(&base.Schema{
+				Type: []string{"int8", "in16"},
+			}),
+		},
+		OneOf: []*base.SchemaProxy{
+			base.CreateSchemaProxy(&base.Schema{
+				Type: []string{"uint", "uint32"},
+			}),
+			base.CreateSchemaProxy(&base.Schema{
+				Type: []string{Boolean, Integer},
+			}),
+		},
+	}
+
+	b.Run("ExtractSchemaTypes", func(b *testing.B) {
+		for b.Loop() {
+			ExtractSchemaTypes(schema)
+		}
+	})
+
+	b.Run("ValidateAllOf", func(b *testing.B) {
+		allOf := ExtractSchemaProxies(schema.AllOf)
+		for b.Loop() {
+			ValidateAllOf(allOf)
+		}
+	})
 }

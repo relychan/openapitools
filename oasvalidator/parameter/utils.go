@@ -15,6 +15,7 @@
 package parameter
 
 import (
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -22,6 +23,80 @@ import (
 	"github.com/relychan/goutils"
 	"github.com/relychan/openapitools/oaschema"
 )
+
+// EncodeQueryEscape encodes the values into “URL encoded” form ("bar=baz&foo=quux") sorted by key with escape.
+func EncodeQueryEscape(value string, allowReserved bool) string { //nolint:revive,nolintlint
+	if allowReserved {
+		return QueryEscapeAllowReserved(value)
+	}
+
+	return url.QueryEscape(value)
+}
+
+// EncodeQueryValuesUnescape encode query values into “URL encoded” form ("bar=baz&foo=quux") sorted by key without escape.
+func EncodeQueryValuesUnescape(values url.Values) string {
+	if len(values) == 0 {
+		return ""
+	}
+
+	var buf strings.Builder
+
+	buf.Grow(len(values) * 4)
+
+	keys := goutils.GetSortedKeys(values)
+
+	for _, key := range keys {
+		vs := values[key]
+
+		for _, v := range vs {
+			if buf.Len() > 0 {
+				buf.WriteByte('&')
+			}
+
+			buf.WriteString(key)
+			buf.WriteByte('=')
+			buf.WriteString(v)
+		}
+	}
+
+	return buf.String()
+}
+
+// IsUnreservedCharacter checks if the character is allowed in a URI but do not has a reserved purpose are called unreserved.
+//
+//	unreserved  = ALPHA / DIGIT / "-" / "." / "_" / "~"
+func IsUnreservedCharacter[C byte | rune](c C) bool {
+	return goutils.IsMetaCharacter(c) || c == '.' || c == '~'
+}
+
+// IsReservedCharacter checks if the character is allowed in a URI and has a reserved purpose.
+//
+//	reserved    = gen-delims / sub-delims
+//	gen-delims  = ":" / "/" / "?" / "#" / "[" / "]" / "@"
+//	sub-delims  = "!" / "$" / "&" / "'" / "(" / ")" / "*" / "+" / "," / ";" / "="
+func IsReservedCharacter[C byte | rune](c C) bool {
+	switch c {
+	// gen-delims
+	case ':', '/', '?', '#', '[', ']', '@',
+		// sub-delims
+		'!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', '%':
+		return true
+	default:
+		return false
+	}
+}
+
+// QueryEscapeAllowReserved escapes the string so it can be safely placed inside a URL query.
+// Allow reserved character.
+func QueryEscapeAllowReserved(query string) string {
+	if strings.ContainsFunc(query, func(r rune) bool {
+		return !IsReservedCharacter(r) && !IsUnreservedCharacter(r)
+	}) {
+		return url.QueryEscape(query)
+	}
+
+	return query
+}
 
 // EvaluateParameterValue evaluates the type of the value and encode it into a string map.
 func EvaluateParameterValue(value any, parentKeys ParamKeys) ParameterItems {
@@ -257,6 +332,9 @@ func buildParamDelimitedStyleNonExplode(
 	}
 }
 
+// getParamStyleAndExplodeFromRawStyle parses the raw style string from an OpenAPI
+// parameter object (which arrives as a plain string from libopenapi) and resolves the
+// effective style and explode flag according to per-location defaults.
 func getParamStyleAndExplodeFromRawStyle(
 	location oaschema.ParameterLocation,
 	rawStyle string,
@@ -278,7 +356,9 @@ func getParamStyleAndExplodeFromRawStyle(
 	return result, explode, nil
 }
 
-// Evaluate the style and explode of a parameter from the location.
+// evalParamStyleAndExplode applies the OpenAPI defaults for style and explode per location:
+//   - path / header: default style=simple, default explode=false
+//   - query / cookie: default style=form,  default explode=true
 func evalParamStyleAndExplode(
 	location oaschema.ParameterLocation,
 	style *oaschema.ParameterEncodingStyle,
@@ -306,7 +386,11 @@ func evalParamStyleAndExplode(
 	}
 }
 
-// parses the deep object string to param paths.
+// parseDeepObjectKey parses a deep-object query key into a ParamKeys path.
+// For example "user[address][city]" → [ParamKey("user"), ParamKey("address"), ParamKey("city")]
+// and "ids[]" → [ParamKey("ids"), ParamIndex(-1)].
+// Returns false if the bracket syntax is invalid (unclosed bracket, characters after ']' that
+// are not '[', etc.).
 func parseDeepObjectKey(input string) (ParamKeys, bool) {
 	var results ParamKeys
 
@@ -370,6 +454,9 @@ func parseDeepObjectKey(input string) (ParamKeys, bool) {
 	return results, true
 }
 
+// getValue unwraps a string slice into a scalar (nil, string, or []string) so that
+// parameters with a single value are not needlessly wrapped in a slice before
+// schema validation.
 func getValue(values []string) any {
 	switch len(values) {
 	case 0:

@@ -49,7 +49,7 @@ func BenchmarkProxyClient(b *testing.B) {
 			if err != nil {
 				panic(err)
 			}
-			gohttpc.CloseResponse(res)
+			goutils.CloseResponse(res)
 		}
 	})
 
@@ -80,7 +80,7 @@ func BenchmarkProxyClient(b *testing.B) {
 			if err != nil {
 				panic(err)
 			}
-			gohttpc.CloseResponse(res)
+			goutils.CloseResponse(res)
 		}
 	})
 

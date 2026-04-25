@@ -15,10 +15,12 @@
 package oaschema
 
 import (
+	"reflect"
 	"strings"
 	"time"
 
 	"github.com/pb33f/libopenapi/datamodel/high/base"
+	"github.com/pb33f/libopenapi/orderedmap"
 )
 
 // NormalizeType normalize a schema type.
@@ -35,6 +37,8 @@ func NormalizeType(typeName string) (string, bool) {
 		return Integer, true
 	case "number", "decimal", "float", "float32", "float64", "double":
 		return Number, true
+	case "null":
+		return "", false
 	default:
 		// array, object and unknown type.
 		return lowerTypeName, false
@@ -111,12 +115,53 @@ func DetectSchemaFromValue(value any) *base.Schema { //nolint:gocyclo,cyclop,fun
 
 		return newArraySchema(itemSchema)
 	case map[string]any:
-		// TODO: infer properties.
+		object := &base.Schema{
+			Type: []string{Object},
+		}
+
+		if len(val) == 0 {
+			return object
+		}
+
+		object.Properties = orderedmap.New[string, *base.SchemaProxy]()
+
+		for key, prop := range val {
+			propSchema := DetectSchemaFromValue(prop)
+
+			object.Properties.Set(key, base.CreateSchemaProxy(propSchema))
+		}
+
+		return object
+	default:
+		return detectSchemaFromReflection(reflect.TypeOf(value))
+	}
+}
+
+func detectSchemaFromReflection(reflectType reflect.Type) *base.Schema {
+	switch reflectType.Kind() {
+	case reflect.Pointer:
+		return detectSchemaFromReflection(reflectType.Elem())
+	case reflect.Bool:
+		return newBooleanSchema(true)
+	case reflect.String:
+		return newStringSchema(true, "")
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Uint8, reflect.Uint16:
+		return newIntegerSchema(true, Int32)
+	case reflect.Int64, reflect.Uint32, reflect.Uint64:
+		return newIntegerSchema(true, Int64)
+	case reflect.Float32:
+		return newNumberSchema(true, Float)
+	case reflect.Float64:
+		return newNumberSchema(true, Double)
+	case reflect.Array, reflect.Slice:
+		itemSchema := detectSchemaFromReflection(reflectType.Elem())
+
+		return newArraySchema(itemSchema)
+	case reflect.Map:
 		return &base.Schema{
 			Type: []string{Object},
 		}
 	default:
-		// TODO: reflection
 		return nil
 	}
 }

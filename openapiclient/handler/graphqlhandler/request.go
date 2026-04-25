@@ -23,6 +23,7 @@ import (
 
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
@@ -93,7 +94,7 @@ func (ge *GraphQLHandler) handleRequest(
 			}
 		}
 
-		err := goutils.NewRFC9457Error(resp.StatusCode, detail)
+		err := httperror.NewHTTPError(resp.StatusCode, detail)
 
 		ge.printLog(
 			ctx,
@@ -108,7 +109,7 @@ func (ge *GraphQLHandler) handleRequest(
 	}
 
 	if resp.Body == nil || resp.Body == http.NoBody {
-		errorDetail := goutils.ErrorDetail{
+		errorDetail := httperror.ValidationError{
 			Detail: "graphql response must be a valid JSON object",
 			Code:   oasvalidator.ErrCodeGraphQLResponseEmpty,
 		}
@@ -122,7 +123,7 @@ func (ge *GraphQLHandler) handleRequest(
 			&errorDetail,
 		)
 
-		respErr := goutils.NewServerError(errorDetail)
+		respErr := httperror.NewServerError(errorDetail)
 		respErr.Detail = "failed to encode graphql response"
 
 		return resp, respErr
@@ -177,7 +178,7 @@ func (ge *GraphQLHandler) prepareRequest(
 	for key, header := range ge.headers {
 		value, err := header.EvaluateString(rawRequestData)
 		if err != nil {
-			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+			respErr := httperror.NewBadRequestError(httperror.ValidationError{
 				Detail:  err.Error(),
 				Pointer: "/headers/" + key,
 			})
@@ -221,7 +222,7 @@ func (ge *GraphQLHandler) prepareRequestGET(
 ) (*gohttpc.RequestWithClient, error) {
 	reqURL, err := goutils.ParsePathOrHTTPURL(ge.url)
 	if err != nil {
-		respErr := goutils.NewServerError(goutils.ErrorDetail{
+		respErr := httperror.NewServerError(httperror.ValidationError{
 			Detail:  err.Error(),
 			Pointer: "/url",
 		})
@@ -251,7 +252,7 @@ func (ge *GraphQLHandler) prepareRequestGET(
 	if len(graphqlPayload.Variables) > 0 {
 		jsonVariables, err := json.Marshal(graphqlPayload.Variables)
 		if err != nil {
-			respErr := goutils.NewServerError(goutils.ErrorDetail{
+			respErr := httperror.NewServerError(httperror.ValidationError{
 				Detail:  err.Error(),
 				Pointer: "/variables",
 			})
@@ -275,7 +276,7 @@ func (ge *GraphQLHandler) prepareRequestGET(
 	if len(graphqlPayload.Extensions) > 0 {
 		jsonExtensions, err := json.Marshal(graphqlPayload.Extensions)
 		if err != nil {
-			respErr := goutils.NewServerError(goutils.ErrorDetail{
+			respErr := httperror.NewServerError(httperror.ValidationError{
 				Detail:  err.Error(),
 				Pointer: "/extensions",
 			})
@@ -318,7 +319,7 @@ func (ge *GraphQLHandler) prepareRequestPOST(
 
 	err := json.NewEncoder(reader).Encode(graphqlPayload)
 	if err != nil {
-		respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+		respErr := httperror.NewBadRequestError(httperror.ValidationError{
 			Detail:  err.Error(),
 			Pointer: "/body",
 		})
@@ -363,7 +364,7 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 		if ok {
 			value, err := variable.Evaluate(rawRequestData)
 			if err != nil {
-				respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+				respErr := httperror.NewBadRequestError(httperror.ValidationError{
 					Detail:  err.Error(),
 					Pointer: "/variables/" + varDef.Variable,
 				})
@@ -375,7 +376,7 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 			if value != nil {
 				typedValue, err := convertVariableTypeFromUnknownValue(varDef, value)
 				if err != nil {
-					respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+					respErr := httperror.NewBadRequestError(httperror.ValidationError{
 						Detail:  err.Error(),
 						Pointer: "/variables/" + varDef.Variable,
 					})
@@ -402,7 +403,7 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 		if ok && param != "" {
 			typedParam, err := convertVariableTypeFromString(varDef, param)
 			if err != nil {
-				respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+				respErr := httperror.NewBadRequestError(httperror.ValidationError{
 					Detail:  err.Error(),
 					Pointer: "/variables/" + varDef.Variable,
 				})
@@ -420,7 +421,7 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 		if queryValue != "" {
 			typedValue, err := convertVariableTypeFromString(varDef, queryValue)
 			if err != nil {
-				respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+				respErr := httperror.NewBadRequestError(httperror.ValidationError{
 					Detail:  err.Error(),
 					Pointer: "/variables/" + varDef.Variable,
 				})
@@ -446,7 +447,7 @@ func (ge *GraphQLHandler) resolveRequestExtensions(
 	for key, extension := range ge.extensions {
 		value, err := extension.Evaluate(rawRequestData)
 		if err != nil {
-			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+			respErr := httperror.NewBadRequestError(httperror.ValidationError{
 				Detail:  err.Error(),
 				Pointer: "/extensions/" + key,
 			})

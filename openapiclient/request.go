@@ -18,6 +18,7 @@ import (
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/internal"
@@ -60,7 +61,7 @@ func (pc *ProxyClient) newRequestFunc(
 func validateRequestParameters(
 	route *internal.Route,
 	request *proxyhandler.Request,
-) *goutils.RFC9457Error {
+) *httperror.HTTPError {
 	request.SetURLParams(route.ParamValues)
 
 	return nil

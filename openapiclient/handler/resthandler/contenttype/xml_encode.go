@@ -22,6 +22,7 @@ import (
 	"strconv"
 
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oasvalidator"
 )
 
@@ -334,16 +335,16 @@ func (enc *xmlEncoder) writeElement(
 	return nil
 }
 
-func newXMLInvalidKeyStringError(kind reflect.Kind, pointer string) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
+func newXMLInvalidKeyStringError(kind reflect.Kind, pointer string) *httperror.ValidationError {
+	return &httperror.ValidationError{
 		Detail:  "expected the type of key is a scalar, got: " + kind.String(),
 		Pointer: pointer,
 		Code:    oasvalidator.ErrCodeXMLEncodeError,
 	}
 }
 
-func newXMLEncodeError(err error, pointer string) *goutils.ErrorDetail {
-	return &goutils.ErrorDetail{
+func newXMLEncodeError(err error, pointer string) *httperror.ValidationError {
+	return &httperror.ValidationError{
 		Detail:  err.Error(),
 		Pointer: pointer,
 		Code:    oasvalidator.ErrCodeXMLEncodeError,

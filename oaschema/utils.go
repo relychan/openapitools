@@ -149,10 +149,144 @@ func MergeOrderedMap[K comparable, V any](dest, src *orderedmap.Map[K, V]) *orde
 	return dest
 }
 
-// IsSchemaEmpty checks if the schema type is empty.
-func IsSchemaEmpty(schema *base.Schema) bool {
+// IsSchemaTypeEmpty checks if the schema type is empty.
+func IsSchemaTypeEmpty(schema *base.Schema) bool {
 	return schema == nil || (len(schema.Type) == 0 &&
 		len(schema.AllOf) == 0 &&
 		len(schema.AnyOf) == 0 &&
-		len(schema.OneOf) == 0)
+		len(schema.OneOf) == 0 &&
+		schema.Properties == nil &&
+		schema.AdditionalProperties == nil &&
+		schema.Items == nil)
+}
+
+// ExtractSchemaTypes returns available types of the schema, and check if it is nullable.
+func ExtractSchemaTypes(schema *base.Schema) ( //nolint:revive,nonamedreturns
+	types []string,
+	allOf []*base.Schema,
+	oneOf []*base.Schema,
+	anyOf []*base.Schema,
+	isNullable bool,
+) {
+	if schema == nil {
+		return nil, nil, nil, nil, true
+	}
+
+	allOf = ExtractSchemaProxies(schema.AllOf)
+	oneOf = ExtractSchemaProxies(schema.OneOf)
+	anyOf = ExtractSchemaProxies(schema.AnyOf)
+
+	types = make(
+		[]string, 0,
+		max(1, len(schema.Type)+len(allOf)+len(oneOf)+len(anyOf)),
+	)
+
+	evalSchema := func(item *base.Schema) {
+		for _, schemaType := range item.Type {
+			normalizedType, _ := NormalizeType(schemaType)
+
+			if !slices.Contains(types, normalizedType) {
+				types = append(types, normalizedType)
+			}
+		}
+
+		isNullable = isNullable || (item.Nullable != nil && *item.Nullable)
+
+		if len(item.Type) > 0 {
+			return
+		}
+
+		if ((item.Properties != nil && item.Properties.Len() > 0) || item.AdditionalProperties != nil ||
+			(item.PatternProperties != nil && item.PatternProperties.Len() > 0)) &&
+			!slices.Contains(types, Object) {
+			types = append(types, Object)
+
+			return
+		}
+
+		if item.Items != nil && !slices.Contains(types, Array) {
+			types = append(types, Array)
+		}
+	}
+
+	evalUnionType := func(schemas []*base.Schema) {
+		for _, item := range schemas {
+			evalSchema(item)
+		}
+	}
+
+	evalSchema(schema)
+	evalUnionType(allOf)
+	evalUnionType(oneOf)
+	evalUnionType(anyOf)
+
+	if len(types) > 0 {
+		types = slices.Clip(types)
+	}
+
+	return types, allOf, oneOf, anyOf, isNullable
+}
+
+// ExtractSchemaProxies returns schema references of schema proxies.
+func ExtractSchemaProxies(proxies []*base.SchemaProxy) []*base.Schema {
+	results := make([]*base.Schema, 0, len(proxies))
+
+	for _, item := range proxies {
+		if item == nil {
+			continue
+		}
+
+		itemSchema := item.Schema()
+		if itemSchema == nil {
+			continue
+		}
+
+		results = append(results, itemSchema)
+	}
+
+	return slices.Clip(results)
+}
+
+// GetUnionSchemaTypes returns unique types of union schemas.
+func GetUnionSchemaTypes(schemas []*base.Schema) ([]string, bool) {
+	if len(schemas) == 0 {
+		return nil, false
+	}
+
+	var (
+		results  = make([]string, 0, 2)
+		nullable bool
+	)
+
+	for _, item := range schemas {
+		if item == nil {
+			continue
+		}
+
+		nullable = nullable || (item.Nullable != nil && *item.Nullable)
+
+		if len(item.Type) == 0 {
+			continue
+		}
+
+		for _, t := range item.Type {
+			if t == "" {
+				continue
+			}
+
+			if t == "null" {
+				nullable = true
+
+				continue
+			}
+
+			nt, _ := NormalizeType(t)
+
+			if !slices.Contains(results, nt) {
+				results = append(results, nt)
+			}
+		}
+	}
+
+	return slices.Clip(results), nullable
 }

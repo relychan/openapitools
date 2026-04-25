@@ -77,6 +77,10 @@ func EncodePathValue(definition BaseParameter, value any) string {
 	}
 }
 
+// encodeParamMatrixExplode serializes params using matrix style with explode=true.
+// For object/array items each property becomes its own ;key=value segment using the
+// property name directly (root key dropped).  For flat scalars the parameter name is
+// repeated per value: ;color=blue;color=black.
 func encodeParamMatrixExplode(name string, params ParameterItems) string {
 	var sb strings.Builder
 

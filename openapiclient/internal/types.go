@@ -18,7 +18,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 )
 
 var (
@@ -51,7 +51,7 @@ func (r Route) IsRequestBodyRequired() bool {
 }
 
 func newInvalidOperationMetadataError(method string, pattern string, err error) error {
-	return goutils.RFC9457Error{
+	return httperror.HTTPError{
 		Type:     "about:blank",
 		Title:    "Invalid Operation Metadata",
 		Detail:   err.Error(),
