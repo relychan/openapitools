@@ -15,43 +15,20 @@
 package oaschema
 
 import (
-	"testing"
-
 	"github.com/pb33f/libopenapi/datamodel/high/base"
-	"github.com/stretchr/testify/assert"
+	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/pb33f/libopenapi/orderedmap"
+	"go.yaml.in/yaml/v4"
 )
 
-func TestValidateAllOf(t *testing.T) {
-	testCases := []struct {
-		AllOf    []*base.Schema
-		Expected []string
-		Nullable bool
-		Error    string
-	}{
-		{
-			AllOf: []*base.Schema{
-				{
-					Type: []string{Array, Object},
-				},
-				{
-					Type: []string{Array, "int", "float"},
-				},
-			},
-			Expected: []string{Array},
-			Nullable: false,
-		},
-	}
-
-	for _, tc := range testCases {
-		result, nullable, err := ValidateAllOf(tc.AllOf)
-		if tc.Error != "" {
-			assert.ErrorContains(t, err, tc.Error)
-
-			return
-		}
-
-		assert.True(t, err == nil)
-		assert.Equal(t, tc.Nullable, nullable)
-		assert.Equal(t, tc.Expected, result)
-	}
+type Operation struct {
+	OperationID          string
+	Parameters           []*Parameter
+	RequestContentType   string
+	RequestBodyMediaType *highv3.MediaType
+	Responses            *highv3.Responses
+	Security             []*base.SecurityRequirement
+	Servers              []*highv3.Server
+	Extensions           *orderedmap.Map[string, *yaml.Node]
+	RequestBodyRequired  bool
 }

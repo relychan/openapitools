@@ -16,6 +16,7 @@ package oaschema
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -43,6 +44,49 @@ func NormalizeType(typeName string) (string, bool) {
 		// array, object and unknown type.
 		return lowerTypeName, false
 	}
+}
+
+// GetSchemaTypes returns available types of the schema, and check if it is nullable.
+func GetSchemaTypes(schema *base.Schema) ([]string, bool) {
+	if schema == nil {
+		return nil, true
+	}
+
+	nullable := schema.Nullable != nil && *schema.Nullable
+
+	types := make([]string, 0, max(1, len(schema.Type)))
+
+	if (schema.Properties != nil && schema.Properties.Len() > 0) ||
+		(schema.AdditionalProperties != nil &&
+			(schema.AdditionalProperties.A != nil && schema.AdditionalProperties.B)) ||
+		(schema.PatternProperties != nil && schema.PatternProperties.Len() > 0) {
+		types = append(types, Object)
+	} else if schema.Items != nil && (schema.Items.B || schema.Items.A != nil) {
+		types = append(types, Array)
+	}
+
+	for _, schemaType := range schema.Type {
+		if schemaType == "" {
+			continue
+		}
+
+		normalizedType, _ := NormalizeType(schemaType)
+		if normalizedType == Null {
+			nullable = true
+
+			continue
+		}
+
+		if !slices.Contains(types, normalizedType) {
+			types = append(types, normalizedType)
+		}
+	}
+
+	if len(types) == 0 {
+		return nil, nullable
+	}
+
+	return slices.Clip(types), nullable
 }
 
 // DetectSchemaFromValue detects the OpenAPI schema type from a Go value.

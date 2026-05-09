@@ -25,7 +25,6 @@ import (
 
 	"github.com/hasura/gotel"
 	"github.com/hasura/gotel/otelutils"
-	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
@@ -42,7 +41,7 @@ var tracer = gotel.NewTracer("openapitools/graphqlhandler")
 
 // GraphQLHandler implements the ProxyHandler interface for GraphQL proxy.
 type GraphQLHandler struct {
-	parameters          []*highv3.Parameter
+	parameters          []*oaschema.Parameter
 	url                 string
 	method              string
 	operationName       string
@@ -59,7 +58,7 @@ type GraphQLHandler struct {
 
 // NewGraphQLHandler creates a GraphQL request from operation.
 func NewGraphQLHandler( //nolint:ireturn,nolintlint
-	operation *highv3.Operation,
+	operation *oaschema.Operation,
 	rawProxyAction *yaml.Node,
 	options *proxyhandler.NewProxyHandlerOptions,
 ) (proxyhandler.ProxyHandler, error) {
@@ -92,7 +91,7 @@ func NewGraphQLHandler( //nolint:ireturn,nolintlint
 		return nil, ErrInvalidRequestMethod
 	}
 
-	responseContentType := oaschema.GetResponseContentTypeFromOperation(operation)
+	responseContentType := oaschema.GetResponseContentType(operation.Responses)
 	if responseContentType == "" {
 		handler.responseContentType = httpheader.ContentTypeJSON
 	} else {
@@ -105,7 +104,7 @@ func NewGraphQLHandler( //nolint:ireturn,nolintlint
 	}
 
 	getEnvFunc := options.GetEnvFunc()
-	handler.parameters = oaschema.MergeParameters(options.Parameters, operation.Parameters)
+	handler.parameters = operation.Parameters
 
 	handler.headers, err = jmes.EvaluateObjectFieldMappingStringEntries(
 		proxyAction.Request.Headers,

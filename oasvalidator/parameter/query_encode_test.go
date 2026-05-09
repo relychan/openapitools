@@ -26,13 +26,13 @@ func TestEncodingURLQueryParam(t *testing.T) {
 	testCases := []struct {
 		name     string
 		value    any
-		encoding BaseParameter
+		param    oaschema.Parameter
 		expected string
 	}{
 		{
 			name:  "empty",
 			value: nil,
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InQuery,
 				Explode: new(true),
@@ -43,7 +43,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 		{
 			name:  "form_explode_single",
 			value: "3",
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InQuery,
 				Explode: new(true),
@@ -54,7 +54,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 		{
 			name:  "form_single",
 			value: "3",
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InQuery,
 				Explode: new(false),
@@ -65,7 +65,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 		{
 			name:  "form_multiple",
 			value: []string{"3", "4", "5"},
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:          "id",
 				In:            oaschema.InQuery,
 				Explode:       new(false),
@@ -77,7 +77,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 		{
 			name:  "form_explode_multiple",
 			value: []string{"3", "4", "5"},
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:          "id",
 				In:            oaschema.InQuery,
 				Explode:       new(true),
@@ -91,7 +91,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 			value: map[any]any{
 				"role": "admin",
 			},
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:          "id",
 				In:            oaschema.InQuery,
 				Explode:       new(false),
@@ -105,7 +105,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 			value: map[any]any{
 				"role": "admin",
 			},
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:          "id",
 				In:            oaschema.InQuery,
 				Explode:       new(true),
@@ -123,7 +123,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 					},
 				},
 			},
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:          "id",
 				In:            oaschema.InQuery,
 				Explode:       new(false),
@@ -143,7 +143,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 					},
 				},
 			},
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:          "id",
 				In:            oaschema.InQuery,
 				Explode:       new(true),
@@ -155,7 +155,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 		{
 			name:  "spaceDelimited_array",
 			value: []string{"3", "4", "5"},
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:          "id",
 				In:            oaschema.InQuery,
 				Explode:       new(false),
@@ -170,7 +170,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				"R": "100",
 				"G": "200",
 			},
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:          "color",
 				In:            oaschema.InQuery,
 				Style:         new(oaschema.EncodingStyleSpaceDelimited),
@@ -182,7 +182,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 		{
 			name:  "spaceDelimited_explode_array",
 			value: []any{"3", "4", "5"},
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:          "id",
 				In:            oaschema.InQuery,
 				Style:         new(oaschema.EncodingStyleSpaceDelimited),
@@ -194,7 +194,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 		{
 			name:  "pipeDelimited_array",
 			value: []any{"3", "4", "5"},
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:          "id",
 				In:            oaschema.InQuery,
 				Style:         new(oaschema.EncodingStylePipeDelimited),
@@ -206,7 +206,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 		{
 			name:  "pipeDelimited_explode_array",
 			value: []any{"3", "4", "5"},
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:          "id",
 				In:            oaschema.InQuery,
 				Style:         new(oaschema.EncodingStylePipeDelimited),
@@ -221,7 +221,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				"R": "100",
 				"G": "200",
 			},
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:          "color",
 				In:            oaschema.InQuery,
 				Style:         new(oaschema.EncodingStylePipeDelimited),
@@ -233,7 +233,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 		{
 			name:  "deepObject_array_explode",
 			value: []any{"3", "4", "5"},
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:          "id",
 				In:            oaschema.InQuery,
 				Style:         new(oaschema.EncodingStyleDeepObject),
@@ -248,7 +248,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 				"R": "100",
 				"G": "200",
 			},
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:          "color",
 				In:            oaschema.InQuery,
 				Style:         new(oaschema.EncodingStyleDeepObject),
@@ -268,7 +268,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 					},
 				},
 			},
-			encoding: BaseParameter{
+			param: oaschema.Parameter{
 				Name:          "id",
 				In:            oaschema.InQuery,
 				Style:         new(oaschema.EncodingStyleDeepObject),
@@ -282,7 +282,7 @@ func TestEncodingURLQueryParam(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			qValues := url.Values{}
-			SetQueryParam(qValues, tc.encoding, tc.value)
+			SetQueryParam(qValues, &tc.param, tc.value)
 			assert.Equal(t, tc.expected, EncodeQueryValuesUnescape(qValues))
 		})
 	}
@@ -300,7 +300,7 @@ func BenchmarkSetQueryParam(b *testing.B) {
 		},
 	}
 
-	encoding := BaseParameter{
+	encoding := &oaschema.Parameter{
 		Name:          "id",
 		In:            oaschema.InQuery,
 		Style:         new(oaschema.EncodingStyleForm),

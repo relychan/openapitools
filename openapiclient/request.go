@@ -17,7 +17,6 @@ package openapiclient
 import (
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gohttpc"
-	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
@@ -76,53 +75,9 @@ func getRequestBodyContentSchema(
 	}
 
 	if route.Method.Operation == nil ||
-		route.Method.Operation.RequestBody == nil {
+		route.Method.Operation.RequestBodyMediaType == nil {
 		return contentType, nil
 	}
 
-	contents := route.Method.Operation.RequestBody.Content
-
-	if route.Method.Operation.RequestBody.Content == nil || contents.Len() == 0 {
-		return contentType, nil
-	}
-
-	// Get the default content type if the input
-	if contentType == "" {
-		var (
-			defaultContentType   string
-			defaultContentSchema *highv3.MediaType
-		)
-
-		for content := contents.First(); content != nil; content = content.Next() {
-			key := content.Key()
-
-			value := content.Value()
-			if value == nil {
-				continue
-			}
-
-			if defaultContentSchema == nil {
-				defaultContentType = key
-				defaultContentSchema = value
-			}
-
-			if httpheader.IsContentTypeJSON(key) {
-				return key, value
-			}
-		}
-
-		return defaultContentType, defaultContentSchema
-	}
-
-	// Find the exact match of the input content type
-	for content := contents.First(); content != nil; content = content.Next() {
-		key := content.Key()
-		value := content.Value()
-
-		if goutils.HasStringPrefixFold(key, contentType) {
-			return contentType, value
-		}
-	}
-
-	return "", nil
+	return route.Method.Operation.RequestContentType, nil
 }

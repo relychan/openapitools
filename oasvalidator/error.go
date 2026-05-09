@@ -66,6 +66,8 @@ const (
 	ErrCodeInvalidURLParam = "invalid_url_param"
 	// ErrCodeInvalidQueryParam represents a code for invalid query parameter errors.
 	ErrCodeInvalidQueryParam = "invalid_query_param"
+	// ErrCodeInvalidHeader represents a code for invalid header errors.
+	ErrCodeInvalidHeader = "invalid_header"
 	// ErrCodeValidationError represents a code for validation errors.
 	ErrCodeValidationError = "validation_error"
 	// ErrCodeGraphQLResponseEmpty represents a code for empty graphql response.
@@ -150,12 +152,22 @@ func InvalidTypeError(
 	}
 }
 
-// func TypeMismatchedError(expected []string, actual string) *httperror.ValidationError {
-// 	return &httperror.ValidationError{
-// 		Code:   ErrCodeInvalidQueryParam,
-// 		Detail: "Invalid data types. Expected one of [" + strings.Join(expected, ", ") + "], but got: " + actual,
-// 	}
-// }
+func TypeMismatchedError(expected []string, actual string) *httperror.ValidationError {
+	return &httperror.ValidationError{
+		Code: ErrCodeValidationError,
+		Detail: "Invalid data types. Expected one of [" + strings.Join(expected, ", ") +
+			"], but got: " + actual,
+	}
+}
+
+func UnionTypeMismatchedError(unionType string, expected []string, actual []string) *httperror.ValidationError {
+	return &httperror.ValidationError{
+		Code: ErrCodeValidationError,
+		Detail: "Inconsistent data types in " + unionType + ". Expected one of [" +
+			strings.Join(expected, ", ") + "], but got: " +
+			strings.Join(actual, ", ") + "]",
+	}
+}
 
 func InvalidTypeErrorFunc(
 	expected []string,

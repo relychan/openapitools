@@ -24,8 +24,8 @@ import (
 	"testing"
 
 	"github.com/jmespath-community/go-jmespath"
-	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gotransform/jmes"
+	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/stretchr/testify/assert"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -244,7 +244,7 @@ func TestResolveRequestExtensions(t *testing.T) {
 // TestNewGraphQLHandler tests the NewGraphQLHandler function
 func TestNewGraphQLHandler(t *testing.T) {
 	t.Run("nil_proxy_action", func(t *testing.T) {
-		operation := &highv3.Operation{}
+		operation := &oaschema.Operation{}
 		options := &proxyhandler.NewProxyHandlerOptions{}
 
 		handler, err := NewGraphQLHandler(operation, nil, options)
@@ -253,7 +253,7 @@ func TestNewGraphQLHandler(t *testing.T) {
 	})
 
 	t.Run("invalid_yaml", func(t *testing.T) {
-		operation := &highv3.Operation{}
+		operation := &oaschema.Operation{}
 		options := &proxyhandler.NewProxyHandlerOptions{}
 
 		// Create invalid YAML node
@@ -266,7 +266,7 @@ func TestNewGraphQLHandler(t *testing.T) {
 	})
 
 	t.Run("missing_request_config", func(t *testing.T) {
-		operation := &highv3.Operation{}
+		operation := &oaschema.Operation{}
 		options := &proxyhandler.NewProxyHandlerOptions{}
 
 		config := ProxyGraphQLActionConfig{
@@ -282,7 +282,7 @@ func TestNewGraphQLHandler(t *testing.T) {
 	})
 
 	t.Run("empty_query", func(t *testing.T) {
-		operation := &highv3.Operation{}
+		operation := &oaschema.Operation{}
 		options := &proxyhandler.NewProxyHandlerOptions{}
 
 		config := ProxyGraphQLActionConfig{
@@ -301,7 +301,7 @@ func TestNewGraphQLHandler(t *testing.T) {
 	})
 
 	t.Run("invalid_graphql_query", func(t *testing.T) {
-		operation := &highv3.Operation{}
+		operation := &oaschema.Operation{}
 		options := &proxyhandler.NewProxyHandlerOptions{}
 
 		config := ProxyGraphQLActionConfig{
@@ -320,7 +320,7 @@ func TestNewGraphQLHandler(t *testing.T) {
 	})
 
 	t.Run("valid_simple_query", func(t *testing.T) {
-		operation := &highv3.Operation{}
+		operation := &oaschema.Operation{}
 		options := &proxyhandler.NewProxyHandlerOptions{}
 
 		config := ProxyGraphQLActionConfig{
@@ -339,7 +339,7 @@ func TestNewGraphQLHandler(t *testing.T) {
 	})
 
 	t.Run("with_variables", func(t *testing.T) {
-		operation := &highv3.Operation{}
+		operation := &oaschema.Operation{}
 		options := &proxyhandler.NewProxyHandlerOptions{}
 
 		// Use YAML string to avoid type issues
@@ -361,7 +361,7 @@ request:
 	})
 
 	t.Run("with_extensions", func(t *testing.T) {
-		operation := &highv3.Operation{}
+		operation := &oaschema.Operation{}
 		options := &proxyhandler.NewProxyHandlerOptions{}
 
 		yamlConfig := `
@@ -382,7 +382,7 @@ request:
 	})
 
 	t.Run("with_response_config", func(t *testing.T) {
-		operation := &highv3.Operation{}
+		operation := &oaschema.Operation{}
 		options := &proxyhandler.NewProxyHandlerOptions{}
 
 		yamlConfig := `

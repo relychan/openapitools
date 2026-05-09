@@ -15,11 +15,13 @@
 // Package parameter defines serialization functions for HTTP parameters.
 package parameter
 
+import "github.com/relychan/openapitools/oaschema"
+
 // EncodeHeader encodes the header from an arbitrary value.
 // The value is encoded differently on each style, according to the [OpenAPI specification].
 //
 // [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
-func EncodeHeader(definition BaseParameter, value any) string {
+func EncodeHeader(definition *oaschema.Parameter, value any) string {
 	_, explode := definition.GetStyleAndExplode()
 	items := EvaluateParameterValue(value, ParamKeys{})
 

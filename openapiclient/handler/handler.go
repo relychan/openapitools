@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 
-	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/graphqlhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
@@ -37,7 +36,7 @@ var proxyHandlerConstructors = map[proxyhandler.ProxyActionType]proxyhandler.New
 
 // NewProxyHandler creates a proxy handler by type.
 func NewProxyHandler( //nolint:ireturn,nolintlint
-	operation *highv3.Operation,
+	operation *oaschema.Operation,
 	options *proxyhandler.NewProxyHandlerOptions,
 ) (proxyhandler.ProxyHandler, error) {
 	var proxyAction rawProxyActionConfig

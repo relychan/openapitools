@@ -54,24 +54,6 @@ func ExtractCommonParametersOfOperation(
 	return pathParams
 }
 
-// MergeParameters merge parameter slices by unique name and location.
-func MergeParameters(dest []*highv3.Parameter, src []*highv3.Parameter) []*highv3.Parameter {
-L:
-	for _, srcParam := range src {
-		for j, destParam := range dest {
-			if destParam.Name == srcParam.Name && destParam.In == srcParam.In {
-				dest[j] = srcParam
-
-				continue L
-			}
-		}
-
-		dest = append(dest, srcParam)
-	}
-
-	return dest
-}
-
 // GetDefaultContentType gets the default content type from the content map.
 func GetDefaultContentType(contents *orderedmap.Map[string, *highv3.MediaType]) string {
 	if contents == nil || contents.Len() == 0 {
@@ -98,15 +80,15 @@ func GetDefaultContentType(contents *orderedmap.Map[string, *highv3.MediaType]) 
 	return contentType
 }
 
-// GetResponseContentTypeFromOperation gets the successful content type of the operation.
-func GetResponseContentTypeFromOperation(operation *highv3.Operation) string {
-	if operation.Responses == nil {
+// GetResponseContentType gets the successful content type of the operation.
+func GetResponseContentType(responses *highv3.Responses) string {
+	if responses == nil {
 		return ""
 	}
 
 	var successResponse *highv3.Response
 
-	for iter := operation.Responses.Codes.First(); iter != nil; iter = iter.Next() {
+	for iter := responses.Codes.First(); iter != nil; iter = iter.Next() {
 		status := iter.Key()
 
 		if status == "200" || status == "201" || status == "204" {
@@ -120,8 +102,8 @@ func GetResponseContentTypeFromOperation(operation *highv3.Operation) string {
 		return GetDefaultContentType(successResponse.Content)
 	}
 
-	if operation.Responses.Default != nil {
-		return GetDefaultContentType(operation.Responses.Default.Content)
+	if responses.Default != nil {
+		return GetDefaultContentType(responses.Default.Content)
 	}
 
 	return ""

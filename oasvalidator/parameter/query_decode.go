@@ -18,11 +18,11 @@ import (
 	"cmp"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"slices"
 	"strings"
 
 	"github.com/pb33f/libopenapi/datamodel/high/base"
-	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
@@ -33,10 +33,12 @@ import (
 // queryParamDecoder holds the resolved configuration and raw string values for a single
 // query parameter and drives all style-aware decoding.
 type queryParamDecoder struct {
-	Name      string
-	Types     []string
-	RawValues []string
-	Schema    *base.Schema
+	Name          string
+	Types         []string
+	RawValues     []string
+	PreferredType string
+	Value         any
+	Schema        *base.Schema
 }
 
 // DecodeQueryFromParameters decodes the query parameters from string values.
@@ -44,7 +46,7 @@ type queryParamDecoder struct {
 //
 // [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
 func DecodeQueryFromParameters(
-	definitions []*highv3.Parameter,
+	definitions []*oaschema.Parameter,
 	values map[string][]string,
 ) (map[string]any, []httperror.ValidationError) {
 	if len(definitions) == 0 {
@@ -56,28 +58,14 @@ func DecodeQueryFromParameters(
 		errs    []httperror.ValidationError
 	)
 
-	var deepObjectParams []*highv3.Parameter
+	var deepObjectParams []*oaschema.Parameter
 
 	for _, definition := range definitions {
-		if definition.In != oaschema.InQuery.String() {
+		if definition.In != oaschema.InQuery {
 			continue
 		}
 
-		style, explode, styleErr := getParamStyleAndExplodeFromRawStyle(
-			oaschema.InQuery,
-			definition.Style,
-			definition.Explode,
-		)
-		if styleErr != nil {
-			return nil, []httperror.ValidationError{
-				{
-					Code:      oasvalidator.ErrCodeInvalidQueryParam,
-					Detail:    styleErr.Error(),
-					Parameter: definition.Name,
-				},
-			}
-		}
-
+		style, explode := definition.GetStyleAndExplode()
 		if style == oaschema.EncodingStyleDeepObject {
 			deepObjectParams = append(deepObjectParams, definition)
 
@@ -115,23 +103,26 @@ func DecodeQueryFromParameters(
 }
 
 func decodeQueryFromParameter(
-	definition *highv3.Parameter,
+	definition *oaschema.Parameter,
 	values map[string][]string,
 	style oaschema.ParameterEncodingStyle,
 	explode bool,
 ) (any, bool, []httperror.ValidationError) {
-	var paramSchema *base.Schema
+	var (
+		schemaTypes []string
+		nullable    bool
+		isObject    bool
+	)
 
 	if definition.Schema != nil {
-		paramSchema = definition.Schema.Schema()
+		schemaTypes, nullable = oaschema.GetSchemaTypes(definition.Schema)
+		isObject = slices.Contains(definition.Schema.Type, oaschema.Object)
 	}
-
-	isObject := paramSchema != nil && slices.Contains(paramSchema.Type, oaschema.Object)
 
 	decoder := &queryParamDecoder{
 		Name:   definition.Name,
-		Schema: paramSchema,
-		Types:  paramSchema.Type,
+		Schema: definition.Schema,
+		Types:  schemaTypes,
 	}
 
 	// Properties in exploded object are flatten.
@@ -147,7 +138,7 @@ func decodeQueryFromParameter(
 
 	rawValues, present := values[definition.Name]
 	if !present {
-		if definition.Required != nil && *definition.Required {
+		if definition.Required {
 			err := oasvalidator.ParameterRequiredError(definition.Name)
 			err.Code = oasvalidator.ErrCodeInvalidQueryParam
 
@@ -170,13 +161,19 @@ func decodeQueryFromParameter(
 		decoder.RawValues = values
 	}
 
-	if oaschema.IsSchemaTypeEmpty(paramSchema) {
+	if oaschema.IsSchemaTypeEmpty(definition.Schema) {
 		return decoder.RawValues, true, nil
 	}
 
 	itemResults, decodeErrs := decoder.Decode()
 	if len(decodeErrs) > 0 {
 		return nil, false, decodeErrs
+	}
+
+	if itemResults == nil && !nullable {
+		err := oasvalidator.ParameterRequiredError(definition.Name)
+
+		return nil, false, []httperror.ValidationError{*err}
 	}
 
 	return itemResults, true, nil
@@ -193,19 +190,30 @@ func (qpe *queryParamDecoder) Decode() (any, []httperror.ValidationError) {
 		allOf := oaschema.ExtractSchemaProxies(qpe.Schema.AllOf)
 		schemaTypes, _ := oaschema.GetUnionSchemaTypes(allOf)
 
-		if resultType != "" && len(schemaTypes) > 0 && !slices.Contains(schemaTypes, resultType) {
-			return nil, []httperror.ValidationError{
-				{
-					Code: oasvalidator.ErrCodeOpenAPISchemaError,
-					Detail: "Mismatched types in allOf [" + strings.Join(schemaTypes, ", ") +
-						"] and schema types [" + strings.Join(qpe.Schema.Type, ", ") + "]",
-					Parameter: qpe.Name,
-				},
+		if resultType != "" && len(schemaTypes) > 0 {
+			if !slices.Contains(schemaTypes, resultType) {
+				return nil, []httperror.ValidationError{
+					{
+						Code: oasvalidator.ErrCodeOpenAPISchemaError,
+						Detail: "Mismatched types in allOf [" + strings.Join(schemaTypes, ", ") +
+							"] and schema types [" + strings.Join(qpe.Types, ", ") + "]",
+						Parameter: qpe.Name,
+					},
+				}
 			}
+
+			schemaTypes = []string{resultType}
 		}
 
-		if len(schemaTypes) == 0 {
-			schemaTypes = []string{resultType}
+		for _, unionSchema := range allOf {
+			decoder := &queryParamDecoder{
+				Name:   qpe.Name,
+				Schema: unionSchema,
+				Types:  schemaTypes,
+				Value:  result,
+			}
+
+			result, errs = decoder.Decode()
 		}
 	}
 
@@ -217,30 +225,12 @@ func (qpe *queryParamDecoder) Decode() (any, []httperror.ValidationError) {
 // to avoid lossy parsing (e.g. a numeric string "007" would become 7).
 func (qpe *queryParamDecoder) decodeFromSchemaTypes() (any, string, []httperror.ValidationError) {
 	if len(qpe.RawValues) == 0 {
-		return qpe.RawValues, "", nil
-	}
-
-	if slices.Contains(qpe.Schema.Type, oaschema.String) {
-		var result string
-
-		for _, value := range qpe.RawValues {
-			if value != "" {
-				result = value
-
-				break
-			}
-		}
-
-		return result, oaschema.String, nil
+		return qpe.Value, "", nil
 	}
 
 	var finalErrors []httperror.ValidationError
 
-	for _, typeName := range qpe.Schema.Type {
-		if typeName == "" || typeName == oaschema.Null {
-			continue
-		}
-
+	for _, typeName := range qpe.Types {
 		result, primitiveType, errs := qpe.decodeFromSchemaType(typeName)
 		if len(errs) == 0 {
 			return result, primitiveType, nil
@@ -267,6 +257,17 @@ func (qpe *queryParamDecoder) decodeFromSchemaType(
 
 		return result, typeName, err
 	default:
+		if qpe.Value != nil {
+			_, ok := qpe.Value.(string)
+			if !ok {
+				return nil, "", []httperror.ValidationError{
+					*oasvalidator.InvalidTypeError([]string{typeName}, reflect.TypeOf(qpe.Value).String()),
+				}
+			}
+
+			return qpe.Value, oaschema.String, nil
+		}
+
 		result, resultType, errs := decodePrimitiveQueryValuesFromSchemaType(
 			typeName,
 			qpe.RawValues,
@@ -716,7 +717,7 @@ func (qpe *queryParamDecoder) parseNonExplodeObject() (map[string][]string, bool
 // raw query map and merges decoded values into results.  If definitions is empty the
 // entire raw map is decoded without schema guidance.
 func decodeQueryDeepObjectFromParameters(
-	definitions []*highv3.Parameter,
+	definitions []*oaschema.Parameter,
 	queryValues map[string][]string,
 	results map[string]any,
 ) []httperror.ValidationError {
@@ -746,12 +747,12 @@ func decodeQueryDeepObjectFromParameters(
 }
 
 func decodeQueryDeepObjectFromParameter(
-	definition *highv3.Parameter,
+	definition *oaschema.Parameter,
 	rawNodes ParameterNodes,
 ) (any, []httperror.ValidationError) {
 	node := rawNodes.Find(ParamKey(definition.Name))
 	if node == nil {
-		if definition.Required != nil && *definition.Required {
+		if definition.Required {
 			err := oasvalidator.ParameterRequiredError(definition.Name)
 			err.Code = oasvalidator.ErrCodeInvalidQueryParam
 
@@ -765,12 +766,7 @@ func decodeQueryDeepObjectFromParameter(
 		return node.decodeArbitrary(), nil
 	}
 
-	schemaDef := definition.Schema.Schema()
-	if schemaDef == nil {
-		return node.decodeArbitrary(), nil
-	}
-
-	return node.Decode(schemaDef)
+	return node.Decode(definition.Schema)
 }
 
 // parseDeepObjectNodes converts the flat map[string][]string from net/url into a
@@ -831,23 +827,33 @@ func newMixedArrayAndObjectError() *httperror.ValidationError {
 // legitimate empty strings.
 func decodePrimitiveQueryValuesFromSchemaType(
 	typeName string,
-	values []string,
+	rawValues []string,
 ) (any, string, []httperror.ValidationError) {
-	// Because the DecodeFromSchemaTypes function already checked the string type,
-	// the value should be converted to null for the empty string.
-	if len(values) == 0 || (len(values) == 1 && values[0] == "") {
-		normalizedType, _ := oaschema.NormalizeType(typeName)
-
-		return nil, normalizedType, nil
+	if len(rawValues) == 0 || (len(rawValues) == 1 && rawValues[0] == "") {
+		return nil, typeName, nil
 	}
 
-	for _, value := range values {
-		if value == "" {
+	if typeName == oaschema.String {
+		var result string
+
+		for _, rawValue := range rawValues {
+			if rawValue != "" {
+				result = rawValue
+
+				break
+			}
+		}
+
+		return result, oaschema.String, nil
+	}
+
+	for _, rawValue := range rawValues {
+		if rawValue == "" {
 			continue
 		}
 
 		result, primitiveType, err := oasvalidator.DecodePrimitiveValueFromType(
-			value,
+			rawValue,
 			typeName,
 		)
 		if err != nil {
@@ -862,7 +868,7 @@ func decodePrimitiveQueryValuesFromSchemaType(
 		return result, primitiveType, nil
 	}
 
-	return values, typeName, nil
+	return rawValues, typeName, nil
 }
 
 // addParameterErrors appends src errors into dest, promoting the nested Parameter

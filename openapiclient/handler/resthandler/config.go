@@ -18,13 +18,11 @@ import (
 	"net/http"
 
 	"github.com/hasura/goenvconf"
-	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gotransform"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
-	"github.com/relychan/openapitools/oasvalidator/parameter"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 )
 
@@ -88,13 +86,13 @@ func (conf customRESTResponse) IsZero() bool {
 // ProxyRESTfulParameterConfig represents  an object of transformation configurations for a parameter.
 type ProxyRESTfulParameterConfig struct {
 	jmes.FieldMappingEntryConfig `yaml:",inline"`
-	parameter.BaseParameter      `yaml:",inline"`
+	oaschema.Parameter           `yaml:",inline"`
 }
 
 // ProxyRESTfulParameter represents  an object of evaluated configurations for a parameter.
 type ProxyRESTfulParameter struct {
 	jmes.FieldMappingEntry
-	parameter.BaseParameter
+	oaschema.Parameter
 }
 
 // ProxyRESTfulRequestConfig represents configurations for the proxy request.
@@ -177,7 +175,7 @@ func newCustomRESTRequestFromConfig(
 
 		result.Parameters[i] = ProxyRESTfulParameter{
 			FieldMappingEntry: field,
-			BaseParameter:     param.BaseParameter,
+			Parameter:         param.Parameter,
 		}
 	}
 
@@ -198,21 +196,17 @@ func newCustomRESTRequestFromConfig(
 }
 
 func parseRequestContentType(
-	operation *highv3.Operation,
+	operation *oaschema.Operation,
 	conf *ProxyRESTfulRequestConfig,
 ) (string, error) {
-	var contentType string
-
-	if conf != nil && conf.ContentType != "" {
-		contentType = conf.ContentType
-	} else if operation.RequestBody != nil {
-		contentType = oaschema.GetDefaultContentType(operation.RequestBody.Content)
+	if conf == nil || conf.ContentType == "" {
+		return operation.RequestContentType, nil
 	}
 
-	result, err := oasvalidator.ValidateContentType(contentType)
+	result, err := oasvalidator.ValidateContentType(conf.ContentType)
 	if err != nil {
 		return "", &httperror.ValidationError{
-			Detail:  err.Error() + " " + contentType,
+			Detail:  err.Error() + " " + conf.ContentType,
 			Pointer: "/contentType",
 			Code:    oasvalidator.ErrCodeInvalidRESTfulRequestConfig,
 		}
@@ -222,7 +216,7 @@ func parseRequestContentType(
 }
 
 func parseResponseContentType(
-	operation *highv3.Operation,
+	operation *oaschema.Operation,
 	conf *ProxyCustomRESTfulResponseConfig,
 ) (string, error) {
 	var contentType string
@@ -230,7 +224,7 @@ func parseResponseContentType(
 	if conf != nil && conf.ContentType != "" {
 		contentType = conf.ContentType
 	} else {
-		contentType = oaschema.GetResponseContentTypeFromOperation(operation)
+		contentType = oaschema.GetResponseContentType(operation.Responses)
 	}
 
 	result, err := oasvalidator.ValidateContentType(contentType)

@@ -23,7 +23,6 @@ import (
 
 	"github.com/hasura/gotel"
 	"github.com/hasura/gotel/otelutils"
-	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
@@ -43,17 +42,17 @@ type RESTfulHandler struct {
 	responseContentType string
 	customRequest       *customRESTRequest
 	customResponse      *customRESTResponse
-	parameters          []*highv3.Parameter
+	parameters          []*oaschema.Parameter
 }
 
 // NewRESTfulHandler creates a RESTHandler from operation.
 func NewRESTfulHandler(
-	operation *highv3.Operation,
+	operation *oaschema.Operation,
 	rawProxyAction *yaml.Node,
 	options *proxyhandler.NewProxyHandlerOptions,
 ) (proxyhandler.ProxyHandler, error) {
 	handler := &RESTfulHandler{
-		parameters: oaschema.MergeParameters(options.Parameters, operation.Parameters),
+		parameters: operation.Parameters,
 	}
 
 	if rawProxyAction == nil {

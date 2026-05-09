@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	"github.com/pb33f/libopenapi/datamodel/high/base"
-	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/stretchr/testify/assert"
@@ -30,7 +29,7 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 	testCases := []struct {
 		name       string
 		value      string
-		parameters []*highv3.Parameter
+		parameters []*oaschema.Parameter
 		expected   map[string]any
 	}{
 		{
@@ -39,15 +38,15 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 			expected: map[string]any{
 				"id": int64(3),
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "id",
-					In:      oaschema.InQuery.String(),
+					In:      oaschema.InQuery,
 					Explode: new(true),
-					Style:   oaschema.EncodingStyleForm.String(),
-					Schema: base.CreateSchemaProxy(&base.Schema{
+					Style:   new(oaschema.EncodingStyleForm),
+					Schema: &base.Schema{
 						Type: []string{oaschema.Integer},
-					}),
+					},
 				},
 			},
 		},
@@ -57,12 +56,12 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 			expected: map[string]any{
 				"id": []string{"3"},
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "id",
-					In:      oaschema.InQuery.String(),
+					In:      oaschema.InQuery,
 					Explode: new(false),
-					Style:   oaschema.EncodingStyleForm.String(),
+					Style:   new(oaschema.EncodingStyleForm),
 				},
 			},
 		},
@@ -72,12 +71,12 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 			expected: map[string]any{
 				"id": []string{"3", "4", "5"},
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "id",
-					In:      oaschema.InQuery.String(),
+					In:      oaschema.InQuery,
 					Explode: new(false),
-					Style:   oaschema.EncodingStyleForm.String(),
+					Style:   new(oaschema.EncodingStyleForm),
 				},
 			},
 		},
@@ -86,12 +85,12 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 			expected: map[string]any{
 				"id": []string{"3", "4", "5"},
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "id",
-					In:      oaschema.InQuery.String(),
+					In:      oaschema.InQuery,
 					Explode: new(true),
-					Style:   oaschema.EncodingStyleForm.String(),
+					Style:   new(oaschema.EncodingStyleForm),
 				},
 			},
 			value: "id=3&id=4&id=5",
@@ -104,15 +103,15 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 					"role": "admin",
 				},
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "id",
-					In:      oaschema.InQuery.String(),
+					In:      oaschema.InQuery,
 					Explode: new(false),
-					Style:   oaschema.EncodingStyleForm.String(),
-					Schema: base.CreateSchemaProxy(&base.Schema{
+					Style:   new(oaschema.EncodingStyleForm),
+					Schema: &base.Schema{
 						Type: []string{oaschema.Object},
-					}),
+					},
 				},
 			},
 		},
@@ -124,13 +123,13 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 					"role": "admin",
 				},
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "id",
-					In:      oaschema.InQuery.String(),
+					In:      oaschema.InQuery,
 					Explode: new(true),
-					Style:   oaschema.EncodingStyleForm.String(),
-					Schema: base.CreateSchemaProxy(&base.Schema{
+					Style:   new(oaschema.EncodingStyleForm),
+					Schema: &base.Schema{
 						Type: []string{oaschema.Object},
 						Properties: func() *orderedmap.Map[string, *base.SchemaProxy] {
 							result := orderedmap.New[string, *base.SchemaProxy]()
@@ -140,7 +139,7 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 
 							return result
 						}(),
-					}),
+					},
 				},
 			},
 		},
@@ -150,20 +149,20 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 			expected: map[string]any{
 				"id": []any{int64(3), int64(4), int64(5)},
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "id",
-					In:      oaschema.InQuery.String(),
+					In:      oaschema.InQuery,
 					Explode: new(false),
-					Style:   oaschema.EncodingStyleSpaceDelimited.String(),
-					Schema: base.CreateSchemaProxy(&base.Schema{
+					Style:   new(oaschema.EncodingStyleSpaceDelimited),
+					Schema: &base.Schema{
 						Type: []string{oaschema.Array},
 						Items: &base.DynamicValue[*base.SchemaProxy, bool]{
 							A: base.CreateSchemaProxy(&base.Schema{
 								Type: []string{oaschema.Integer},
 							}),
 						},
-					}),
+					},
 				},
 			},
 		},
@@ -176,13 +175,13 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 					"G": float64(200),
 				},
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "color",
-					In:      oaschema.InQuery.String(),
+					In:      oaschema.InQuery,
 					Explode: new(false),
-					Style:   oaschema.EncodingStyleSpaceDelimited.String(),
-					Schema: base.CreateSchemaProxy(&base.Schema{
+					Style:   new(oaschema.EncodingStyleSpaceDelimited),
+					Schema: &base.Schema{
 						Type: []string{oaschema.Object},
 						Properties: func() *orderedmap.Map[string, *base.SchemaProxy] {
 							result := orderedmap.New[string, *base.SchemaProxy]()
@@ -200,7 +199,7 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 								Type: []string{oaschema.Integer},
 							}),
 						},
-					}),
+					},
 				},
 			},
 		},
@@ -210,15 +209,15 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 			expected: map[string]any{
 				"id": []any{"3", "4", "5"},
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "id",
-					In:      oaschema.InQuery.String(),
+					In:      oaschema.InQuery,
 					Explode: new(true),
-					Style:   oaschema.EncodingStyleSpaceDelimited.String(),
-					Schema: base.CreateSchemaProxy(&base.Schema{
+					Style:   new(oaschema.EncodingStyleSpaceDelimited),
+					Schema: &base.Schema{
 						Type: []string{oaschema.Array},
-					}),
+					},
 				},
 			},
 		},
@@ -228,12 +227,12 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 			expected: map[string]any{
 				"id": []string{"3", "4", "5"},
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "id",
-					In:      oaschema.InQuery.String(),
+					In:      oaschema.InQuery,
 					Explode: new(false),
-					Style:   oaschema.EncodingStylePipeDelimited.String(),
+					Style:   new(oaschema.EncodingStylePipeDelimited),
 				},
 			},
 		},
@@ -243,12 +242,12 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 			expected: map[string]any{
 				"id": []string{"3", "4", "5"},
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "id",
-					In:      oaschema.EncodingStylePipeDelimited.String(),
+					In:      oaschema.InQuery,
 					Explode: new(true),
-					Style:   oaschema.EncodingStyleSpaceDelimited.String(),
+					Style:   new(oaschema.EncodingStyleSpaceDelimited),
 				},
 			},
 		},
@@ -261,15 +260,15 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 					"G": "200",
 				},
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "color",
-					In:      oaschema.InQuery.String(),
+					In:      oaschema.InQuery,
 					Explode: new(false),
-					Style:   oaschema.EncodingStylePipeDelimited.String(),
-					Schema: base.CreateSchemaProxy(&base.Schema{
+					Style:   new(oaschema.EncodingStylePipeDelimited),
+					Schema: &base.Schema{
 						Type: []string{oaschema.Object},
-					}),
+					},
 				},
 			},
 		},
@@ -279,12 +278,12 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 			expected: map[string]any{
 				"id": []string{"3", "4", "5"},
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "id",
-					In:      oaschema.InQuery.String(),
+					In:      oaschema.InQuery,
 					Explode: new(true),
-					Style:   oaschema.EncodingStyleDeepObject.String(),
+					Style:   new(oaschema.EncodingStyleDeepObject),
 				},
 			},
 		},
@@ -297,12 +296,12 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 					"G": "200",
 				},
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "color",
-					In:      oaschema.InQuery.String(),
+					In:      oaschema.InQuery,
 					Explode: new(true),
-					Style:   oaschema.EncodingStyleDeepObject.String(),
+					Style:   new(oaschema.EncodingStyleDeepObject),
 				},
 			},
 		},
@@ -317,12 +316,12 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 					},
 				},
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "role",
-					In:      oaschema.InQuery.String(),
+					In:      oaschema.InQuery,
 					Explode: new(true),
-					Style:   oaschema.EncodingStyleDeepObject.String(),
+					Style:   new(oaschema.EncodingStyleDeepObject),
 				},
 			},
 			value: "role[0][user][0]=admin&role[0][user][0]=anonymous",
@@ -341,12 +340,12 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 					},
 				},
 			},
-			parameters: []*highv3.Parameter{
+			parameters: []*oaschema.Parameter{
 				{
 					Name:    "id",
-					In:      oaschema.InQuery.String(),
+					In:      oaschema.InQuery,
 					Explode: new(true),
-					Style:   oaschema.EncodingStyleDeepObject.String(),
+					Style:   new(oaschema.EncodingStyleDeepObject),
 				},
 			},
 		},
@@ -370,24 +369,24 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 // BenchmarkDecodeQueryFromParameters/parse_deep_object_complex-11            	   14704	     81540 ns/op	   63932 B/op	    1966 allocs/op
 func BenchmarkDecodeQueryFromParameters(b *testing.B) {
 	value := "id[role][0][user][0][]=admin&id[role][0][user][0][]=anonymous&name=foo&bar=baz"
-	parameters := []*highv3.Parameter{
+	parameters := []*oaschema.Parameter{
 		{
 			Name:    "id",
-			In:      oaschema.InQuery.String(),
+			In:      oaschema.InQuery,
 			Explode: new(true),
-			Style:   oaschema.EncodingStyleDeepObject.String(),
+			Style:   new(oaschema.EncodingStyleDeepObject),
 		},
 		{
 			Name:    "name",
-			In:      oaschema.InQuery.String(),
+			In:      oaschema.InQuery,
 			Explode: new(true),
-			Style:   oaschema.EncodingStyleForm.String(),
+			Style:   new(oaschema.EncodingStyleForm),
 		},
 		{
 			Name:    "bar",
-			In:      oaschema.InQuery.String(),
+			In:      oaschema.InQuery,
 			Explode: new(true),
-			Style:   oaschema.EncodingStyleSpaceDelimited.String(),
+			Style:   new(oaschema.EncodingStyleSpaceDelimited),
 		},
 	}
 
@@ -408,15 +407,15 @@ func BenchmarkDecodeQueryFromParameters(b *testing.B) {
 			"color": {"G|200|R|100"},
 		}
 
-		params := []*highv3.Parameter{
+		params := []*oaschema.Parameter{
 			{
 				Name:    "color",
-				In:      oaschema.InQuery.String(),
+				In:      oaschema.InQuery,
 				Explode: new(false),
-				Style:   oaschema.EncodingStylePipeDelimited.String(),
-				Schema: base.CreateSchemaProxy(&base.Schema{
+				Style:   new(oaschema.EncodingStylePipeDelimited),
+				Schema: &base.Schema{
 					Type: []string{oaschema.Object},
-				}),
+				},
 			},
 		}
 

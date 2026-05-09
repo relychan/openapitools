@@ -34,7 +34,7 @@ type queryParamSetter struct {
 // The value is encoded differently on each style, according to the [OpenAPI specification].
 //
 // [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
-func SetQueryParam(params url.Values, definition BaseParameter, value any) {
+func SetQueryParam(params url.Values, definition *oaschema.Parameter, value any) {
 	qre := &queryParamSetter{
 		params:        params,
 		rootKey:       definition.Name,

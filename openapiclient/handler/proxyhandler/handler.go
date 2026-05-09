@@ -20,7 +20,6 @@ import (
 	"net/http"
 
 	"github.com/hasura/goenvconf"
-	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/openapitools/oaschema"
 	"go.yaml.in/yaml/v4"
@@ -49,9 +48,8 @@ type ProxyHandler interface {
 
 // NewProxyHandlerOptions hold request options for the proxy handler.
 type NewProxyHandlerOptions struct {
-	Method     string
-	Parameters []*highv3.Parameter
-	GetEnv     goenvconf.GetEnvFunc
+	Method string
+	GetEnv goenvconf.GetEnvFunc
 }
 
 // GetEnvFunc returns a function to get environment variables.
@@ -64,7 +62,7 @@ func (nrp NewProxyHandlerOptions) GetEnvFunc() goenvconf.GetEnvFunc {
 }
 
 // NewProxyHandlerFunc abstracts a function to create a new proxy handler.
-type NewProxyHandlerFunc func(operation *highv3.Operation, rawProxyAction *yaml.Node, options *NewProxyHandlerOptions) (ProxyHandler, error)
+type NewProxyHandlerFunc func(operation *oaschema.Operation, rawProxyAction *yaml.Node, options *NewProxyHandlerOptions) (ProxyHandler, error)
 
 // NewRequestFunc abstracts a function to create an HTTP request.
 type NewRequestFunc func(method string, uri string) *gohttpc.RequestWithClient

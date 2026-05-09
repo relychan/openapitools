@@ -25,13 +25,13 @@ func TestEncodingURLPathParam(t *testing.T) {
 	testCases := []struct {
 		name     string
 		value    any
-		encoding BaseParameter
+		encoding *oaschema.Parameter
 		expected []string
 	}{
 		{
 			name:  "simple_empty",
 			value: nil,
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(true),
@@ -42,7 +42,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "simple_empty_explode",
 			value: nil,
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(true),
@@ -53,7 +53,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "simple_single",
 			value: "3",
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(false),
@@ -64,7 +64,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "simple_single_explode",
 			value: "3",
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(true),
@@ -75,7 +75,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "simple_array",
 			value: []int{3, 4, 5},
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(false),
@@ -86,7 +86,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "simple_array_explode",
 			value: []int{3, 4, 5},
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(true),
@@ -100,7 +100,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 				"role":      "admin",
 				"firstName": "Alex",
 			},
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(false),
@@ -117,7 +117,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 				"role":      "admin",
 				"firstName": "Alex",
 			},
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(true),
@@ -131,7 +131,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "label_empty",
 			value: nil,
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(false),
@@ -142,7 +142,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "label_empty_explode",
 			value: nil,
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(true),
@@ -153,7 +153,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "label_single",
 			value: "3",
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(false),
@@ -164,7 +164,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "label_single_explode",
 			value: "3",
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(true),
@@ -175,7 +175,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "label_array",
 			value: []int{3, 4, 5},
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(false),
@@ -186,7 +186,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "label_array_explode",
 			value: []int{3, 4, 5},
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(true),
@@ -200,7 +200,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 				"role":      "admin",
 				"firstName": "Alex",
 			},
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(false),
@@ -217,7 +217,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 				"role":      "admin",
 				"firstName": "Alex",
 			},
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(true),
@@ -231,7 +231,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "matrix_empty",
 			value: nil,
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(false),
@@ -242,7 +242,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "matrix_empty_explode",
 			value: nil,
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(true),
@@ -253,7 +253,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "matrix_single",
 			value: "3",
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(false),
@@ -264,7 +264,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "matrix_single_explode",
 			value: "3",
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(true),
@@ -275,7 +275,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "matrix_array",
 			value: []int{3, 4, 5},
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(false),
@@ -286,7 +286,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 		{
 			name:  "matrix_array_explode",
 			value: []int{3, 4, 5},
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(true),
@@ -300,7 +300,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 				"role":      "admin",
 				"firstName": "Alex",
 			},
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(false),
@@ -317,7 +317,7 @@ func TestEncodingURLPathParam(t *testing.T) {
 				"role":      "admin",
 				"firstName": "Alex",
 			},
-			encoding: BaseParameter{
+			encoding: &oaschema.Parameter{
 				Name:    "id",
 				In:      oaschema.InPath,
 				Explode: new(true),
@@ -344,7 +344,7 @@ func BenchmarkEncodePath(b *testing.B) {
 		"firstName": "Alex",
 	}
 
-	encoding := BaseParameter{
+	encoding := &oaschema.Parameter{
 		Name:          "thisisalongid",
 		In:            oaschema.InPath,
 		Style:         new(oaschema.EncodingStyleMatrix),

@@ -41,7 +41,7 @@ const (
 
 // MethodHandler represents a handler data for a method.
 type MethodHandler struct {
-	Operation *highv3.Operation
+	Operation *oaschema.Operation
 	Handler   proxyhandler.ProxyHandler
 }
 
@@ -508,7 +508,7 @@ func patNextSegment(pattern string) (*patNextSegmentResult, error) {
 }
 
 func validateURLParams(
-	operation *highv3.Operation,
+	operation *oaschema.Operation,
 	values map[string]string,
 ) (map[string]any, []httperror.ValidationError) {
 	result := goutils.ToAnyMap(values)
@@ -520,13 +520,13 @@ func validateURLParams(
 	var errs []httperror.ValidationError
 
 	for _, param := range operation.Parameters {
-		if param.In != oaschema.InPath.String() {
+		if param.In != oaschema.InPath {
 			continue
 		}
 
 		rawValue, ok := values[param.Name]
 		if !ok {
-			if param.Required != nil && *param.Required {
+			if param.Required {
 				errs = append(errs, httperror.ValidationError{
 					Code:      oasvalidator.ErrCodeInvalidURLParam,
 					Detail:    "Parameter is required",

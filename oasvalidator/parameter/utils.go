@@ -351,39 +351,9 @@ func getParamStyleAndExplodeFromRawStyle(
 		style = &parsedStyle
 	}
 
-	result, explode := evalParamStyleAndExplode(location, style, rawExplode)
+	result, explode := oaschema.GetParameterStyleAndExplode(location, style, rawExplode)
 
 	return result, explode, nil
-}
-
-// evalParamStyleAndExplode applies the OpenAPI defaults for style and explode per location:
-//   - path / header: default style=simple, default explode=false
-//   - query / cookie: default style=form,  default explode=true
-func evalParamStyleAndExplode(
-	location oaschema.ParameterLocation,
-	style *oaschema.ParameterEncodingStyle,
-	explode *bool,
-) (oaschema.ParameterEncodingStyle, bool) {
-	switch location {
-	case oaschema.InPath, oaschema.InHeader:
-		explodeValue := explode != nil && *explode
-
-		if style == nil {
-			return oaschema.EncodingStyleSimple, explodeValue
-		}
-
-		return *style, explodeValue
-	case oaschema.InQuery, oaschema.InCookie:
-		explodeValue := explode == nil || *explode
-
-		if style == nil {
-			return oaschema.EncodingStyleForm, explodeValue
-		}
-
-		return *style, explodeValue
-	default:
-		return 255, false
-	}
 }
 
 // parseDeepObjectKey parses a deep-object query key into a ParamKeys path.

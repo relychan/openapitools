@@ -138,27 +138,8 @@ func newUnsupportedContentTypeError(
 	urlPath string,
 	contentType string,
 ) *httperror.HTTPError {
-	var sb strings.Builder
-
-	sb.WriteString("Unsupported Content-Type ")
-	sb.WriteString(contentType)
-	sb.WriteString(". Expected one of ")
-
-	contents := route.Method.Operation.RequestBody.Content
-	isFirstContent := true
-
-	for content := contents.First(); content != nil; content = content.Next() {
-		if isFirstContent {
-			isFirstContent = false
-		} else {
-			sb.WriteString(", ")
-		}
-
-		sb.WriteString(content.Key())
-	}
-
 	statusCode := http.StatusUnsupportedMediaType
-	err := httperror.NewHTTPError(statusCode, sb.String())
+	err := httperror.NewHTTPError(statusCode, "Unsupported Content-Type "+contentType+". Expected application/json.")
 	err.Code = "415-01"
 	err.Instance = urlPath
 

@@ -115,99 +115,6 @@ func TestExtractCommonParametersOfOperation(t *testing.T) {
 	}
 }
 
-func TestMergeParameters(t *testing.T) {
-	testCases := []struct {
-		name     string
-		dest     []*highv3.Parameter
-		src      []*highv3.Parameter
-		expected []*highv3.Parameter
-	}{
-		{
-			name:     "empty dest and src",
-			dest:     []*highv3.Parameter{},
-			src:      []*highv3.Parameter{},
-			expected: []*highv3.Parameter{},
-		},
-		{
-			name:     "empty src",
-			dest:     []*highv3.Parameter{{Name: "id", In: InPath.String()}},
-			src:      []*highv3.Parameter{},
-			expected: []*highv3.Parameter{{Name: "id", In: InPath.String()}},
-		},
-		{
-			name: "empty dest",
-			dest: []*highv3.Parameter{},
-			src:  []*highv3.Parameter{{Name: "id", In: InPath.String()}},
-			expected: []*highv3.Parameter{
-				{Name: "id", In: InPath.String()},
-			},
-		},
-		{
-			name: "merge without duplicates",
-			dest: []*highv3.Parameter{
-				{Name: "id", In: InPath.String()},
-			},
-			src: []*highv3.Parameter{
-				{Name: "filter", In: InQuery.String()},
-			},
-			expected: []*highv3.Parameter{
-				{Name: "id", In: InPath.String()},
-				{Name: "filter", In: InQuery.String()},
-			},
-		},
-		{
-			name: "merge with duplicate - src overrides dest",
-			dest: []*highv3.Parameter{
-				{Name: "id", In: InPath.String(), Required: new(true)},
-			},
-			src: []*highv3.Parameter{
-				{Name: "id", In: InPath.String(), Required: new(false)},
-			},
-			expected: []*highv3.Parameter{
-				{Name: "id", In: InPath.String(), Required: new(false)},
-			},
-		},
-		{
-			name: "merge with same name but different location",
-			dest: []*highv3.Parameter{
-				{Name: "id", In: InPath.String()},
-			},
-			src: []*highv3.Parameter{
-				{Name: "id", In: InQuery.String()},
-			},
-			expected: []*highv3.Parameter{
-				{Name: "id", In: InPath.String()},
-				{Name: "id", In: InQuery.String()},
-			},
-		},
-		{
-			name: "merge multiple parameters",
-			dest: []*highv3.Parameter{
-				{Name: "id", In: InPath.String()},
-				{Name: "filter", In: InQuery.String()},
-			},
-			src: []*highv3.Parameter{
-				{Name: "filter", In: InQuery.String(), Required: new(true)},
-				{Name: "sort", In: InQuery.String()},
-				{Name: "Authorization", In: InHeader.String()},
-			},
-			expected: []*highv3.Parameter{
-				{Name: "id", In: InPath.String()},
-				{Name: "filter", In: InQuery.String(), Required: new(true)},
-				{Name: "sort", In: InQuery.String()},
-				{Name: "Authorization", In: InHeader.String()},
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := MergeParameters(tc.dest, tc.src)
-			assert.Equal(t, tc.expected, result)
-		})
-	}
-}
-
 // BenchmarkSchemaTypes/ExtractSchemaTypes-11         	 3055024	       386.3 ns/op	     160 B/op	       4 allocs/op
 // BenchmarkSchemaTypes/ValidateAllOf-11              	 5838295	       206.4 ns/op	     176 B/op	       4 allocs/op
 func BenchmarkSchemaTypes(b *testing.B) {
@@ -242,13 +149,6 @@ func BenchmarkSchemaTypes(b *testing.B) {
 	b.Run("ExtractSchemaTypes", func(b *testing.B) {
 		for b.Loop() {
 			ExtractSchemaTypes(schema)
-		}
-	})
-
-	b.Run("ValidateAllOf", func(b *testing.B) {
-		allOf := ExtractSchemaProxies(schema.AllOf)
-		for b.Loop() {
-			ValidateAllOf(allOf)
 		}
 	})
 }

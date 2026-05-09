@@ -12,16 +12,73 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package oasvalidator
 
 import (
-	"net/url"
-	"slices"
-
-	"github.com/pb33f/libopenapi/datamodel/high/base"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/relychan/goutils/httperror"
+	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 )
+
+func ValidateOperation(
+	document *highv3.Document,
+	operation *highv3.Operation,
+	additionalParams []*highv3.Parameter,
+) (*oaschema.Operation, []httperror.ValidationError) {
+	applyOperationReference(document, operation)
+
+	result := &oaschema.Operation{
+		OperationID: operation.OperationId,
+		Responses:   operation.Responses,
+		Security:    operation.Security,
+		Servers:     operation.Servers,
+		Extensions:  operation.Extensions,
+	}
+
+	var errs []httperror.ValidationError
+
+	if len(operation.Parameters)+len(additionalParams) > 0 {
+		result.Parameters, errs = ValidateParameterDefinitions(append(operation.Parameters, additionalParams...))
+	}
+
+	if operation.RequestBody != nil {
+		result.RequestBodyRequired = operation.RequestBody.Required != nil &&
+			*operation.RequestBody.Required
+		result.RequestContentType, result.RequestBodyMediaType = getRequestBodyContentSchema(operation)
+
+		if result.RequestContentType != "" {
+			contentType, err := ValidateContentType(result.RequestContentType)
+			if err != nil {
+				errs = append(errs, httperror.ValidationError{
+					Detail:  err.Error() + " " + contentType,
+					Pointer: "/contentType",
+					Code:    ErrCodeOpenAPISchemaError,
+				})
+			}
+
+			result.RequestContentType = contentType
+		}
+
+		if result.RequestBodyMediaType != nil {
+			_, validateErrors := ValidateSchemaProxy(result.RequestBodyMediaType.Schema)
+			if len(validateErrors) > 0 {
+				errs = append(errs, validateErrors...)
+			}
+
+			_, validateErrors = ValidateSchemaProxy(result.RequestBodyMediaType.ItemSchema)
+			if len(validateErrors) > 0 {
+				errs = append(errs, validateErrors...)
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	return result, nil
+}
 
 func applyOperationReference(document *highv3.Document, operation *highv3.Operation) {
 	if document == nil {
@@ -146,87 +203,35 @@ func applyResponseReference(document *highv3.Document, response *highv3.Response
 	return response
 }
 
-func extractParametersFromOperationV3(
-	operations *highv3.PathItem,
-	paramKeys []string,
-) []*highv3.Parameter {
-	params := operations.Parameters
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Get)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Post)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Put)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Patch)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Delete)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Head)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Options)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Query)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Trace)
+func getRequestBodyContentSchema(operation *highv3.Operation) (string, *highv3.MediaType) {
+	contents := operation.RequestBody.Content
 
-	if operations.AdditionalOperations != nil {
-		for iter := operations.AdditionalOperations.Oldest(); iter != nil; iter = iter.Next() {
-			if iter.Value == nil {
-				continue
-			}
-
-			params = oaschema.ExtractCommonParametersOfOperation(params, iter.Value)
-		}
+	if operation.RequestBody.Content == nil || contents.Len() == 0 {
+		return "", nil
 	}
 
-	// validates and add unknown parameters from the request pattern
-	for _, key := range paramKeys {
-		if slices.ContainsFunc(params, func(param *highv3.Parameter) bool {
-			return param.In == oaschema.InPath.String() && param.Name == key
-		}) {
+	var (
+		defaultContentType   string
+		defaultContentSchema *highv3.MediaType
+	)
+
+	for content := contents.First(); content != nil; content = content.Next() {
+		key := content.Key()
+
+		value := content.Value()
+		if value == nil {
 			continue
 		}
 
-		params = append(params, &highv3.Parameter{
-			Name:     key,
-			In:       oaschema.InPath.String(),
-			Required: new(true),
-			Schema: base.CreateSchemaProxy(&base.Schema{
-				Type: []string{"string"},
-			}),
-		})
-	}
+		if defaultContentSchema == nil {
+			defaultContentType = key
+			defaultContentSchema = value
+		}
 
-	return params
-}
-
-// cut the first path of the url and parse the query param if exists. Ignore fragments.
-func cutURLPath(search string) (string, string, url.Values, error) { //nolint:revive
-	if search == "" {
-		return search, "", nil, nil
-	}
-
-	var endPathIndex int
-
-	maxLength := len(search)
-
-L:
-	for ; endPathIndex < maxLength; endPathIndex++ {
-		c := search[endPathIndex]
-
-		switch c {
-		case '/', '#':
-			break L
-		case '?':
-			if endPathIndex == maxLength-1 {
-				return search[:endPathIndex], "", nil, nil
-			}
-
-			queryParams, err := url.ParseQuery(search[endPathIndex+1:])
-			if err != nil {
-				return "", "", nil, err
-			}
-
-			return search[:endPathIndex], "", queryParams, nil
-		default:
+		if httpheader.IsContentTypeJSON(key) {
+			return key, value
 		}
 	}
 
-	if endPathIndex == maxLength {
-		return search, "", nil, nil
-	}
-
-	return search[0:endPathIndex], search[endPathIndex+1:], nil, nil
+	return defaultContentType, defaultContentSchema
 }

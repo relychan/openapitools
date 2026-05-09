@@ -24,7 +24,7 @@ import (
 // The value is encoded differently on each style, according to the [OpenAPI specification].
 //
 // [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
-func EncodePathValue(definition BaseParameter, value any) string {
+func EncodePathValue(definition *oaschema.Parameter, value any) string {
 	style, explode := definition.GetStyleAndExplode()
 	items := EvaluateParameterValue(value, ParamKeys{})
 

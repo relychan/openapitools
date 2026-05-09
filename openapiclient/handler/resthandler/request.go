@@ -96,7 +96,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 			}
 
 			if rawValue != nil {
-				value := parameter.EncodeHeader(param.BaseParameter, rawValue)
+				value := parameter.EncodeHeader(&param.Parameter, rawValue)
 				req.Header().Set(param.Name, value)
 			}
 		case oaschema.InQuery:
@@ -114,7 +114,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 				return nil, respErr
 			}
 
-			parameter.SetQueryParam(queryValues, param.BaseParameter, value)
+			parameter.SetQueryParam(queryValues, &param.Parameter, value)
 		default:
 		}
 	}

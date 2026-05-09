@@ -26,7 +26,6 @@ import (
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/openapitools/oaschema"
-	"github.com/relychan/openapitools/oasvalidator/parameter"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -202,7 +201,7 @@ func TestEvaluateRequestPath_ParamFromCustomParameters(t *testing.T) {
 					FieldMappingEntry: jmes.FieldMappingEntry{
 						Path: jmespath.MustCompile("param.userId"),
 					},
-					BaseParameter: parameter.BaseParameter{
+					Parameter: oaschema.Parameter{
 						Name: "id",
 						In:   oaschema.InPath,
 					},
@@ -287,7 +286,7 @@ func TestTransformRequest_WithHeaderParam(t *testing.T) {
 					FieldMappingEntry: jmes.FieldMappingEntry{
 						Path: jmespath.MustCompile("headers.authorization"),
 					},
-					BaseParameter: parameter.BaseParameter{
+					Parameter: oaschema.Parameter{
 						Name: "Authorization",
 						In:   oaschema.InHeader,
 					},
@@ -316,7 +315,7 @@ func TestTransformRequest_WithQueryParam(t *testing.T) {
 					FieldMappingEntry: jmes.FieldMappingEntry{
 						Path: jmespath.MustCompile("query.limit"),
 					},
-					BaseParameter: parameter.BaseParameter{
+					Parameter: oaschema.Parameter{
 						Name: "limit",
 						In:   oaschema.InQuery,
 					},

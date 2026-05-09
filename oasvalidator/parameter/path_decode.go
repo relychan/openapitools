@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	"github.com/pb33f/libopenapi/datamodel/high/base"
-	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
@@ -42,7 +41,7 @@ type pathParamDecoder struct {
 // The value is encoded differently on each style, according to the [OpenAPI specification].
 //
 // [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
-func DecodePathValue(definition *highv3.Parameter, value string) (any, []httperror.ValidationError) {
+func DecodePathValue(definition *oaschema.Parameter, value string) (any, []httperror.ValidationError) {
 	if value == "" {
 		return nil, []httperror.ValidationError{
 			{
@@ -57,27 +56,14 @@ func DecodePathValue(definition *highv3.Parameter, value string) (any, []httperr
 		return value, nil
 	}
 
-	style, explode, err := getParamStyleAndExplodeFromRawStyle(
-		oaschema.InPath,
-		definition.Style,
-		definition.Explode,
-	)
-	if err != nil {
-		return nil, []httperror.ValidationError{
-			{
-				Code:      oasvalidator.ErrCodeInvalidURLParam,
-				Detail:    err.Error(),
-				Parameter: definition.Name,
-			},
-		}
-	}
+	style, explode := definition.GetStyleAndExplode()
 
 	decoder := &pathParamDecoder{
 		Name:     definition.Name,
 		Style:    style,
 		Explode:  explode,
 		RawValue: strings.TrimSpace(value),
-		Schema:   definition.Schema.Schema(),
+		Schema:   definition.Schema,
 	}
 
 	return decoder.Decode()

@@ -52,56 +52,6 @@ var (
 	)
 )
 
-// BaseParameter represents an object of common configurations for a parameter.
-type BaseParameter struct {
-	// The name of the parameter.
-	Name string `json:"name" yaml:"name"`
-	// When this is true, parameter values of type array or object generate separate parameters for each value of the array or key-value pair of the map.
-	Explode *bool `json:"explode,omitempty" yaml:"explode,omitempty"`
-	// When this is true, parameter values are serialized using reserved expansion.
-	AllowReserved bool `json:"allowReserved,omitempty" yaml:"allowReserved,omitempty"`
-	// The location of the parameter.
-	In oaschema.ParameterLocation `json:"in" yaml:"in" jsonschema:"type=string,enum=header,enum=query,enum=cookie,enum=path"`
-	// Describes how the parameter value will be serialized depending on the type of the parameter value.
-	Style *oaschema.ParameterEncodingStyle `json:"style,omitempty" yaml:"style,omitempty" jsonschema:"enum=simple,enum=label,enum=matrix,enum=form,enum=spaceDelimited,enum=pipeDelimited,enum=deepObject"`
-}
-
-// Validate checks if the current parameter config is valid.
-func (conf BaseParameter) Validate() error {
-	if conf.Name == "" {
-		return errParamNameRequired
-	}
-
-	switch conf.In {
-	case oaschema.InPath:
-		if conf.Style != nil && (*conf.Style != oaschema.EncodingStyleMatrix &&
-			*conf.Style != oaschema.EncodingStyleLabel &&
-			*conf.Style != oaschema.EncodingStyleSimple) {
-			return fmt.Errorf("%w, got %s", errInvalidParamPathStyle, *conf.Style)
-		}
-	case oaschema.InHeader:
-		if conf.Style != nil && *conf.Style != oaschema.EncodingStyleSimple {
-			return fmt.Errorf("%w, got %s", errInvalidParamHeaderStyle, conf.Style)
-		}
-	case oaschema.InQuery:
-		if conf.Style != nil && (*conf.Style != oaschema.EncodingStyleForm &&
-			*conf.Style != oaschema.EncodingStyleSpaceDelimited &&
-			*conf.Style != oaschema.EncodingStylePipeDelimited &&
-			*conf.Style != oaschema.EncodingStyleDeepObject) {
-			return errInvalidParamQueryStyle
-		}
-	default:
-		return fmt.Errorf("%w, got: %s", errInvalidParamIn, conf.In)
-	}
-
-	return nil
-}
-
-// GetStyleAndExplode gets the matched explode value of the parameter location.
-func (conf BaseParameter) GetStyleAndExplode() (oaschema.ParameterEncodingStyle, bool) {
-	return evalParamStyleAndExplode(conf.In, conf.Style, conf.Explode)
-}
-
 // ParamKeys is an ordered path of selectors that locates a value within a nested
 // parameter tree, e.g. [ParamKey("address"), ParamKey("city")] or
 // [ParamKey("ids"), ParamIndex(0)].

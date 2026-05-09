@@ -45,9 +45,7 @@ type Route struct {
 func (r Route) IsRequestBodyRequired() bool {
 	return r.Method != nil &&
 		r.Method.Operation != nil &&
-		r.Method.Operation.RequestBody != nil &&
-		r.Method.Operation.RequestBody.Required != nil &&
-		*r.Method.Operation.RequestBody.Required
+		r.Method.Operation.RequestBodyRequired
 }
 
 func newInvalidOperationMetadataError(method string, pattern string, err error) error {
