@@ -56,9 +56,9 @@ func (pc *ProxyClient) Execute(
 
 	request := proxyhandler.NewRequest(method, requestURL, header, body)
 
-	route, options, notFoundErr := pc.findRoute(span, request)
-	if notFoundErr != nil {
-		return nil, nil, notFoundErr
+	route, options, routeErr := pc.findRoute(span, request)
+	if routeErr != nil {
+		return nil, nil, routeErr
 	}
 
 	response, responseBody, err := route.Method.Handler.Handle(ctx, request, options)
@@ -110,6 +110,11 @@ func (pc *ProxyClient) findRoute(
 
 	err := validateRequestParameters(route, request)
 	if err != nil {
+		span.SetStatus(codes.Error, err.Detail)
+		span.RecordError(err)
+
+		err.Instance = request.Path()
+
 		return nil, nil, err
 	}
 

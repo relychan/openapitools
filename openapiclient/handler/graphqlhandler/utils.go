@@ -20,7 +20,6 @@ import (
 
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
-	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/parser"
 )
@@ -66,19 +65,40 @@ func ValidateGraphQLString(query string) (*GraphQLHandler, error) {
 	}
 }
 
-// convertVariableTypeFromString coerces a string value to the Go type that matches the
+// convertVariableTypeFromParam coerces a parameter value to the Go type that matches the
 // declared GraphQL scalar (bool, int*, uint*, float*). Returns the original string for
 // unknown or nil types.
-func convertVariableTypeFromString(varDef *ast.VariableDefinition, value any) (any, error) {
+func convertVariableTypeFromParam(varDef *ast.VariableDefinition, value any) (any, error) {
 	if varDef.Type == nil {
 		// unknown type. Returns the original value.
 		return value, nil
 	}
 
-	namedType := strings.ToLower(varDef.Type.NamedType)
-	result, _, err := oasvalidator.DecodePrimitiveValueFromType(value, namedType)
+	// Query and Header parameters can be an array of strings.
+	if strValues, ok := value.([]string); ok {
+		switch len(strValues) {
+		case 0:
+			return nil, nil
+		case 1:
+			return convertVariableTypeFromUnknownValue(varDef, strValues[0])
+		default:
+			return convertVariableTypeFromUnknownValue(varDef, value)
+		}
+	}
 
-	return result, err
+	if anyValues, ok := value.([]any); ok {
+		switch len(anyValues) {
+		case 0:
+			return nil, nil
+		case 1:
+			if strValue, ok := anyValues[0].(string); ok {
+				return convertVariableTypeFromUnknownValue(varDef, strValue)
+			}
+		default:
+		}
+	}
+
+	return convertVariableTypeFromUnknownValue(varDef, value)
 }
 
 // convertVariableTypeFromUnknownValue coerces an arbitrary value to the declared GraphQL scalar type.
@@ -88,18 +108,6 @@ func convertVariableTypeFromUnknownValue(varDef *ast.VariableDefinition, value a
 	if varDef.Type == nil || value == nil {
 		// unknown type. Returns the original value.
 		return value, nil
-	}
-
-	if str, ok := value.(string); ok {
-		return convertVariableTypeFromString(varDef, str)
-	}
-
-	if strPtr, ok := value.(*string); ok {
-		if strPtr == nil {
-			return nil, nil
-		}
-
-		return convertVariableTypeFromString(varDef, *strPtr)
 	}
 
 	switch strings.ToLower(varDef.Type.NamedType) {

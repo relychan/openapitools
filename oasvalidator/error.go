@@ -160,7 +160,11 @@ func TypeMismatchedError(expected []string, actual string) *httperror.Validation
 	}
 }
 
-func UnionTypeMismatchedError(unionType string, expected []string, actual []string) *httperror.ValidationError {
+func UnionTypeMismatchedError(
+	unionType string,
+	expected []string,
+	actual []string,
+) *httperror.ValidationError {
 	return &httperror.ValidationError{
 		Code: ErrCodeValidationError,
 		Detail: "Inconsistent data types in " + unionType + ". Expected one of [" +
@@ -250,7 +254,11 @@ func MultipleOfValidationErrorFunc(
 	}
 }
 
-func MaximumValidationError(expected float64, actual float64, exclusive bool) *httperror.ValidationError {
+func MaximumValidationError(
+	expected float64,
+	actual float64,
+	exclusive bool,
+) *httperror.ValidationError {
 	detail := "Number value must be less than "
 
 	if !exclusive {
@@ -272,7 +280,11 @@ func MaximumValidationErrorFunc(expected float64, actual float64, exclusive bool
 	}
 }
 
-func MinimumValidationError(expected float64, actual float64, exclusive bool) *httperror.ValidationError {
+func MinimumValidationError(
+	expected float64,
+	actual float64,
+	exclusive bool,
+) *httperror.ValidationError {
 	detail := "Number value must be greater than "
 
 	if !exclusive {

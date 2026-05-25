@@ -48,7 +48,9 @@ L:
 	return nil, errs
 }
 
-func ValidateParameterDefinition(param *highv3.Parameter) (*oaschema.Parameter, []httperror.ValidationError) {
+func ValidateParameterDefinition(
+	param *highv3.Parameter,
+) (*oaschema.Parameter, []httperror.ValidationError) {
 	if param == nil {
 		return nil, nil
 	}

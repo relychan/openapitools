@@ -82,7 +82,9 @@ func ValidateSchema(schema *base.Schema) []httperror.ValidationError {
 	return nil
 }
 
-func validateAllOfSchema(schema *base.Schema) []httperror.ValidationError {
+func validateAllOfSchema( //nolint:gocognit,gocyclo,cyclop,funlen,maintidx
+	schema *base.Schema,
+) []httperror.ValidationError {
 	for _, aop := range schema.AllOf {
 		allOf, errs := ValidateSchemaProxy(aop)
 		if len(errs) > 0 {
@@ -105,7 +107,10 @@ func validateAllOfSchema(schema *base.Schema) []httperror.ValidationError {
 		}
 
 		if allOf.AdditionalProperties != nil {
-			schema.AdditionalProperties = mergeDynamicValue(schema.AdditionalProperties, allOf.AdditionalProperties)
+			schema.AdditionalProperties = mergeDynamicValue(
+				schema.AdditionalProperties,
+				allOf.AdditionalProperties,
+			)
 		}
 
 		if allOf.Anchor != "" && schema.Anchor == "" {
@@ -261,7 +266,10 @@ func validateAllOfSchema(schema *base.Schema) []httperror.ValidationError {
 			schema.UnevaluatedItems = allOf.UnevaluatedItems
 		}
 
-		schema.UnevaluatedProperties = mergeDynamicValue(schema.UnevaluatedProperties, allOf.UnevaluatedProperties)
+		schema.UnevaluatedProperties = mergeDynamicValue(
+			schema.UnevaluatedProperties,
+			allOf.UnevaluatedProperties,
+		)
 
 		if allOf.UniqueItems != nil && *allOf.UniqueItems {
 			schema.UniqueItems = allOf.UniqueItems
@@ -283,7 +291,9 @@ func validateAllOfSchema(schema *base.Schema) []httperror.ValidationError {
 	return nil
 }
 
-func mergeDynamicValue(dest, src *base.DynamicValue[*base.SchemaProxy, bool]) *base.DynamicValue[*base.SchemaProxy, bool] {
+func mergeDynamicValue(
+	dest, src *base.DynamicValue[*base.SchemaProxy, bool],
+) *base.DynamicValue[*base.SchemaProxy, bool] {
 	if src == nil {
 		return dest
 	}
@@ -308,7 +318,8 @@ func mergeDynamicValue(dest, src *base.DynamicValue[*base.SchemaProxy, bool]) *b
 }
 
 func evaluateSchemaMaximum(schema *base.Schema) {
-	if schema.ExclusiveMaximum != nil && schema.ExclusiveMaximum.IsA() && !schema.ExclusiveMaximum.A {
+	if schema.ExclusiveMaximum != nil && schema.ExclusiveMaximum.IsA() &&
+		!schema.ExclusiveMaximum.A {
 		schema.ExclusiveMaximum = nil
 	}
 
@@ -343,7 +354,7 @@ func mergeSchemaMaximum[T int64 | float64](dest, src *T) *T {
 	return dest
 }
 
-func mergeSchemaExclusiveMaximum(dest, src *base.Schema) {
+func mergeSchemaExclusiveMaximum(dest, src *base.Schema) { //nolint:dupl
 	if src.ExclusiveMaximum == nil {
 		return
 	}
@@ -396,7 +407,8 @@ func mergeSchemaExclusiveMaximum(dest, src *base.Schema) {
 }
 
 func evaluateSchemaMinimum(schema *base.Schema) {
-	if schema.ExclusiveMinimum != nil && schema.ExclusiveMinimum.IsA() && !schema.ExclusiveMinimum.A {
+	if schema.ExclusiveMinimum != nil && schema.ExclusiveMinimum.IsA() &&
+		!schema.ExclusiveMinimum.A {
 		schema.ExclusiveMinimum = nil
 	}
 
@@ -431,7 +443,7 @@ func mergeSchemaMinimum[T int64 | float64](dest, src *T) *T {
 	return dest
 }
 
-func mergeSchemaExclusiveMinimum(dest, src *base.Schema) {
+func mergeSchemaExclusiveMinimum(dest, src *base.Schema) { //nolint:dupl
 	if src.ExclusiveMinimum == nil {
 		return
 	}
@@ -512,7 +524,10 @@ func validateAllOfOrAnyOf(proxies []*base.SchemaProxy) ([]string, []httperror.Va
 	return unionTypes, nil
 }
 
-func validateIntersectedTypes(types, srcTypes []string, errorType string) ([]string, *httperror.ValidationError) {
+func validateIntersectedTypes(
+	types, srcTypes []string,
+	errorType string,
+) ([]string, *httperror.ValidationError) {
 	if len(srcTypes) == 0 {
 		return types, nil
 	}

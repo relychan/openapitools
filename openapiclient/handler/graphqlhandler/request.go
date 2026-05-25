@@ -355,6 +355,9 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 		return results, nil
 	}
 
+	urlParams := request.URLParams()
+	queryParams := request.QueryParams()
+
 	for _, varDef := range ge.variableDefinitions {
 		// Resolve graphql variables. Variables are resolved in order:
 		// - In proxy config.
@@ -399,9 +402,9 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 			continue
 		}
 
-		param, ok := request.URLParams()[varDef.Variable]
+		param, ok := urlParams[varDef.Variable]
 		if ok && param != "" {
-			typedParam, err := convertVariableTypeFromString(varDef, param)
+			typedParam, err := convertVariableTypeFromUnknownValue(varDef, param)
 			if err != nil {
 				respErr := httperror.NewBadRequestError(httperror.ValidationError{
 					Detail:  err.Error(),
@@ -417,9 +420,9 @@ func (ge *GraphQLHandler) resolveRequestVariables(
 			continue
 		}
 
-		queryValue := request.QueryParams().Get(varDef.Variable)
-		if queryValue != "" {
-			typedValue, err := convertVariableTypeFromString(varDef, queryValue)
+		queryValue, ok := queryParams[varDef.Variable]
+		if ok {
+			typedValue, err := convertVariableTypeFromParam(varDef, queryValue)
 			if err != nil {
 				respErr := httperror.NewBadRequestError(httperror.ValidationError{
 					Detail:  err.Error(),

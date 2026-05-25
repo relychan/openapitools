@@ -39,13 +39,17 @@ func ValidateOperation(
 	var errs []httperror.ValidationError
 
 	if len(operation.Parameters)+len(additionalParams) > 0 {
-		result.Parameters, errs = ValidateParameterDefinitions(append(operation.Parameters, additionalParams...))
+		result.Parameters, errs = ValidateParameterDefinitions(
+			append(operation.Parameters, additionalParams...),
+		)
 	}
 
 	if operation.RequestBody != nil {
 		result.RequestBodyRequired = operation.RequestBody.Required != nil &&
 			*operation.RequestBody.Required
-		result.RequestContentType, result.RequestBodyMediaType = getRequestBodyContentSchema(operation)
+		result.RequestContentType, result.RequestBodyMediaType = getRequestBodyContentSchema(
+			operation,
+		)
 
 		if result.RequestContentType != "" {
 			contentType, err := ValidateContentType(result.RequestContentType)

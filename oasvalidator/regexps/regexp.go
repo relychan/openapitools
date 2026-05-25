@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package oasvalidator defines a global cache for regular expressions.
+// Package regexps defines a global cache for regular expressions.
 package regexps
 
 import (

@@ -51,7 +51,7 @@ func (pc *ProxyClient) ServeHTTP(
 
 	contentType, _ := getRequestBodyContentSchema(route, originalContentType)
 	if contentType == "" && originalContentType != "" {
-		err := newUnsupportedContentTypeError(route, request.URL.Path, originalContentType)
+		err := newUnsupportedContentTypeError(request.URL.Path, originalContentType)
 
 		span.SetStatus(codes.Error, "unsupported content type")
 		writeErrorResponse(writer, err.Status, err)

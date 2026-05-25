@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	"github.com/relychan/goutils"
-	"github.com/relychan/openapitools/oaschema"
 )
 
 // EncodeQueryEscape encodes the values into “URL encoded” form ("bar=baz&foo=quux") sorted by key with escape.
@@ -330,30 +329,6 @@ func buildParamDelimitedStyleNonExplode(
 			sb.WriteString(value)
 		}
 	}
-}
-
-// getParamStyleAndExplodeFromRawStyle parses the raw style string from an OpenAPI
-// parameter object (which arrives as a plain string from libopenapi) and resolves the
-// effective style and explode flag according to per-location defaults.
-func getParamStyleAndExplodeFromRawStyle(
-	location oaschema.ParameterLocation,
-	rawStyle string,
-	rawExplode *bool,
-) (oaschema.ParameterEncodingStyle, bool, error) {
-	var style *oaschema.ParameterEncodingStyle
-
-	if rawStyle != "" {
-		parsedStyle, err := oaschema.ParseParameterEncodingStyle(rawStyle)
-		if err != nil {
-			return 255, false, err
-		}
-
-		style = &parsedStyle
-	}
-
-	result, explode := oaschema.GetParameterStyleAndExplode(location, style, rawExplode)
-
-	return result, explode, nil
 }
 
 // parseDeepObjectKey parses a deep-object query key into a ParamKeys path.

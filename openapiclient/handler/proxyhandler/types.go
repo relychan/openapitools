@@ -67,19 +67,23 @@ type Request struct {
 	header http.Header
 	// The body of the request.
 	body any
+	// Query parameters of the request.
+	query url.Values
 	// Parameter values of the request.
 	urlParams map[string]any
-	// Query parameters of the request.
-	queryParams url.Values
+	// Evaluated query parameters of the request.
+	queryParams map[string]any
+	// Evaluated headers of the request.
+	headerParams map[string]any
 	// URL fragment.
 	fragment string
 }
 
 // NewRequest creates a new [Request] instance.
-func NewRequest(method string, uri *url.URL, header http.Header, body any) *Request {
+func NewRequest(method string, uri *url.URL, headers http.Header, body any) *Request {
 	result := &Request{
 		method: method,
-		header: header,
+		header: headers,
 		body:   body,
 	}
 
@@ -94,7 +98,19 @@ func NewRequest(method string, uri *url.URL, header http.Header, body any) *Requ
 
 		result.path = uriPath
 		result.fragment = uri.RawFragment
-		result.queryParams = uri.Query()
+		result.query = uri.Query()
+	}
+
+	if len(headers) > 0 {
+		result.headerParams = make(map[string]any)
+
+		for key, header := range headers {
+			if len(header) == 0 {
+				continue
+			}
+
+			result.headerParams[strings.ToLower(key)] = header[0]
+		}
 	}
 
 	return result
@@ -114,7 +130,7 @@ func (r *Request) SetMethod(method string) {
 func (r *Request) URL() string {
 	result := r.path
 
-	if len(r.queryParams) == 0 && r.fragment == "" {
+	if len(r.query) == 0 && r.fragment == "" {
 		return r.path
 	}
 
@@ -122,9 +138,9 @@ func (r *Request) URL() string {
 
 	sb.WriteString(result)
 
-	if len(r.queryParams) > 0 {
+	if len(r.query) > 0 {
 		sb.WriteByte('?')
-		sb.WriteString(r.queryParams.Encode())
+		sb.WriteString(r.query.Encode())
 	}
 
 	if r.fragment != "" {
@@ -170,34 +186,33 @@ func (r *Request) SetURLParams(value map[string]any) {
 	r.urlParams = value
 }
 
+// Query returns query parameter values of the request URL.
+func (r *Request) Query() url.Values {
+	return r.query
+}
+
+// SetQuery sets query parameters for the request.
+func (r *Request) SetQuery(values url.Values) {
+	r.query = values
+}
+
 // QueryParams returns query parameter values of the request URL.
-func (r *Request) QueryParams() url.Values {
+func (r *Request) QueryParams() map[string]any {
 	return r.queryParams
 }
 
 // SetQueryParams sets query parameters for the request.
-func (r *Request) SetQueryParams(values url.Values) {
+func (r *Request) SetQueryParams(values map[string]any) {
 	r.queryParams = values
 }
 
 // ToMap converts the struct to map.
 func (r *Request) ToMap() map[string]any {
 	result := map[string]any{
-		"param": r.urlParams,
-		"query": r.queryParams,
+		"param":   r.urlParams,
+		"query":   r.queryParams,
+		"headers": r.headerParams,
 	}
-
-	headers := make(map[string]string)
-
-	for key, header := range r.header {
-		if len(header) == 0 {
-			continue
-		}
-
-		headers[strings.ToLower(key)] = header[0]
-	}
-
-	result["headers"] = headers
 
 	if r.body != nil {
 		result["body"] = r.body

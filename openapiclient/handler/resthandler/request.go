@@ -121,7 +121,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 
 	// Forward all query params if forwardAllQueryParams is true
 	// or null and there is no query param in the parameters list.
-	rawQueryParams := request.QueryParams()
+	rawQueryParams := request.Query()
 
 	if len(rawQueryParams) > 0 &&
 		(!hasQueryParam && re.customRequest.ForwardAllQueryParams == nil) ||

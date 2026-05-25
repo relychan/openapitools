@@ -134,12 +134,14 @@ func parseHTTPRequestBody(
 }
 
 func newUnsupportedContentTypeError(
-	route *internal.Route,
 	urlPath string,
 	contentType string,
 ) *httperror.HTTPError {
 	statusCode := http.StatusUnsupportedMediaType
-	err := httperror.NewHTTPError(statusCode, "Unsupported Content-Type "+contentType+". Expected application/json.")
+	err := httperror.NewHTTPError(
+		statusCode,
+		"Unsupported Content-Type "+contentType+". Expected application/json.",
+	)
 	err.Code = "415-01"
 	err.Instance = urlPath
 

@@ -41,7 +41,10 @@ type pathParamDecoder struct {
 // The value is encoded differently on each style, according to the [OpenAPI specification].
 //
 // [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
-func DecodePathValue(definition *oaschema.Parameter, value string) (any, []httperror.ValidationError) {
+func DecodePathValue(
+	definition *oaschema.Parameter,
+	value string,
+) (any, []httperror.ValidationError) {
 	if value == "" {
 		return nil, []httperror.ValidationError{
 			{
@@ -193,7 +196,7 @@ func (ppe *pathParamDecoder) decodeFromArray() ([]any, []httperror.ValidationErr
 	results := make([]any, len(strValues))
 
 	for i, value := range strValues {
-		itemValue, _, err := ppe.decodeItemValueFromSchemaTypes(itemSchema, value)
+		itemValue, err := ppe.decodeItemValueFromSchemaTypes(itemSchema, value)
 		if err != nil {
 			errs = append(errs, *err)
 
@@ -241,7 +244,7 @@ func (ppe *pathParamDecoder) decodeFromObject() (map[string]any, []httperror.Val
 			continue
 		}
 
-		parsedValue, _, err := ppe.decodeItemValueFromSchemaTypes(propSchema, value)
+		parsedValue, err := ppe.decodeItemValueFromSchemaTypes(propSchema, value)
 		if err != nil {
 			errs = append(errs, *err)
 		} else {
@@ -361,13 +364,13 @@ func (ppe *pathParamDecoder) splitObjectFromString() (map[string]any, *httperror
 func (ppe *pathParamDecoder) decodeItemValueFromSchemaTypes(
 	itemSchema *base.Schema,
 	value any,
-) (any, string, *httperror.ValidationError) {
+) (any, *httperror.ValidationError) {
 	if len(itemSchema.Type) == 0 {
-		return value, "", nil
+		return value, nil
 	}
 
 	if slices.Contains(itemSchema.Type, oaschema.String) {
-		return value, oaschema.String, nil
+		return value, nil
 	}
 
 	var finalError *httperror.ValidationError
@@ -388,15 +391,15 @@ func (ppe *pathParamDecoder) decodeItemValueFromSchemaTypes(
 				Parameter: ppe.Name,
 			}
 		} else if primitiveType != "" {
-			return result, primitiveType, nil
+			return result, nil
 		}
 	}
 
 	if finalError != nil {
-		return nil, "", finalError
+		return nil, finalError
 	}
 
-	return nil, "", &httperror.ValidationError{
+	return nil, &httperror.ValidationError{
 		Code: oasvalidator.ErrCodeInvalidURLParam,
 		Detail: fmt.Sprintf(
 			"Unsupported types or nested fields in URL path parameter: %v",

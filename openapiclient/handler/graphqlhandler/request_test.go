@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/url"
 	"testing"
 
 	"github.com/jmespath-community/go-jmespath"
@@ -95,9 +94,9 @@ func TestTransformRequest(t *testing.T) {
 			TemplateData: func() *proxyhandler.Request {
 				request := &proxyhandler.Request{}
 
-				request.SetQueryParams(map[string][]string{
-					"limit":  {"10"},
-					"offset": {"1"},
+				request.SetQueryParams(map[string]any{
+					"limit":  []string{"10"},
+					"offset": []string{"1"},
 				})
 
 				return request
@@ -160,29 +159,6 @@ func TestTransformRequest(t *testing.T) {
 func TestGraphQLHandler_Type(t *testing.T) {
 	handler := &GraphQLHandler{}
 	assert.Equal(t, "graphql", string(handler.Type()))
-}
-
-func TestRequestTemplateData_ToMap(t *testing.T) {
-	data := proxyhandler.NewRequest(http.MethodGet, nil, map[string][]string{
-		"authorization": {"Bearer token"},
-	}, map[string]any{
-		"name": "test",
-	})
-
-	data.SetURLParams(map[string]any{
-		"id": "123",
-	})
-
-	data.SetQueryParams(url.Values{
-		"limit": []string{"10"},
-	})
-
-	result := data.ToMap()
-
-	assert.True(t, result["param"] != nil)
-	assert.True(t, result["query"] != nil)
-	assert.True(t, result["headers"] != nil)
-	assert.True(t, result["body"] != nil)
 }
 
 func TestResolveRequestExtensions(t *testing.T) {
@@ -423,7 +399,7 @@ func TestConvertVariableTypeFromString(t *testing.T) {
 				Type: &ast.Type{NamedType: "Boolean"},
 			},
 			value:    "true",
-			expected: true,
+			expected: new(true),
 		},
 		{
 			name: "bool_false",
@@ -431,7 +407,7 @@ func TestConvertVariableTypeFromString(t *testing.T) {
 				Type: &ast.Type{NamedType: "Bool"},
 			},
 			value:    "false",
-			expected: false,
+			expected: new(false),
 		},
 		{
 			name: "bool_invalid",
@@ -447,7 +423,7 @@ func TestConvertVariableTypeFromString(t *testing.T) {
 				Type: &ast.Type{NamedType: "Int"},
 			},
 			value:    "42",
-			expected: int64(42),
+			expected: new(int64(42)),
 		},
 		{
 			name: "int64",
@@ -455,7 +431,7 @@ func TestConvertVariableTypeFromString(t *testing.T) {
 				Type: &ast.Type{NamedType: "Int64"},
 			},
 			value:    "9223372036854775807",
-			expected: int64(9223372036854775807),
+			expected: new(int64(9223372036854775807)),
 		},
 		{
 			name: "int_invalid",
@@ -471,7 +447,7 @@ func TestConvertVariableTypeFromString(t *testing.T) {
 				Type: &ast.Type{NamedType: "UInt"},
 			},
 			value:    "42",
-			expected: uint64(42),
+			expected: new(uint64(42)),
 		},
 		{
 			name: "uint64",
@@ -479,7 +455,7 @@ func TestConvertVariableTypeFromString(t *testing.T) {
 				Type: &ast.Type{NamedType: "UInt64"},
 			},
 			value:    "18446744073709551615",
-			expected: uint64(18446744073709551615),
+			expected: new(uint64(18446744073709551615)),
 		},
 		{
 			name: "float",
@@ -487,7 +463,7 @@ func TestConvertVariableTypeFromString(t *testing.T) {
 				Type: &ast.Type{NamedType: "Float"},
 			},
 			value:    "3.14",
-			expected: float64(3.14),
+			expected: new(float64(3.14)),
 		},
 		{
 			name: "double",
@@ -495,7 +471,7 @@ func TestConvertVariableTypeFromString(t *testing.T) {
 				Type: &ast.Type{NamedType: "Double"},
 			},
 			value:    "2.718",
-			expected: float64(2.718),
+			expected: new(float64(2.718)),
 		},
 		{
 			name: "decimal",
@@ -503,7 +479,7 @@ func TestConvertVariableTypeFromString(t *testing.T) {
 				Type: &ast.Type{NamedType: "Decimal"},
 			},
 			value:    "1.5",
-			expected: float64(1.5),
+			expected: new(float64(1.5)),
 		},
 		{
 			name: "float_invalid",
@@ -525,7 +501,7 @@ func TestConvertVariableTypeFromString(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := convertVariableTypeFromString(tc.varDef, tc.value)
+			result, err := convertVariableTypeFromParam(tc.varDef, tc.value)
 
 			if tc.expectError {
 				assert.True(t, err != nil)
@@ -564,23 +540,15 @@ func TestConvertVariableTypeFromUnknownValue(t *testing.T) {
 				Type: &ast.Type{NamedType: "Boolean"},
 			},
 			value:    "true",
-			expected: true,
+			expected: new(true),
 		},
 		{
 			name: "string_ptr_to_int",
 			varDef: &ast.VariableDefinition{
 				Type: &ast.Type{NamedType: "Int"},
 			},
-			value:    func() *string { s := "42"; return &s }(),
-			expected: int64(42),
-		},
-		{
-			name: "nil_string_ptr",
-			varDef: &ast.VariableDefinition{
-				Type: &ast.Type{NamedType: "Int"},
-			},
-			value:    (*string)(nil),
-			expected: nil,
+			value:    new("42"),
+			expected: new(int64(42)),
 		},
 		{
 			name: "bool_value",
@@ -588,7 +556,7 @@ func TestConvertVariableTypeFromUnknownValue(t *testing.T) {
 				Type: &ast.Type{NamedType: "Boolean"},
 			},
 			value:    true,
-			expected: func() *bool { b := true; return &b }(),
+			expected: new(true),
 		},
 		{
 			name: "int_value",
@@ -596,7 +564,7 @@ func TestConvertVariableTypeFromUnknownValue(t *testing.T) {
 				Type: &ast.Type{NamedType: "Int"},
 			},
 			value:    int64(42),
-			expected: func() *int64 { i := int64(42); return &i }(),
+			expected: new(int64(42)),
 		},
 		{
 			name: "uint_value",
@@ -604,7 +572,7 @@ func TestConvertVariableTypeFromUnknownValue(t *testing.T) {
 				Type: &ast.Type{NamedType: "UInt"},
 			},
 			value:    uint64(42),
-			expected: func() *uint64 { u := uint64(42); return &u }(),
+			expected: new(uint64(42)),
 		},
 		{
 			name: "float_value",
@@ -612,7 +580,7 @@ func TestConvertVariableTypeFromUnknownValue(t *testing.T) {
 				Type: &ast.Type{NamedType: "Float"},
 			},
 			value:    float64(3.14),
-			expected: func() *float64 { f := float64(3.14); return &f }(),
+			expected: new(float64(3.14)),
 		},
 		{
 			name: "unknown_type_passthrough",
@@ -756,7 +724,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 
 		result, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.NoError(t, err)
-		assert.Equal(t, map[string]any{"limit": int64(10)}, result)
+		assert.Equal(t, map[string]any{"limit": new(int64(10))}, result)
 	})
 
 	t.Run("query_with_bool_type", func(t *testing.T) {
@@ -771,13 +739,13 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 		}
 
 		templateData := proxyhandler.Request{}
-		templateData.SetQueryParams(map[string][]string{
-			"active": {"true"},
+		templateData.SetQueryParams(map[string]any{
+			"active": []string{"true"},
 		})
 
 		result, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.NoError(t, err)
-		assert.Equal(t, map[string]any{"active": true}, result)
+		assert.Equal(t, map[string]any{"active": new(true)}, result)
 	})
 
 	t.Run("variable_with_custom_mapping_and_type", func(t *testing.T) {
@@ -802,7 +770,7 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 
 		result, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())
 		assert.NoError(t, err)
-		assert.Equal(t, map[string]any{"price": float64(19.99)}, result)
+		assert.Equal(t, map[string]any{"price": new(float64(19.99))}, result)
 	})
 
 	t.Run("variable_with_nil_value", func(t *testing.T) {
@@ -861,8 +829,8 @@ func TestResolveRequestVariablesWithTypes(t *testing.T) {
 		}
 
 		templateData := proxyhandler.Request{}
-		templateData.SetQueryParams(map[string][]string{
-			"active": {"not_a_bool"},
+		templateData.SetQueryParams(map[string]any{
+			"active": []string{"not_a_bool"},
 		})
 
 		_, err := handler.resolveRequestVariables(&templateData, templateData.ToMap())

@@ -267,7 +267,9 @@ func (pn *ParameterNode) decodeFromSchemaType(
 	}
 }
 
-func (pn *ParameterNode) decodeFromArray(schemaDef *base.Schema) (any, []httperror.ValidationError) {
+func (pn *ParameterNode) decodeFromArray(
+	schemaDef *base.Schema,
+) (any, []httperror.ValidationError) {
 	errFuncs := oasvalidator.ValidateArray(schemaDef, pn.items, compareParameterNodes)
 
 	errs := oasvalidator.CollectErrors(errFuncs)

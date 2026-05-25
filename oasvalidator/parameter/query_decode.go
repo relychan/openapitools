@@ -219,7 +219,7 @@ func decodeQueryFromParameter(
 }
 
 // Decode evaluates and decodes URL parameters.
-func (qpe *queryParamDecoder) Decode() (any, []httperror.ValidationError) {
+func (qpe *queryParamDecoder) Decode() (any, []httperror.ValidationError) { //nolint:gocognit,cyclop,funlen
 	result, resultType, errs := qpe.decodeFromSchemaTypes()
 	if len(errs) > 0 {
 		return nil, errs
@@ -252,11 +252,112 @@ func (qpe *queryParamDecoder) Decode() (any, []httperror.ValidationError) {
 				Value:  result,
 			}
 
-			result, errs = decoder.Decode()
+			aor, errs := decoder.Decode()
+			if len(errs) > 0 {
+				return nil, errs
+			}
+
+			qpe.Value = aor
 		}
 	}
 
-	// TODO: oneOf, anyOf
+	if len(qpe.Schema.AnyOf) > 0 {
+		anyOf := oaschema.ExtractSchemaProxies(qpe.Schema.AnyOf)
+		schemaTypes, _ := oaschema.GetUnionSchemaTypes(anyOf)
+
+		if resultType != "" && len(schemaTypes) > 0 {
+			if !slices.Contains(schemaTypes, resultType) {
+				return nil, []httperror.ValidationError{
+					{
+						Code: oasvalidator.ErrCodeOpenAPISchemaError,
+						Detail: "Mismatched types in anyOf [" + strings.Join(schemaTypes, ", ") +
+							"] and schema types [" + strings.Join(qpe.Types, ", ") + "]",
+						Parameter: qpe.Name,
+					},
+				}
+			}
+
+			schemaTypes = []string{resultType}
+		}
+
+		var (
+			anyOfErrs      []httperror.ValidationError
+			isAnyOfSuccess bool
+		)
+
+		for _, unionSchema := range anyOf {
+			decoder := &queryParamDecoder{
+				Name:   qpe.Name,
+				Schema: unionSchema,
+				Types:  schemaTypes,
+				Value:  result,
+			}
+
+			aor, errs := decoder.Decode()
+			if len(errs) > 0 {
+				anyOfErrs = append(anyOfErrs, errs...)
+
+				continue
+			}
+
+			qpe.Value = aor
+			isAnyOfSuccess = true
+		}
+
+		if !isAnyOfSuccess {
+			return nil, anyOfErrs
+		}
+	}
+
+	if len(qpe.Schema.OneOf) > 0 {
+		oneOf := oaschema.ExtractSchemaProxies(qpe.Schema.OneOf)
+		schemaTypes, _ := oaschema.GetUnionSchemaTypes(oneOf)
+
+		if resultType != "" && len(schemaTypes) > 0 {
+			if !slices.Contains(schemaTypes, resultType) {
+				return nil, []httperror.ValidationError{
+					{
+						Code: oasvalidator.ErrCodeOpenAPISchemaError,
+						Detail: "Mismatched types in oneOf [" + strings.Join(schemaTypes, ", ") +
+							"] and schema types [" + strings.Join(qpe.Types, ", ") + "]",
+						Parameter: qpe.Name,
+					},
+				}
+			}
+
+			schemaTypes = []string{resultType}
+		}
+
+		var (
+			oneOfErrs      []httperror.ValidationError
+			isOneOfSuccess bool
+		)
+
+		for _, unionSchema := range oneOf {
+			decoder := &queryParamDecoder{
+				Name:   qpe.Name,
+				Schema: unionSchema,
+				Types:  schemaTypes,
+				Value:  result,
+			}
+
+			oor, errs := decoder.Decode()
+			if len(errs) > 0 {
+				oneOfErrs = append(oneOfErrs, errs...)
+
+				continue
+			}
+
+			qpe.Value = oor
+			isOneOfSuccess = true
+
+			break
+		}
+
+		if !isOneOfSuccess {
+			return nil, oneOfErrs
+		}
+	}
 
 	return result, errs
 }
@@ -441,7 +542,85 @@ func (qpod *queryParamObjectDecoder) Decode(schema *base.Schema) []httperror.Val
 	return nil
 }
 
-func (qpod *queryParamObjectDecoder) decodeOrUnionItem(proxy *base.SchemaProxy) []httperror.ValidationError {
+func (qpod *queryParamObjectDecoder) DecodeExplode(
+	schema *base.Schema,
+) []httperror.ValidationError {
+	// /users?role=admin&firstName=Alex
+	var (
+		parsedKeys = make([]string, 0, len(qpod.RawValues))
+		errs       []httperror.ValidationError
+	)
+
+	if schema.Properties != nil {
+		for iter := schema.Properties.First(); iter != nil; iter = iter.Next() {
+			key := iter.Key()
+
+			rawValues, present := qpod.RawValues[key]
+			if !present {
+				if len(schema.Required) > 0 && slices.Contains(schema.Required, key) {
+					err := oasvalidator.ObjectRequiredPropertyError(key)
+
+					errs = append(errs, *err)
+				}
+
+				continue
+			}
+
+			parsedKeys = append(parsedKeys, key)
+
+			schemaProxy := iter.Value()
+			if schemaProxy == nil {
+				qpod.Result[key] = rawValues
+
+				continue
+			}
+
+			propSchema := schemaProxy.Schema()
+			if oaschema.IsSchemaTypeEmpty(propSchema) {
+				qpod.Result[key] = rawValues
+
+				continue
+			}
+
+			schemaTypes, _ := oaschema.GetSchemaTypes(propSchema)
+			propDecoder := &queryParamDecoder{
+				Name:      key,
+				RawValues: rawValues,
+				Schema:    propSchema,
+				Types:     schemaTypes,
+			}
+
+			value, decodeErrs := propDecoder.Decode()
+			if len(decodeErrs) == 0 {
+				qpod.Result[key] = value
+
+				continue
+			}
+
+			errs = addParameterErrors(errs, decodeErrs, key)
+		}
+	}
+
+	if len(errs) > 0 {
+		return errs
+	}
+
+	errs = qpod.decodeObjectAdditionalProperties(schema, parsedKeys)
+	if len(errs) > 0 {
+		return errs
+	}
+
+	errs = qpod.decodeObjectPatternProperties(schema)
+	if len(errs) > 0 {
+		return errs
+	}
+
+	return nil
+}
+
+func (qpod *queryParamObjectDecoder) decodeOrUnionItem(
+	proxy *base.SchemaProxy,
+) []httperror.ValidationError {
 	if proxy == nil {
 		return nil
 	}
@@ -476,7 +655,9 @@ func (qpod *queryParamObjectDecoder) decodeOrUnionItem(proxy *base.SchemaProxy) 
 	return nil
 }
 
-func (qpod *queryParamObjectDecoder) decodeProperties(schema *base.Schema) []httperror.ValidationError {
+func (qpod *queryParamObjectDecoder) decodeProperties(
+	schema *base.Schema,
+) []httperror.ValidationError {
 	var errs []httperror.ValidationError
 
 	if schema.Properties != nil {
@@ -587,80 +768,6 @@ func (qpe *queryParamDecoder) decodeItemValueFromSchemaTypes(
 		),
 		Parameter: qpe.Name,
 	}
-}
-
-func (qpod *queryParamObjectDecoder) DecodeExplode(schema *base.Schema) []httperror.ValidationError {
-	// /users?role=admin&firstName=Alex
-	var (
-		parsedKeys = make([]string, 0, len(qpod.RawValues))
-		errs       []httperror.ValidationError
-	)
-
-	if schema.Properties != nil {
-		for iter := schema.Properties.First(); iter != nil; iter = iter.Next() {
-			key := iter.Key()
-
-			rawValues, present := qpod.RawValues[key]
-			if !present {
-				if len(schema.Required) > 0 && slices.Contains(schema.Required, key) {
-					err := oasvalidator.ObjectRequiredPropertyError(key)
-
-					errs = append(errs, *err)
-				}
-
-				continue
-			}
-
-			parsedKeys = append(parsedKeys, key)
-
-			schemaProxy := iter.Value()
-			if schemaProxy == nil {
-				qpod.Result[key] = rawValues
-
-				continue
-			}
-
-			propSchema := schemaProxy.Schema()
-			if oaschema.IsSchemaTypeEmpty(propSchema) {
-				qpod.Result[key] = rawValues
-
-				continue
-			}
-
-			schemaTypes, _ := oaschema.GetSchemaTypes(propSchema)
-			propDecoder := &queryParamDecoder{
-				Name:      key,
-				RawValues: rawValues,
-				Schema:    propSchema,
-				Types:     schemaTypes,
-			}
-
-			value, decodeErrs := propDecoder.Decode()
-			if len(decodeErrs) == 0 {
-				qpod.Result[key] = value
-
-				continue
-			}
-
-			errs = addParameterErrors(errs, decodeErrs, key)
-		}
-	}
-
-	if len(errs) > 0 {
-		return errs
-	}
-
-	errs = qpod.decodeObjectAdditionalProperties(schema, parsedKeys)
-	if len(errs) > 0 {
-		return errs
-	}
-
-	errs = qpod.decodeObjectPatternProperties(schema)
-	if len(errs) > 0 {
-		return errs
-	}
-
-	return nil
 }
 
 func (qpod *queryParamObjectDecoder) decodeObjectPatternProperties(
@@ -870,7 +977,9 @@ func decodeQueryDeepObjectFromParameter(
 // parseDeepObjectNodes converts the flat map[string][]string from net/url into a
 // ParameterNodes tree by parsing bracket-notation keys (e.g. "user[name]") and then
 // calling Normalize to resolve any index/key ambiguities.
-func parseDeepObjectNodes(queryValues map[string][]string) (ParameterNodes, []httperror.ValidationError) {
+func parseDeepObjectNodes(
+	queryValues map[string][]string,
+) (ParameterNodes, []httperror.ValidationError) {
 	var (
 		rawNodes = make(ParameterNodes, 0, len(queryValues))
 		errs     []httperror.ValidationError

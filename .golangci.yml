@@ -15,6 +15,8 @@ linters:
     - tagliatelle
     - ireturn
     - recvcheck
+    - gomodguard
+    - goconst
   settings:
     depguard:
       rules:

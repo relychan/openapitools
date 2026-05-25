@@ -15,41 +15,12 @@
 package parameter
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/relychan/goutils"
-	"github.com/relychan/openapitools/oaschema"
-)
-
-var (
-	errParamNameRequired = errors.New("parameter name is required")
-	errInvalidParamIn    = fmt.Errorf(
-		"invalid parameter location. Accept one of [%s, %s, %s]",
-		oaschema.InHeader,
-		oaschema.InQuery,
-		oaschema.InPath,
-	)
-	errInvalidParamHeaderStyle = fmt.Errorf(
-		"invalid style of the header parameter. Accept one of [%s]",
-		oaschema.EncodingStyleSimple,
-	)
-	errInvalidParamPathStyle = fmt.Errorf(
-		"invalid style of the path parameter. Accept one of [%s, %s, %s]",
-		oaschema.EncodingStyleLabel,
-		oaschema.EncodingStyleMatrix,
-		oaschema.EncodingStyleSimple,
-	)
-	errInvalidParamQueryStyle = fmt.Errorf(
-		"invalid style of the query parameter. Accept one of [%s, %s, %s, %s]",
-		oaschema.EncodingStyleForm,
-		oaschema.EncodingStyleSpaceDelimited,
-		oaschema.EncodingStylePipeDelimited,
-		oaschema.EncodingStyleDeepObject,
-	)
 )
 
 // ParamKeys is an ordered path of selectors that locates a value within a nested

@@ -19,6 +19,7 @@ import (
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
+	"github.com/relychan/openapitools/oasvalidator/parameter"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/internal"
 )
@@ -62,6 +63,16 @@ func validateRequestParameters(
 	request *proxyhandler.Request,
 ) *httperror.HTTPError {
 	request.SetURLParams(route.ParamValues)
+
+	queryParams, errs := parameter.DecodeQueryFromParameters(
+		route.Method.Operation.Parameters,
+		request.Query(),
+	)
+	if len(errs) > 0 {
+		return httperror.NewBadRequestError(errs...)
+	}
+
+	request.SetQueryParams(queryParams)
 
 	return nil
 }
