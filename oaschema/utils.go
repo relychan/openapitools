@@ -139,7 +139,18 @@ func IsSchemaTypeEmpty(schema *base.Schema) bool {
 		len(schema.OneOf) == 0 &&
 		schema.Properties == nil &&
 		schema.AdditionalProperties == nil &&
+		schema.PatternProperties == nil &&
 		schema.Items == nil)
+}
+
+// IsSchemaObjectEmpty checks if the schema object is empty.
+func IsSchemaObjectEmpty(schema *base.Schema) bool {
+	return schema == nil || (len(schema.AllOf) == 0 &&
+		len(schema.AnyOf) == 0 &&
+		len(schema.OneOf) == 0 &&
+		schema.Properties == nil &&
+		schema.AdditionalProperties == nil &&
+		schema.PatternProperties == nil)
 }
 
 // ExtractSchemaTypes returns available types of the schema, and check if it is nullable.

@@ -100,7 +100,7 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 			value: "id=role,admin",
 			expected: map[string]any{
 				"id": map[string]any{
-					"role": "admin",
+					"role": []string{"admin"},
 				},
 			},
 			parameters: []*oaschema.Parameter{
@@ -256,8 +256,8 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 			value: "color=G%7C200%7CR%7C100",
 			expected: map[string]any{
 				"color": map[string]any{
-					"R": "100",
-					"G": "200",
+					"R": []string{"100"},
+					"G": []string{"200"},
 				},
 			},
 			parameters: []*oaschema.Parameter{
