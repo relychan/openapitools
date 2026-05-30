@@ -15,10 +15,8 @@
 package openapiclient
 
 import (
-	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils/httperror"
-	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oasvalidator/parameter"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/internal"
@@ -75,20 +73,4 @@ func validateRequestParameters(
 	request.SetQueryParams(queryParams)
 
 	return nil
-}
-
-func getRequestBodyContentSchema(
-	route *internal.Route,
-	contentType string,
-) (string, *highv3.MediaType) {
-	if contentType != "" {
-		contentType = httpheader.ExtractBaseMediaType(contentType)
-	}
-
-	if route.Method.Operation == nil ||
-		route.Method.Operation.RequestBodyMediaType == nil {
-		return contentType, nil
-	}
-
-	return route.Method.Operation.RequestContentType, nil
 }

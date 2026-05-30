@@ -45,14 +45,19 @@ func ValidateOperation(
 	}
 
 	if operation.RequestBody != nil {
-		result.RequestBodyRequired = operation.RequestBody.Required != nil &&
-			*operation.RequestBody.Required
-		result.RequestContentType, result.RequestBodyMediaType = getRequestBodyContentSchema(
+		result.RequestBody = &oaschema.RequestBody{
+			Required: operation.RequestBody.Required != nil &&
+				*operation.RequestBody.Required,
+			Encoding:     result.RequestBody.Encoding,
+			ItemEncoding: result.RequestBody.ItemEncoding,
+		}
+
+		requestContentType, requestBodyMediaType := getRequestBodyContentSchema(
 			operation,
 		)
 
-		if result.RequestContentType != "" {
-			contentType, err := ValidateContentType(result.RequestContentType)
+		if requestContentType != "" {
+			contentType, err := ValidateContentType(requestContentType)
 			if err != nil {
 				errs = append(errs, httperror.ValidationError{
 					Detail:  err.Error() + " " + contentType,
@@ -64,16 +69,20 @@ func ValidateOperation(
 			result.RequestContentType = contentType
 		}
 
-		if result.RequestBodyMediaType != nil {
-			_, validateErrors := ValidateSchemaProxy(result.RequestBodyMediaType.Schema)
+		if requestBodyMediaType != nil {
+			bodySchema, validateErrors := ValidateSchemaProxy(requestBodyMediaType.Schema)
 			if len(validateErrors) > 0 {
 				errs = append(errs, validateErrors...)
 			}
 
-			_, validateErrors = ValidateSchemaProxy(result.RequestBodyMediaType.ItemSchema)
+			result.RequestBody.Schema = bodySchema
+
+			itemSchema, validateErrors := ValidateSchemaProxy(requestBodyMediaType.ItemSchema)
 			if len(validateErrors) > 0 {
 				errs = append(errs, validateErrors...)
 			}
+
+			result.RequestBody.ItemSchema = itemSchema
 		}
 	}
 

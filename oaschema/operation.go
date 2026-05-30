@@ -22,13 +22,20 @@ import (
 )
 
 type Operation struct {
-	OperationID          string
-	Parameters           []*Parameter
-	RequestContentType   string
-	RequestBodyMediaType *highv3.MediaType
-	Responses            *highv3.Responses
-	Security             []*base.SecurityRequirement
-	Servers              []*highv3.Server
-	Extensions           *orderedmap.Map[string, *yaml.Node]
-	RequestBodyRequired  bool
+	OperationID        string
+	Parameters         []*Parameter
+	RequestContentType string
+	RequestBody        *RequestBody
+	Responses          *highv3.Responses
+	Security           []*base.SecurityRequirement
+	Servers            []*highv3.Server
+	Extensions         *orderedmap.Map[string, *yaml.Node]
+}
+
+type RequestBody struct {
+	Schema       *base.Schema
+	ItemSchema   *base.Schema
+	Encoding     *orderedmap.Map[string, *highv3.Encoding]
+	ItemEncoding *orderedmap.Map[string, *highv3.Encoding]
+	Required     bool
 }

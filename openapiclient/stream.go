@@ -18,7 +18,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"go.opentelemetry.io/otel/codes"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
@@ -47,19 +46,7 @@ func (pc *ProxyClient) ServeHTTP(
 		return
 	}
 
-	originalContentType := httpheader.GetHeaderValue(request.Header, httpheader.ContentType)
-
-	contentType, _ := getRequestBodyContentSchema(route, originalContentType)
-	if contentType == "" && originalContentType != "" {
-		err := newUnsupportedContentTypeError(request.URL.Path, originalContentType)
-
-		span.SetStatus(codes.Error, "unsupported content type")
-		writeErrorResponse(writer, err.Status, err)
-
-		return
-	}
-
-	requestBody, err := parseHTTPRequestBody(route, writer, request, contentType)
+	requestBody, err := parseHTTPRequestBody(route, writer, request)
 	if err != nil {
 		span.SetStatus(codes.Error, "failed to validate request body")
 		span.RecordError(err)
@@ -69,9 +56,9 @@ func (pc *ProxyClient) ServeHTTP(
 
 	req.SetBody(requestBody)
 
-	_, err = route.Method.Handler.Stream(ctx, req, writer, options) //nolint:bodyclose
-	if err != nil {
-		status, respErr := pc.handleError(span, err, request.URL.Path)
+	_, streamErr := route.Method.Handler.Stream(ctx, req, writer, options) //nolint:bodyclose
+	if streamErr != nil {
+		status, respErr := pc.handleError(span, streamErr, request.URL.Path)
 
 		writeErrorResponse(writer, status, respErr)
 
@@ -102,6 +89,15 @@ func (pc *ProxyClient) Stream(
 		writeErrorResponse(writer, notFoundErr.Status, notFoundErr)
 
 		return nil, notFoundErr
+	}
+
+	validationErr := validateRequestBody(route.Method.Operation.RequestBody, request.Body())
+	if validationErr != nil {
+		validationErr.Instance = request.Path()
+
+		writeErrorResponse(writer, validationErr.Status, validationErr)
+
+		return nil, validationErr
 	}
 
 	response, err := route.Method.Handler.Stream(ctx, request, writer, options)

@@ -59,9 +59,7 @@ func Decode(contentType string, rawBody io.Reader) (any, error) {
 
 	switch {
 	case httpheader.IsContentTypeJSON(contentType):
-		var result any
-
-		return result, json.NewDecoder(rawBody).Decode(&result)
+		return DecodeJSON(rawBody)
 	case httpheader.IsContentTypeXML(contentType):
 		return DecodeXML(rawBody)
 	case httpheader.IsContentTypeText(contentType):

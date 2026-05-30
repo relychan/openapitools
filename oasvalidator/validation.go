@@ -17,6 +17,7 @@ package oasvalidator
 import (
 	"cmp"
 	"math"
+	"reflect"
 	"slices"
 	"strconv"
 	"time"
@@ -195,8 +196,7 @@ func ValidateValue( //nolint:gocyclo,cyclop,funlen
 	case map[string]any:
 		return ValidateObject(typeSchema, val)
 	default:
-		// TODO: reflection
-		return nil
+		return validateValueReflection(typeSchema, reflect.ValueOf(value))
 	}
 }
 
@@ -240,10 +240,9 @@ func ValidateString(typeSchema *base.Schema, value string) []ErrorFunc {
 
 	var errs []ErrorFunc
 
-	if typeSchema.MaxLength != nil && valueLength > *typeSchema.MaxLength {
-		errs = append(errs, MaxLengthValidationErrorFunc(*typeSchema.MaxLength, valueLength))
-	} else if typeSchema.MinLength != nil && valueLength < *typeSchema.MinLength {
-		errs = append(errs, MinLengthValidationErrorFunc(*typeSchema.MinLength, valueLength))
+	alError := validateArrayLength(typeSchema, valueLength)
+	if alError != nil {
+		errs = append(errs, alError)
 	}
 
 	if typeSchema.Pattern == "" {
@@ -385,7 +384,7 @@ func ValidateArrayAndItems[T any](
 
 	errs := ValidateArray(typeSchema, value, compare)
 
-	if len(value) == 0 || typeSchema.Items.A == nil {
+	if len(value) == 0 || typeSchema.Items == nil || (typeSchema.Items.IsB() || typeSchema.Items.A == nil) {
 		return errs
 	}
 
@@ -433,16 +432,9 @@ func ValidateObject[T any](typeSchema *base.Schema, value map[string]T) []ErrorF
 
 	var errs []ErrorFunc
 
-	if typeSchema.MaxProperties != nil && *typeSchema.MaxProperties < propertiesLength {
-		errs = append(
-			errs,
-			ObjectMaxPropertiesValidationErrorFunc(*typeSchema.MaxProperties, propertiesLength),
-		)
-	} else if typeSchema.MinProperties != nil && *typeSchema.MinProperties > propertiesLength {
-		errs = append(
-			errs,
-			ObjectMinPropertiesValidationErrorFunc(*typeSchema.MinProperties, propertiesLength),
-		)
+	propLenErr := validateObjectPropertiesLength(typeSchema, propertiesLength)
+	if propLenErr != nil {
+		errs = []ErrorFunc{propLenErr}
 	}
 
 	for _, requiredKey := range typeSchema.Required {
@@ -563,4 +555,124 @@ func validateNumberRules(typeSchema *base.Schema, value float64) []ErrorFunc { /
 	}
 
 	return errs
+}
+
+func validateArrayLength(typeSchema *base.Schema, length int64) ErrorFunc {
+	// array length validations
+	if typeSchema.MaxItems != nil && length > *typeSchema.MaxItems {
+		return ArrayMaxItemsValidationErrorFunc(*typeSchema.MaxItems, length)
+	}
+
+	if typeSchema.MinItems != nil && length < *typeSchema.MinItems {
+		return ArrayMinItemsValidationErrorFunc(*typeSchema.MinItems, length)
+	}
+
+	return nil
+}
+
+func validateObjectReflection(typeSchema *base.Schema, reflectValue reflect.Value) []ErrorFunc {
+	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Object) {
+		return []ErrorFunc{InvalidTypeErrorFunc(typeSchema.Type, oaschema.Object)}
+	}
+
+	var (
+		errs []ErrorFunc
+		keys []string
+	)
+
+	fieldCount := reflectValue.Len()
+
+	propLenErr := validateObjectPropertiesLength(typeSchema, int64(fieldCount))
+	if propLenErr != nil {
+		errs = []ErrorFunc{propLenErr}
+	}
+
+	if fieldCount > 0 {
+		keys = make([]string, 0, fieldCount)
+
+		for _, reflectKey := range reflectValue.MapKeys() {
+			kind := reflectKey.Kind()
+
+			if kind != reflect.String {
+				errs = append(errs, ObjectPropertyKeyTypeErrorFunc(kind.String()))
+
+				return errs
+			}
+
+			keys = append(keys, reflectKey.String())
+		}
+	}
+
+	for _, requiredKey := range typeSchema.Required {
+		if !slices.Contains(keys, requiredKey) {
+			errs = append(errs, ObjectRequiredPropertyErrorFunc(requiredKey))
+		}
+	}
+
+	if typeSchema.DependentRequired != nil {
+		for iter := typeSchema.DependentRequired.First(); iter != nil; iter = iter.Next() {
+			key := iter.Key()
+			dependents := iter.Value()
+
+			for _, dependent := range dependents {
+				if !slices.Contains(keys, dependent) {
+					errs = append(errs, ObjectDependentRequiredErrorFunc(key, dependent))
+				}
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return errs
+	}
+
+	return nil
+}
+
+func validateObjectPropertiesLength(typeSchema *base.Schema, propertiesLength int64) ErrorFunc {
+	if typeSchema.MaxProperties != nil && *typeSchema.MaxProperties < propertiesLength {
+		return ObjectMaxPropertiesValidationErrorFunc(*typeSchema.MaxProperties, propertiesLength)
+	}
+
+	if typeSchema.MinProperties != nil && *typeSchema.MinProperties > propertiesLength {
+		return ObjectMinPropertiesValidationErrorFunc(*typeSchema.MinProperties, propertiesLength)
+	}
+
+	return nil
+}
+
+// Validates a reflection value against an OpenAPI schema.
+func validateValueReflection(typeSchema *base.Schema, value reflect.Value) []ErrorFunc {
+	reflectValue, notNull := goutils.UnwrapPointerFromReflectValue(value)
+	if !notNull {
+		return nil
+	}
+
+	valueKind := reflectValue.Kind()
+
+	switch valueKind {
+	case reflect.Bool:
+		return ValidateBoolean(typeSchema, reflectValue.Bool())
+	case reflect.String:
+		return ValidateString(typeSchema, reflectValue.String())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return ValidateInteger(typeSchema, reflectValue.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return ValidateInteger(typeSchema, reflectValue.Uint())
+	case reflect.Float32, reflect.Float64:
+		return ValidateNumber(typeSchema, reflectValue.Float())
+	case reflect.Slice, reflect.Array:
+		valueLength := reflectValue.Len()
+
+		alError := validateArrayLength(typeSchema, int64(valueLength))
+		if alError != nil {
+			return []ErrorFunc{alError}
+		}
+
+		return nil
+	case reflect.Map:
+		return validateObjectReflection(typeSchema, reflectValue)
+	default:
+		return nil
+	}
 }

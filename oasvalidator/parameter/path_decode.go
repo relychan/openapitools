@@ -15,27 +15,13 @@
 package parameter
 
 import (
-	"cmp"
-	"fmt"
 	"slices"
 	"strings"
 
-	"github.com/pb33f/libopenapi/datamodel/high/base"
-	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
 )
-
-// pathParamDecoder holds the resolved configuration and raw string value for a single
-// path parameter and drives all style-aware decoding.
-type pathParamDecoder struct {
-	Name     string
-	RawValue string
-	Schema   *base.Schema
-	Style    oaschema.ParameterEncodingStyle
-	Explode  bool
-}
 
 // DecodePathValue decodes the path parameter from a string value.
 // The value is encoded differently on each style, according to the [OpenAPI specification].
@@ -55,230 +41,190 @@ func DecodePathValue(
 		}
 	}
 
-	if definition == nil || definition.Schema == nil {
-		return value, nil
-	}
-
 	style, explode := definition.GetStyleAndExplode()
 
-	decoder := &pathParamDecoder{
-		Name:     definition.Name,
-		Style:    style,
-		Explode:  explode,
-		RawValue: strings.TrimSpace(value),
-		Schema:   definition.Schema,
-	}
-
-	return decoder.Decode()
-}
-
-// Decode evaluates and decodes URL parameters.
-func (ppe *pathParamDecoder) Decode() (any, []httperror.ValidationError) {
-	result, _, errs := ppe.decodeFromSchemaTypes()
-
-	return result, errs
-}
-
-// decodes the raw path segment value by trying each declared schema type in order.
-// String is given priority to avoid lossy parsing.  Before type dispatch
-// the style prefix ("." for label, ";" for matrix) is stripped from RawValue so downstream
-// split helpers receive the plain payload.
-func (ppe *pathParamDecoder) decodeFromSchemaTypes() (any, string, []httperror.ValidationError) {
-	// remove the symbol prefix from raw value string
-	switch ppe.Style {
-	case oaschema.EncodingStyleLabel:
-		if ppe.RawValue[0] != oaschema.Dot[0] {
-			return nil, "", []httperror.ValidationError{
-				{
-					Code:      oasvalidator.ErrCodeInvalidURLParam,
-					Detail:    "The label style of parameter value must start with a dot",
-					Parameter: ppe.Name,
-				},
-			}
-		}
-
-		ppe.RawValue = ppe.RawValue[1:]
-	case oaschema.EncodingStyleMatrix:
-		if ppe.RawValue[0] != oaschema.SemiColon[0] {
-			return nil, "", []httperror.ValidationError{
-				{
-					Code:      oasvalidator.ErrCodeInvalidURLParam,
-					Detail:    "The matrix style of parameter value must start with a semicolon",
-					Parameter: ppe.Name,
-				},
-			}
-		}
-
-		ppe.RawValue = ppe.RawValue[1:]
-	default:
-	}
-
-	if slices.Contains(ppe.Schema.Type, oaschema.String) {
-		return ppe.RawValue, oaschema.String, nil
-	}
-
-	var finalErrors []httperror.ValidationError
-
-	for _, typeName := range ppe.Schema.Type {
-		if typeName == "" || typeName == oaschema.Null {
-			continue
-		}
-
-		result, primitiveType, errs := ppe.decodeFromSchemaType(typeName)
-		if len(errs) == 0 {
-			return result, primitiveType, nil
-		}
-
-		finalErrors = errs
-	}
-
-	return nil, "", finalErrors
-}
-
-// decodes a path parameter value from a type of the schema.
-// Returns the decoded value, a matched type and an error.
-func (ppe *pathParamDecoder) decodeFromSchemaType(
-	typeName string,
-) (any, string, []httperror.ValidationError) {
-	result, primitiveType, err := oasvalidator.DecodePrimitiveValueFromType(
-		ppe.RawValue,
-		typeName,
-	)
+	value, err := trimPathValueByStyle(definition.Name, value, style)
 	if err != nil {
-		return nil, "", []httperror.ValidationError{
+		return nil, []httperror.ValidationError{*err}
+	}
+
+	if definition == nil || definition.Schema == nil {
+		rawResults, parseErr := parsePathArrayParam(definition.Name, value, style, explode)
+		if parseErr != nil {
+			return nil, []httperror.ValidationError{*parseErr}
+		}
+
+		return normalizeRawParamValue(rawResults), nil
+	}
+
+	schemaTypes, nullable := oaschema.GetSchemaTypes(definition.Schema)
+
+	if value == "" {
+		if nullable {
+			return nil, nil
+		}
+
+		return nil, []httperror.ValidationError{
 			{
 				Code:      oasvalidator.ErrCodeInvalidURLParam,
-				Detail:    err.Error(),
-				Parameter: ppe.Name,
+				Detail:    "URL parameter must not be empty",
+				Parameter: definition.Name,
 			},
 		}
 	}
 
-	if primitiveType != "" {
-		return result, primitiveType, nil
+	if slices.Contains(schemaTypes, oaschema.Object) {
+		result, errs := decodePathObjectParam(definition, value, style, explode)
+		if len(errs) == 0 {
+			return result, nil
+		}
+
+		if len(schemaTypes) == 1 {
+			return nil, enrichHeaderErrors(errs, definition.Name)
+		}
+
+		schemaTypes = slices.DeleteFunc(schemaTypes, func(t string) bool {
+			return t == oaschema.Object
+		})
 	}
 
-	switch typeName {
-	case oaschema.Array:
-		result, err := ppe.decodeFromArray()
+	if slices.Contains(schemaTypes, oaschema.Array) {
+		results, errs := decodePathArrayParam(definition, value, style, explode)
+		if len(errs) == 0 {
+			return results, nil
+		}
 
-		return result, typeName, err
-	case oaschema.Object:
-		result, err := ppe.decodeFromObject()
+		if len(schemaTypes) == 1 {
+			return nil, enrichHeaderErrors(errs, definition.Name)
+		}
 
-		return result, typeName, err
+		schemaTypes = slices.DeleteFunc(schemaTypes, func(t string) bool {
+			return t == oaschema.Array
+		})
+	}
+
+	decoder := paramDecoder{
+		RawValues: []string{value},
+		Schema:    definition.Schema,
+	}
+
+	result, errs := decoder.Decode(schemaTypes)
+	if len(errs) > 0 {
+		return nil, enrichHeaderErrors(errs, definition.Name)
+	}
+
+	return result, nil
+}
+
+func decodePathArrayParam(
+	definition *oaschema.Parameter,
+	rawValue string,
+	style oaschema.ParameterEncodingStyle,
+	explode bool,
+) (any, []httperror.ValidationError) {
+	rawParts, parseErr := parsePathArrayParam(definition.Name, rawValue, style, explode)
+	if parseErr != nil {
+		return nil, []httperror.ValidationError{*parseErr}
+	}
+
+	results, errs := decodeParamFromArray(rawParts, definition.Schema)
+	if len(errs) == 0 {
+		return results, nil
+	}
+
+	errFuncs := oasvalidator.ValidateValue(definition.Schema, results)
+	if len(errFuncs) > 0 {
+		return nil, oasvalidator.CollectErrorsFunc(errFuncs, func(ve *httperror.ValidationError) {
+			ve.Code = oasvalidator.ErrCodeInvalidURLParam
+			ve.Parameter = definition.Name
+		})
+	}
+
+	return results, nil
+}
+
+func decodePathObjectParam(
+	definition *oaschema.Parameter,
+	rawValue string,
+	style oaschema.ParameterEncodingStyle,
+	explode bool,
+) (any, []httperror.ValidationError) {
+	rawObjectValues, err := parsePathObjectParam(definition.Name, rawValue, style, explode)
+	if err != nil {
+		return nil, []httperror.ValidationError{*err}
+	}
+
+	decoder := newObjectParamDecoder(rawObjectValues)
+
+	errs := decoder.Decode(definition.Schema)
+	if len(errs) > 0 {
+		return nil, enrichHeaderErrors(errs, definition.Name)
+	}
+
+	return decoder.Result, nil
+}
+
+func trimPathValueByStyle(
+	name string,
+	rawValue string,
+	style oaschema.ParameterEncodingStyle,
+) (string, *httperror.ValidationError) {
+	// remove the symbol prefix from raw value string
+	switch style {
+	case oaschema.EncodingStyleLabel:
+		if rawValue[0] != oaschema.Dot[0] {
+			return "", &httperror.ValidationError{
+				Code:      oasvalidator.ErrCodeInvalidURLParam,
+				Detail:    "The label style of parameter value must start with a dot",
+				Parameter: name,
+			}
+		}
+
+		return rawValue[1:], nil
+	case oaschema.EncodingStyleMatrix:
+		if rawValue[0] != oaschema.SemiColon[0] {
+			return "", &httperror.ValidationError{
+				Code:      oasvalidator.ErrCodeInvalidURLParam,
+				Detail:    "The matrix style of parameter value must start with a semicolon",
+				Parameter: name,
+			}
+		}
+
+		return rawValue[1:], nil
 	default:
-		return ppe.RawValue, typeName, nil
+		return rawValue, nil
 	}
-}
-
-func (ppe *pathParamDecoder) decodeFromArray() ([]any, []httperror.ValidationError) {
-	strValues, err := ppe.splitArrayFromString()
-	if err != nil {
-		return nil, []httperror.ValidationError{*err}
-	}
-
-	errFuncs := oasvalidator.ValidateArray(ppe.Schema, strValues, cmp.Compare)
-	errs := oasvalidator.CollectErrorsFunc(errFuncs, func(ed *httperror.ValidationError) {
-		ed.Code = oasvalidator.ErrCodeInvalidURLParam
-		ed.Parameter = ppe.Name
-	})
-
-	if len(strValues) == 0 || ppe.Schema.Items.A == nil {
-		return []any{}, errs
-	}
-
-	itemSchema := ppe.Schema.Items.A.Schema()
-	if oaschema.IsSchemaTypeEmpty(itemSchema) {
-		return goutils.ToAnySlice(strValues), errs
-	}
-
-	results := make([]any, len(strValues))
-
-	for i, value := range strValues {
-		itemValue, err := ppe.decodeItemValueFromSchemaTypes(itemSchema, value)
-		if err != nil {
-			errs = append(errs, *err)
-
-			return nil, errs
-		}
-
-		results[i] = itemValue
-	}
-
-	return results, errs
-}
-
-func (ppe *pathParamDecoder) decodeFromObject() (map[string]any, []httperror.ValidationError) {
-	values, err := ppe.splitObjectFromString()
-	if err != nil {
-		return nil, []httperror.ValidationError{*err}
-	}
-
-	errFuncs := oasvalidator.ValidateObject(ppe.Schema, values)
-	errs := oasvalidator.CollectErrors(errFuncs)
-
-	if len(values) == 0 || ppe.Schema.Properties == nil || ppe.Schema.Properties.Len() == 0 {
-		return values, errs
-	}
-
-	for iter := ppe.Schema.Properties.First(); iter != nil; iter = iter.Next() {
-		key := iter.Key()
-
-		value, ok := values[key]
-		if !ok {
-			continue
-		}
-
-		propSchemaProxy := iter.Value()
-		if propSchemaProxy == nil {
-			values[key] = value
-
-			continue
-		}
-
-		propSchema := propSchemaProxy.Schema()
-		if oaschema.IsSchemaTypeEmpty(propSchema) {
-			values[key] = value
-
-			continue
-		}
-
-		parsedValue, err := ppe.decodeItemValueFromSchemaTypes(propSchema, value)
-		if err != nil {
-			errs = append(errs, *err)
-		} else {
-			values[key] = parsedValue
-		}
-	}
-
-	return values, errs
 }
 
 // Splits RawValue into individual array elements according to the serialization style.
 // The style prefix has already been stripped by DecodeFromSchemaTypes.
-func (ppe *pathParamDecoder) splitArrayFromString() ([]string, *httperror.ValidationError) {
-	switch ppe.Style {
+func parsePathArrayParam(
+	name string,
+	rawValue string,
+	style oaschema.ParameterEncodingStyle,
+	explode bool,
+) ([]string, *httperror.ValidationError) {
+	switch style {
 	case oaschema.EncodingStyleLabel:
-		if ppe.RawValue == "" {
-			return []string{}, nil
+		if rawValue == "" {
+			return nil, nil
 		}
 
 		// /users/.3.4.5
 		// /users/.role=admin.firstName=Alex
-		if ppe.Explode {
-			return strings.Split(ppe.RawValue, oaschema.Dot), nil
+		if explode {
+			return strings.Split(rawValue, oaschema.Dot), nil
 		}
 
 		// /users/.3,4,5
 		// /users/.role,admin,firstName,Alex
-		return strings.Split(ppe.RawValue, oaschema.Comma), nil
+		return strings.Split(rawValue, oaschema.Comma), nil
 	case oaschema.EncodingStyleMatrix:
-		prefix := ppe.Name + oaschema.Equals
+		prefix := name + oaschema.Equals
 		// /users/;id=3;id=4;id=5
 		// /users/;role=admin;firstName=Alex
-		if ppe.Explode {
-			parts := strings.Split(ppe.RawValue, oaschema.SemiColon)
+		if explode {
+			parts := strings.Split(rawValue, oaschema.SemiColon)
 			results := make([]string, len(parts))
 
 			for i, part := range parts {
@@ -287,7 +233,7 @@ func (ppe *pathParamDecoder) splitArrayFromString() ([]string, *httperror.Valida
 					return nil, &httperror.ValidationError{
 						Code:      oasvalidator.ErrCodeInvalidURLParam,
 						Detail:    "Invalid matrix style in parameter value. The array value must follow this format: ;key1=value1;key2=value2",
-						Parameter: ppe.Name,
+						Parameter: name,
 					}
 				}
 
@@ -299,197 +245,134 @@ func (ppe *pathParamDecoder) splitArrayFromString() ([]string, *httperror.Valida
 
 		// /users/;id=3,4,5
 		// /users/;id=role,admin,firstName,Alex
-		value, found := strings.CutPrefix(ppe.RawValue, prefix)
+		value, found := strings.CutPrefix(rawValue, prefix)
 		if !found {
 			return nil, &httperror.ValidationError{
 				Code:      oasvalidator.ErrCodeInvalidURLParam,
 				Detail:    "Invalid matrix style in parameter value. The array value must follow this format: ;key1=value1,value2",
-				Parameter: ppe.Name,
+				Parameter: name,
 			}
 		}
 
 		return strings.Split(value, oaschema.Comma), nil
 	default:
 		// encode with the simple style
-		return strings.Split(ppe.RawValue, oaschema.Comma), nil
+		return strings.Split(rawValue, oaschema.Comma), nil
 	}
 }
 
 // Splits RawValue into a key→value map according to the serialization style.
 // The style prefix has already been stripped by DecodeFromSchemaTypes.
-func (ppe *pathParamDecoder) splitObjectFromString() (map[string]any, *httperror.ValidationError) {
-	switch ppe.Style {
-	case oaschema.EncodingStyleLabel:
-		if ppe.RawValue == "" {
-			return map[string]any{}, nil
-		}
+func parsePathObjectParam(
+	name string,
+	rawValue string,
+	style oaschema.ParameterEncodingStyle,
+	explode bool,
+) (map[string][]string, *httperror.ValidationError) {
+	if rawValue == "" {
+		return nil, nil
+	}
 
+	switch style {
+	case oaschema.EncodingStyleLabel:
 		// /users/.role=admin.firstName=Alex
-		if ppe.Explode {
-			return ppe.parseExplodeObject(ppe.RawValue, oaschema.Dot)
+		if explode {
+			result, ok := parseExplodeObjectParam(rawValue, oaschema.Dot)
+			if !ok {
+				return nil, newInvalidPathObjectError(name, style, explode)
+			}
+
+			return result, nil
 		}
 
 		// /users/.role,admin,firstName,Alex
-		return ppe.parseNonExplodeObject(ppe.RawValue, oaschema.Comma)
-	case oaschema.EncodingStyleMatrix:
-		if ppe.RawValue == "" {
-			return map[string]any{}, nil
+		parts := strings.Split(rawValue, oaschema.Comma)
+
+		results, ok := parseNonExplodeObject(parts)
+		if !ok {
+			return nil, newInvalidPathObjectError(name, style, explode)
 		}
 
+		return results, nil
+	case oaschema.EncodingStyleMatrix:
 		// /users/;role=admin;firstName=Alex
-		if ppe.Explode {
-			return ppe.parseExplodeObject(ppe.RawValue, oaschema.SemiColon)
+		if explode {
+			result, ok := parseExplodeObjectParam(rawValue, oaschema.SemiColon)
+			if !ok {
+				return nil, newInvalidPathObjectError(name, style, explode)
+			}
+
+			return result, nil
 		}
 
 		// /users/;id=role,admin,firstName,Alex
-		value, found := strings.CutPrefix(ppe.RawValue, ppe.Name+oaschema.Equals)
+		value, found := strings.CutPrefix(rawValue, name+oaschema.Equals)
 		if !found {
-			return nil, ppe.newInvalidObjectError()
+			return nil, newInvalidPathObjectError(name, style, explode)
 		}
 
-		return ppe.parseNonExplodeObject(value, oaschema.Comma)
+		parts := strings.Split(value, oaschema.Comma)
+
+		results, ok := parseNonExplodeObject(parts)
+		if !ok {
+			return nil, newInvalidPathObjectError(name, style, explode)
+		}
+
+		return results, nil
 	default:
 		// /users/role=admin,firstName=Alex
-		if ppe.Explode {
-			return ppe.parseExplodeObject(ppe.RawValue, oaschema.Comma)
+		if explode {
+			result, ok := parseExplodeObjectParam(rawValue, oaschema.Comma)
+			if !ok {
+				return nil, newInvalidPathObjectError(name, style, explode)
+			}
+
+			return result, nil
 		}
 
 		// /users/role,admin,firstName,Alex
-		return ppe.parseNonExplodeObject(ppe.RawValue, oaschema.Comma)
+		parts := strings.Split(rawValue, oaschema.Comma)
+
+		results, ok := parseNonExplodeObject(parts)
+		if !ok {
+			return nil, newInvalidPathObjectError(name, style, explode)
+		}
+
+		return results, nil
 	}
 }
 
-// Decodes a single split element (array item or object property value) against itemSchema.
-// String is given priority to avoid lossy parsing.
-func (ppe *pathParamDecoder) decodeItemValueFromSchemaTypes(
-	itemSchema *base.Schema,
-	value any,
-) (any, *httperror.ValidationError) {
-	if len(itemSchema.Type) == 0 {
-		return value, nil
-	}
-
-	if slices.Contains(itemSchema.Type, oaschema.String) {
-		return value, nil
-	}
-
-	var finalError *httperror.ValidationError
-
-	for _, typeName := range itemSchema.Type {
-		if typeName == "" {
-			continue
-		}
-
-		result, primitiveType, err := oasvalidator.DecodePrimitiveValueFromType(
-			ppe.RawValue,
-			typeName,
-		)
-		if err != nil {
-			finalError = &httperror.ValidationError{
-				Code:      oasvalidator.ErrCodeInvalidURLParam,
-				Detail:    err.Error(),
-				Parameter: ppe.Name,
-			}
-		} else if primitiveType != "" {
-			return result, nil
-		}
-	}
-
-	if finalError != nil {
-		return nil, finalError
-	}
-
-	return nil, &httperror.ValidationError{
-		Code: oasvalidator.ErrCodeInvalidURLParam,
-		Detail: fmt.Sprintf(
-			"Unsupported types or nested fields in URL path parameter: %v",
-			itemSchema.Type,
-		),
-		Parameter: ppe.Name,
-	}
-}
-
-func (ppe *pathParamDecoder) parseExplodeObject(
-	rawValue string,
-	separator string,
-) (map[string]any, *httperror.ValidationError) {
-	result, ok := parseExplodeObjectParam(rawValue, separator)
-	if !ok {
-		return nil, ppe.newInvalidObjectError()
-	}
-
-	return result, nil
-}
-
-func parseExplodeObjectParam(rawValue string, separator string) (map[string]any, bool) {
-	result := make(map[string]any)
-
-	for part := range strings.SplitSeq(rawValue, separator) {
-		key, value, found := strings.Cut(part, oaschema.Equals)
-
-		key = strings.TrimSpace(key)
-
-		if !found || key == "" {
-			return nil, false
-		}
-
-		result[key] = value
-	}
-
-	return result, true
-}
-
-func (ppe *pathParamDecoder) parseNonExplodeObject(
-	rawValue string,
-	separator string,
-) (map[string]any, *httperror.ValidationError) {
-	result := make(map[string]any)
-
-	if rawValue == "" {
-		return result, nil
-	}
-
-	parts := strings.Split(rawValue, separator)
-	if len(parts)%2 != 0 {
-		return nil, ppe.newInvalidObjectError()
-	}
-
-	for i := 0; i < len(parts); i += 2 {
-		if parts[i] == "" {
-			return nil, ppe.newInvalidObjectError()
-		}
-
-		result[parts[i]] = parts[i+1]
-	}
-
-	return result, nil
-}
-
-func (ppe *pathParamDecoder) newInvalidObjectError() *httperror.ValidationError {
-	message := "Invalid syntax for simple style in parameter value. The object value must follow this format: key1,value1,key2,value2"
-
-	switch ppe.Style {
-	case oaschema.EncodingStyleLabel:
-		if ppe.Explode {
-			message = "Invalid syntax for exploded label style in parameter value. The object value must follow this format: .key1=value1.key2=value2"
-		} else {
-			message = "Invalid syntax for non-exploded label style in parameter value. The object value must follow this format: .key1,value1,key2,value2"
-		}
-	case oaschema.EncodingStyleMatrix:
-		if ppe.Explode {
-			message = "Invalid syntax for exploded matrix style in parameter value. The object value must follow this format: ;key1=value1;key2=value2"
-		} else {
-			message = "Invalid syntax for non-exploded matrix style in parameter value. The object value must follow this format: ;id=key1,value1,key2,value2"
-		}
-	default:
-		if ppe.Explode {
-			message = "Invalid syntax for simple style in parameter value. The object value must follow this format: role=admin,firstName=Alex"
-		}
-	}
-
+func newInvalidPathObjectError(
+	name string,
+	style oaschema.ParameterEncodingStyle,
+	explode bool,
+) *httperror.ValidationError {
 	return &httperror.ValidationError{
 		Code:      oasvalidator.ErrCodeInvalidURLParam,
-		Detail:    message,
-		Parameter: ppe.Name,
+		Detail:    newInvalidPathObjectErrorMessage(style, explode),
+		Parameter: name,
+	}
+}
+
+func newInvalidPathObjectErrorMessage(style oaschema.ParameterEncodingStyle, explode bool) string {
+	switch style {
+	case oaschema.EncodingStyleLabel:
+		if explode {
+			return "Invalid syntax for exploded label style in parameter value. The object value must follow this format: .key1=value1.key2=value2"
+		}
+
+		return "Invalid syntax for non-exploded label style in parameter value. The object value must follow this format: .key1,value1,key2,value2"
+	case oaschema.EncodingStyleMatrix:
+		if explode {
+			return "Invalid syntax for exploded matrix style in parameter value. The object value must follow this format: ;key1=value1;key2=value2"
+		}
+
+		return "Invalid syntax for non-exploded matrix style in parameter value. The object value must follow this format: ;id=key1,value1,key2,value2"
+	default:
+		if explode {
+			return "Invalid syntax for simple style in parameter value. The object value must follow this format: role=admin,firstName=Alex"
+		}
+
+		return "Invalid syntax for simple style in parameter value. The object value must follow this format: key1,value1,key2,value2"
 	}
 }

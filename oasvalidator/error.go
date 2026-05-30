@@ -32,8 +32,8 @@ var (
 )
 
 const (
-	// ErrCodeRequestDecodeBodyError represents a code for an decoding error from request body.
-	ErrCodeRequestDecodeBodyError = "request_decode_body_error"
+	// ErrCodeRequestBodyError represents a code for invalid request body error.
+	ErrCodeRequestBodyError = "request_body_error"
 	// ErrCodeResponseDecodeBodyError represents a code for an decoding error from response body.
 	ErrCodeResponseDecodeBodyError = "response_decode_body_error"
 	// ErrCodeRequestEncodeBodyError represents a code for an encoding error from request body.
@@ -473,5 +473,19 @@ func ParameterRequiredError(name string) *httperror.ValidationError {
 func ParameterRequiredErrorFunc(name string) ErrorFunc {
 	return func() *httperror.ValidationError {
 		return ParameterRequiredError(name)
+	}
+}
+
+// ObjectPropertyKeyTypeError returns a validation error for invalid object key error.
+func ObjectPropertyKeyTypeError(actualType string) *httperror.ValidationError {
+	return &httperror.ValidationError{
+		Code:   ErrCodeValidationError,
+		Detail: "Object property key must be string, but got: " + actualType,
+	}
+}
+
+func ObjectPropertyKeyTypeErrorFunc(actualType string) ErrorFunc {
+	return func() *httperror.ValidationError {
+		return ObjectPropertyKeyTypeError(actualType)
 	}
 }

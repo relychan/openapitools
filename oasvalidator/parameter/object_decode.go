@@ -1,0 +1,311 @@
+package parameter
+
+import (
+	"log/slog"
+	"maps"
+	"slices"
+
+	"github.com/pb33f/libopenapi/datamodel/high/base"
+	"github.com/relychan/goutils/httperror"
+	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
+	"github.com/relychan/openapitools/oasvalidator/regexps"
+)
+
+type objectParamDecoder struct {
+	RawValues map[string][]string
+	Result    map[string]any
+}
+
+func newObjectParamDecoder(rawValues map[string][]string) *objectParamDecoder {
+	return &objectParamDecoder{
+		RawValues: rawValues,
+		Result:    map[string]any{},
+	}
+}
+
+func (opd *objectParamDecoder) Decode(schema *base.Schema) []httperror.ValidationError {
+	if oaschema.IsSchemaObjectEmpty(schema) {
+		opd.Result = normalizeRawObjectValues(opd.RawValues)
+
+		return nil
+	}
+
+	errs := opd.decodeProperties(schema)
+	if len(errs) > 0 {
+		return errs
+	}
+
+	for _, ao := range schema.AllOf {
+		if ao == nil {
+			continue
+		}
+
+		aoSchema := ao.Schema()
+		if aoSchema == nil {
+			continue
+		}
+
+		decodeErrs := opd.Decode(aoSchema)
+		if len(decodeErrs) > 0 {
+			errs = append(errs, decodeErrs...)
+		}
+	}
+
+	if len(errs) > 0 {
+		return errs
+	}
+
+	if len(schema.AnyOf) > 0 {
+		var anyOfSuccess bool
+
+		for _, ao := range schema.AnyOf {
+			decodeErrs := opd.decodeOrUnionItem(ao)
+			if len(decodeErrs) > 0 {
+				errs = append(errs, decodeErrs...)
+
+				continue
+			}
+
+			anyOfSuccess = true
+		}
+
+		if !anyOfSuccess {
+			return errs
+		}
+	}
+
+	for _, oo := range schema.OneOf {
+		decodeErrs := opd.decodeOrUnionItem(oo)
+		if len(decodeErrs) > 0 {
+			errs = append(errs, decodeErrs...)
+
+			continue
+		}
+
+		break
+	}
+
+	errFuncs := oasvalidator.ValidateObject(schema, opd.Result)
+	if len(errFuncs) > 0 {
+		return oasvalidator.CollectErrors(errFuncs)
+	}
+
+	return nil
+}
+
+func (opd *objectParamDecoder) decodeProperties(
+	schema *base.Schema,
+) []httperror.ValidationError {
+	var (
+		parsedKeys = make([]string, 0, len(opd.RawValues))
+		errs       []httperror.ValidationError
+	)
+
+	if schema.Properties != nil {
+		for iter := schema.Properties.First(); iter != nil; iter = iter.Next() {
+			key := iter.Key()
+
+			value, ok := opd.RawValues[key]
+			if !ok {
+				continue
+			}
+
+			parsedKeys = append(parsedKeys, key)
+
+			propSchemaProxy := iter.Value()
+			if propSchemaProxy == nil {
+				opd.Result[key] = normalizeRawParamValue(value)
+
+				continue
+			}
+
+			propSchema := propSchemaProxy.Schema()
+
+			decodeErrs := opd.decodeProperty(key, value, propSchema)
+			if len(decodeErrs) > 0 {
+				errs = append(errs, decodeErrs...)
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return errs
+	}
+
+	errs = opd.decodeObjectAdditionalProperties(schema, parsedKeys)
+	if len(errs) > 0 {
+		return errs
+	}
+
+	errs = opd.decodeObjectPatternProperties(schema, parsedKeys)
+	if len(errs) > 0 {
+		return errs
+	}
+
+	return nil
+}
+
+func (opd *objectParamDecoder) decodeOrUnionItem(
+	proxy *base.SchemaProxy,
+) []httperror.ValidationError {
+	if proxy == nil {
+		return nil
+	}
+
+	aoSchema := proxy.Schema()
+	if aoSchema == nil {
+		return nil
+	}
+
+	if oaschema.IsSchemaObjectEmpty(aoSchema) {
+		errFuncs := oasvalidator.ValidateObject(aoSchema, opd.Result)
+		if len(errFuncs) > 0 {
+			return oasvalidator.CollectErrors(errFuncs)
+		}
+
+		return nil
+	}
+
+	ooDecoder := newObjectParamDecoder(opd.RawValues)
+
+	decodeErrs := ooDecoder.Decode(aoSchema)
+	if len(decodeErrs) > 0 {
+		return decodeErrs
+	}
+
+	if len(opd.Result) > 0 {
+		maps.Copy(opd.Result, ooDecoder.Result)
+	} else {
+		opd.Result = ooDecoder.Result
+	}
+
+	return nil
+}
+
+func (opd *objectParamDecoder) decodeObjectPatternProperties(
+	schema *base.Schema,
+	parsedKeys []string,
+) []httperror.ValidationError {
+	if schema.PatternProperties == nil || schema.PatternProperties.Len() == 0 {
+		return nil
+	}
+
+	var errs []httperror.ValidationError
+
+	for iter := schema.PatternProperties.First(); iter != nil; iter = iter.Next() {
+		rawPattern := iter.Key()
+
+		pattern, err := regexps.Get(rawPattern)
+		if err != nil {
+			// ignore compile error on runtime.
+			slog.Warn(
+				"failed to compile regular expression: "+err.Error(),
+				slog.String("pattern", rawPattern),
+			)
+
+			continue
+		}
+
+		var propSchema *base.Schema
+
+		schemaProxy := iter.Value()
+		if schemaProxy != nil {
+			propSchema = schemaProxy.Schema()
+		}
+
+		for key, values := range opd.RawValues {
+			if len(parsedKeys) > 0 && slices.Contains(parsedKeys, key) {
+				continue
+			}
+
+			_, present := opd.Result[key]
+			if present {
+				continue
+			}
+
+			matched, err := pattern.MatchString(key)
+			if err != nil {
+				slog.Warn(
+					"failed to compile pattern property: "+err.Error(),
+					slog.String("pattern", key),
+					slog.String("name", key),
+				)
+
+				continue
+			}
+
+			if !matched {
+				continue
+			}
+
+			decodeErrs := opd.decodeProperty(key, values, propSchema)
+			if len(decodeErrs) > 0 {
+				errs = append(errs, decodeErrs...)
+			}
+		}
+	}
+
+	return errs
+}
+
+func (opd *objectParamDecoder) decodeObjectAdditionalProperties(
+	schema *base.Schema,
+	parsedKeys []string,
+) []httperror.ValidationError {
+	if schema.AdditionalProperties == nil ||
+		(!schema.AdditionalProperties.B && schema.AdditionalProperties.A == nil) {
+		return nil
+	}
+
+	var (
+		propSchema *base.Schema
+		errs       []httperror.ValidationError
+	)
+
+	if schema.AdditionalProperties.N == 0 && schema.AdditionalProperties.A != nil {
+		propSchema = schema.AdditionalProperties.A.Schema()
+	}
+
+	for key, rawValues := range opd.RawValues {
+		if len(parsedKeys) > 0 && slices.Contains(parsedKeys, key) {
+			continue
+		}
+
+		_, present := opd.Result[key]
+		if present {
+			continue
+		}
+
+		decodeErrs := opd.decodeProperty(key, rawValues, propSchema)
+		if len(decodeErrs) > 0 {
+			errs = append(errs, decodeErrs...)
+		}
+	}
+
+	return errs
+}
+
+func (opd *objectParamDecoder) decodeProperty(
+	key string,
+	rawValues []string,
+	schema *base.Schema,
+) []httperror.ValidationError {
+	propDecoder := paramDecoder{
+		RawValues: rawValues,
+		Schema:    schema,
+	}
+
+	propValue, decodeErrs := propDecoder.Decode(nil)
+	if len(decodeErrs) == 0 {
+		opd.Result[key] = propValue
+
+		return nil
+	}
+
+	for i := range decodeErrs {
+		decodeErrs[i].PrependPointer("/" + key)
+	}
+
+	return decodeErrs
+}

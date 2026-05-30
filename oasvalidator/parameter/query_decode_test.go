@@ -54,7 +54,7 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 			name:  "form_single",
 			value: "id=3",
 			expected: map[string]any{
-				"id": []string{"3"},
+				"id": "3",
 			},
 			parameters: []*oaschema.Parameter{
 				{
@@ -100,7 +100,7 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 			value: "id=role,admin",
 			expected: map[string]any{
 				"id": map[string]any{
-					"role": []string{"admin"},
+					"role": "admin",
 				},
 			},
 			parameters: []*oaschema.Parameter{
@@ -256,8 +256,8 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 			value: "color=G%7C200%7CR%7C100",
 			expected: map[string]any{
 				"color": map[string]any{
-					"R": []string{"100"},
-					"G": []string{"200"},
+					"R": "100",
+					"G": "200",
 				},
 			},
 			parameters: []*oaschema.Parameter{
@@ -363,10 +363,14 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 	}
 }
 
-// BenchmarkDecodeQueryFromParameters/parse_deep_object-11         	 1330220	       899.0 ns/op	    1036 B/op	      34 allocs/op
-// BenchmarkDecodeQueryFromParameters/decode_spaceDelimited_object-11         	 2498127	       480.0 ns/op	     816 B/op	      10 allocs/op
-// BenchmarkDecodeQueryFromParameters/decode_deep_object-11                   	  837478	      1419 ns/op	    2212 B/op	      48 allocs/op
-// BenchmarkDecodeQueryFromParameters/parse_deep_object_complex-11            	   14704	     81540 ns/op	   63932 B/op	    1966 allocs/op
+// goos: darwin
+// goarch: arm64
+// pkg: github.com/relychan/openapitools/oasvalidator/parameter
+// cpu: Apple M3 Pro
+// BenchmarkDecodeQueryFromParameters/parse_deep_object-11         	 	1294014	       920.2 ns/op	    1036 B/op	      34 allocs/op
+// BenchmarkDecodeQueryFromParameters/decode_spaceDelimited_object-11   2010278	       599.0 ns/op	    1280 B/op	      14 allocs/op
+// BenchmarkDecodeQueryFromParameters/decode_deep_object-11              813062	      	1456 ns/op	    2196 B/op	      48 allocs/op
+// BenchmarkDecodeQueryFromParameters/parse_deep_object_complex-11        14659	       81884 ns/op	   63994 B/op	    1966 allocs/op
 func BenchmarkDecodeQueryFromParameters(b *testing.B) {
 	value := "id[role][0][user][0][]=admin&id[role][0][user][0][]=anonymous&name=foo&bar=baz"
 	parameters := []*oaschema.Parameter{

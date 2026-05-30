@@ -46,47 +46,81 @@ func NormalizeType(typeName string) (string, bool) {
 	}
 }
 
+// ExtractSchemaTypes returns available types of the schema, and check if it is nullable.
+func ExtractSchemaTypes(schema *base.Schema) ( //nolint:revive,nonamedreturns
+	types []string,
+	allOf []*base.Schema,
+	oneOf []*base.Schema,
+	anyOf []*base.Schema,
+	isNullable bool,
+) {
+	if schema == nil {
+		return nil, nil, nil, nil, true
+	}
+
+	allOf = ExtractSchemaProxies(schema.AllOf)
+	oneOf = ExtractSchemaProxies(schema.OneOf)
+	anyOf = ExtractSchemaProxies(schema.AnyOf)
+
+	types = make(
+		[]string, 0,
+		max(1, len(schema.Type)+len(allOf)+len(oneOf)+len(anyOf)),
+	)
+
+	evalSchema := func(item *base.Schema) {
+		for _, schemaType := range item.Type {
+			normalizedType, _ := NormalizeType(schemaType)
+
+			if !slices.Contains(types, normalizedType) {
+				types = append(types, normalizedType)
+			}
+		}
+
+		isNullable = isNullable || (item.Nullable != nil && *item.Nullable)
+
+		if len(item.Type) > 0 {
+			return
+		}
+
+		if ((item.Properties != nil && item.Properties.Len() > 0) ||
+			(schema.AdditionalProperties != nil &&
+				(schema.AdditionalProperties.A != nil && schema.AdditionalProperties.B)) ||
+			(item.PatternProperties != nil && item.PatternProperties.Len() > 0)) &&
+			!slices.Contains(types, Object) {
+			types = append(types, Object)
+
+			return
+		}
+
+		if schema.Items != nil && (schema.Items.B || schema.Items.A != nil) &&
+			!slices.Contains(types, Array) {
+			types = append(types, Array)
+		}
+	}
+
+	evalUnionType := func(schemas []*base.Schema) {
+		for _, item := range schemas {
+			evalSchema(item)
+		}
+	}
+
+	evalSchema(schema)
+	evalUnionType(allOf)
+	evalUnionType(oneOf)
+	evalUnionType(anyOf)
+
+	if len(types) > 0 {
+		types = slices.Clip(types)
+	}
+
+	return types, allOf, oneOf, anyOf, isNullable
+}
+
 // GetSchemaTypes returns available types of the schema, and check if it is nullable.
 func GetSchemaTypes(schema *base.Schema) ([]string, bool) {
-	if schema == nil {
-		return nil, true
-	}
+	types, _, _, _, isNullable := ExtractSchemaTypes(schema)
 
-	nullable := schema.Nullable != nil && *schema.Nullable
-
-	types := make([]string, 0, max(1, len(schema.Type)))
-
-	if (schema.Properties != nil && schema.Properties.Len() > 0) ||
-		(schema.AdditionalProperties != nil &&
-			(schema.AdditionalProperties.A != nil && schema.AdditionalProperties.B)) ||
-		(schema.PatternProperties != nil && schema.PatternProperties.Len() > 0) {
-		types = append(types, Object)
-	} else if schema.Items != nil && (schema.Items.B || schema.Items.A != nil) {
-		types = append(types, Array)
-	}
-
-	for _, schemaType := range schema.Type {
-		if schemaType == "" {
-			continue
-		}
-
-		normalizedType, _ := NormalizeType(schemaType)
-		if normalizedType == Null {
-			nullable = true
-
-			continue
-		}
-
-		if !slices.Contains(types, normalizedType) {
-			types = append(types, normalizedType)
-		}
-	}
-
-	if len(types) == 0 {
-		return nil, nullable
-	}
-
-	return slices.Clip(types), nullable
+	return types, isNullable
 }
 
 // DetectSchemaFromValue detects the OpenAPI schema type from a Go value.

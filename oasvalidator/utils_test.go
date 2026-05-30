@@ -17,8 +17,6 @@ package oasvalidator
 import (
 	"testing"
 
-	"github.com/pb33f/libopenapi/datamodel/high/base"
-	"github.com/relychan/openapitools/oaschema"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -250,44 +248,6 @@ func TestFindDuplicatedItems(t *testing.T) {
 				result := FindDuplicatedItems(tc.values)
 				assert.Equal(t, tc.expected, result)
 			})
-		}
-	})
-}
-
-// BenchmarkXxx/validate-11         	32195074	        37.19 ns/op	      56 B/op	       2 allocs/op
-// BenchmarkXxx/validate_2-11       	195932468	         6.126 ns/op	       0 B/op	       0 allocs/op
-// BenchmarkXxx/validate_object-11  	31653950	        36.41 ns/op	      56 B/op	       2 allocs/op
-// BenchmarkXxx/validate_object_2-11         	 8644915	       138.8 ns/op	     344 B/op	       5 allocs/op
-func BenchmarkValidation(b *testing.B) {
-	schema := &base.Schema{
-		Type: []string{oaschema.String},
-	}
-
-	b.Run("validate", func(b *testing.B) {
-		for b.Loop() {
-			_ = ValidateValue(schema, 65)
-		}
-	})
-
-	b.Run("validate_2", func(b *testing.B) {
-		for b.Loop() {
-			_ = ValidateValue(schema, "test")
-		}
-	})
-
-	b.Run("validate_object", func(b *testing.B) {
-		value := make(map[string]any)
-
-		for b.Loop() {
-			_ = ValidateObject(schema, value)
-		}
-	})
-
-	b.Run("validate_object_2", func(b *testing.B) {
-		value := make(map[string]any)
-
-		for b.Loop() {
-			_ = CollectErrors(ValidateValue(schema, value))
 		}
 	})
 }

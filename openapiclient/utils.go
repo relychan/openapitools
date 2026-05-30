@@ -16,7 +16,6 @@ package openapiclient
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -27,6 +26,7 @@ import (
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
+	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"github.com/relychan/openapitools/openapiclient/internal"
@@ -97,8 +97,7 @@ func parseHTTPRequestBody(
 	route *internal.Route,
 	writer http.ResponseWriter,
 	request *http.Request,
-	contentType string,
-) (any, error) {
+) (any, *httperror.HTTPError) {
 	if request.Body == nil || request.Body == http.NoBody {
 		if !route.IsRequestBodyRequired() {
 			return nil, nil
@@ -112,25 +111,59 @@ func parseHTTPRequestBody(
 		return nil, err
 	}
 
-	decodedBody, err := contenttype.Decode(contentType, request.Body)
-	if err == nil {
-		return decodedBody, nil
+	originalContentType := httpheader.GetHeaderValue(request.Header, httpheader.ContentType)
+	if canHTTPMethodHaveBody(request.Method) && !httpheader.IsContentTypeJSON(originalContentType) {
+		err := newUnsupportedContentTypeError(request.URL.Path, originalContentType)
+
+		writeErrorResponse(writer, err.Status, err)
+
+		return nil, err
 	}
 
-	errorDetail, ok := errors.AsType[*httperror.ValidationError](err)
-	if !ok {
-		errorDetail = &httperror.ValidationError{
+	decodedBody, err := contenttype.DecodeJSON(request.Body)
+	if err != nil {
+		respErr := httperror.NewBadRequestError(httperror.ValidationError{
 			Detail: err.Error(),
-			Code:   oasvalidator.ErrCodeRequestDecodeBodyError,
+			Code:   oasvalidator.ErrCodeRequestBodyError,
+		})
+		respErr.Detail = "failed to decode request"
+
+		writeErrorResponse(writer, respErr.Status, respErr)
+
+		return nil, respErr
+	}
+
+	validationError := validateRequestBody(route.Method.Operation.RequestBody, decodedBody)
+	if validationError != nil {
+		writeErrorResponse(writer, validationError.Status, validationError)
+
+		return nil, validationError
+	}
+
+	return decodedBody, nil
+}
+
+func validateRequestBody(requestBody *oaschema.RequestBody, body any) *httperror.HTTPError {
+	if requestBody == nil {
+		return nil
+	}
+
+	if requestBody.Schema != nil {
+		errFuncs := oasvalidator.ValidateValue(
+			requestBody.Schema,
+			body,
+		)
+
+		if len(errFuncs) > 0 {
+			errs := oasvalidator.CollectErrorsFunc(errFuncs, func(ve *httperror.ValidationError) {
+				ve.Code = oasvalidator.ErrCodeRequestBodyError
+			})
+
+			return httperror.NewBadRequestError(errs...)
 		}
 	}
 
-	respErr := httperror.NewBadRequestError(*errorDetail)
-	respErr.Detail = "failed to decode request"
-
-	writeErrorResponse(writer, respErr.Status, respErr)
-
-	return nil, err
+	return nil
 }
 
 func newUnsupportedContentTypeError(
@@ -140,10 +173,18 @@ func newUnsupportedContentTypeError(
 	statusCode := http.StatusUnsupportedMediaType
 	err := httperror.NewHTTPError(
 		statusCode,
-		"Unsupported Content-Type "+contentType+". Expected application/json.",
+		"Unsupported Content-Type "+contentType+". Expected application/json only.",
 	)
 	err.Code = "415-01"
 	err.Instance = urlPath
 
 	return err
+}
+
+func canHTTPMethodHaveBody(method string) bool {
+	return method != http.MethodGet &&
+		method != http.MethodDelete &&
+		method != http.MethodConnect &&
+		method != http.MethodOptions &&
+		method != http.MethodHead
 }

@@ -15,12 +15,18 @@
 package parameter
 
 import (
+	"fmt"
 	"net/url"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/pb33f/libopenapi/datamodel/high/base"
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
+	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 )
 
 // EncodeQueryEscape encodes the values into “URL encoded” form ("bar=baz&foo=quux") sorted by key with escape.
@@ -399,10 +405,10 @@ func parseDeepObjectKey(input string) (ParamKeys, bool) {
 	return results, true
 }
 
-// getValue unwraps a string slice into a scalar (nil, string, or []string) so that
+// Unwraps a string slice into a scalar (nil, string, or []string) so that
 // parameters with a single value are not needlessly wrapped in a slice before
 // schema validation.
-func getValue(values []string) any {
+func normalizeRawParamValue(values []string) any {
 	switch len(values) {
 	case 0:
 		return nil
@@ -410,5 +416,170 @@ func getValue(values []string) any {
 		return values[0]
 	default:
 		return values
+	}
+}
+
+func normalizeRawObjectValues(values map[string][]string) map[string]any {
+	result := make(map[string]any, len(values))
+
+	for key, value := range values {
+		result[key] = normalizeRawParamValue(value)
+	}
+
+	return result
+}
+
+func parseNonExplodeObject(parts []string) (map[string][]string, bool) {
+	if len(parts)%2 != 0 {
+		return nil, false
+	}
+
+	rawValues := make(map[string][]string, len(parts)/2)
+
+	for i := 0; i < len(parts); i += 2 {
+		if parts[i] == "" {
+			return nil, false
+		}
+
+		existingValue, present := rawValues[parts[i]]
+		if present {
+			rawValues[parts[i]] = append(existingValue, parts[i+1])
+		} else {
+			rawValues[parts[i]] = []string{parts[i+1]}
+		}
+	}
+
+	return rawValues, true
+}
+
+func parseExplodeObjectParam(rawValue string, separator string) (map[string][]string, bool) {
+	result := make(map[string][]string)
+
+	if !setExplodeObjectProperties(result, rawValue, separator) {
+		return nil, false
+	}
+
+	return result, true
+}
+
+func setExplodeObjectProperties(
+	result map[string][]string,
+	rawValue string,
+	separator string,
+) bool {
+	for part := range strings.SplitSeq(rawValue, separator) {
+		key, value, found := strings.Cut(part, oaschema.Equals)
+
+		key = strings.TrimSpace(key)
+
+		if !found || key == "" {
+			return false
+		}
+
+		_, present := result[key]
+		if present {
+			result[key] = append(result[key], value)
+		} else {
+			result[key] = []string{value}
+		}
+	}
+
+	return true
+}
+
+func splitNonExplodeDelimitedStyle(
+	rawValues []string,
+	style oaschema.ParameterEncodingStyle,
+	isObject bool,
+) ([]string, bool) {
+	if len(rawValues) == 0 {
+		return rawValues, true
+	}
+
+	switch style {
+	case oaschema.EncodingStyleSpaceDelimited:
+		// /users?id=3 4 5
+		return parseDelimitedStyle(rawValues, oaschema.Space, isObject)
+	case oaschema.EncodingStylePipeDelimited:
+		// /users?id=3|4|5
+		return parseDelimitedStyle(rawValues, oaschema.Pipe, isObject)
+	default:
+		// /users?id=3,4,5
+		return parseDelimitedStyle(rawValues, oaschema.Comma, isObject)
+	}
+}
+
+// Set delimited-separated array values for array params.
+// For example: /users?id=3|4|5.
+func parseDelimitedStyle(
+	rawValues []string,
+	separator string,
+	isObject bool,
+) ([]string, bool) {
+	results := make([]string, 0, len(rawValues))
+
+	for _, value := range rawValues {
+		if value == "" {
+			continue
+		}
+
+		items := strings.Split(value, separator)
+		if isObject && len(items)%2 != 0 {
+			return nil, false
+		}
+
+		if len(results) == 0 {
+			results = items
+		} else {
+			results = append(results, items...)
+		}
+	}
+
+	return slices.Clip(results), true
+}
+
+// Decodes a single split element (array item or object property value) against itemSchema.
+// String is given priority to avoid lossy parsing.
+func decodeItemValueFromSchemaTypes(
+	itemSchema *base.Schema,
+	value any,
+) (any, *httperror.ValidationError) {
+	if len(itemSchema.Type) == 0 {
+		return value, nil
+	}
+
+	if slices.Contains(itemSchema.Type, oaschema.String) {
+		return value, nil
+	}
+
+	var finalError *httperror.ValidationError
+
+	for _, typeName := range itemSchema.Type {
+		if typeName == "" {
+			continue
+		}
+
+		result, primitiveType, err := oasvalidator.DecodePrimitiveValueFromType(
+			value,
+			typeName,
+		)
+		if err != nil {
+			finalError = &httperror.ValidationError{
+				Detail: err.Error(),
+			}
+		} else if primitiveType != "" {
+			return result, nil
+		}
+	}
+
+	if finalError != nil {
+		return nil, finalError
+	}
+
+	return nil, &httperror.ValidationError{
+		Detail: fmt.Sprintf(
+			"Unsupported types or nested fields in parameter: %v",
+			itemSchema.Type,
+		),
 	}
 }

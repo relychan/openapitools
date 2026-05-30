@@ -12,7 +12,7 @@ require (
 	github.com/pb33f/libopenapi v0.36.6
 	github.com/relychan/gohttpc v0.0.0-20260425101336-80ce5d5ba98a
 	github.com/relychan/gotransform v0.0.0-20260404192235-bcef8d71746d
-	github.com/relychan/goutils v0.0.0-20260424152002-b262b08e6c6e
+	github.com/relychan/goutils v0.0.0-20260529174539-fae163d678da
 	github.com/samber/lo v1.53.0
 	github.com/stretchr/testify v1.11.1
 	github.com/vektah/gqlparser/v2 v2.5.33

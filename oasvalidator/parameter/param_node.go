@@ -509,7 +509,7 @@ func (pn *ParameterNode) decodeObjectAdditionalProperties(
 
 func (pn *ParameterNode) decodeArbitrary() any {
 	if len(pn.items) == 0 {
-		return getValue(pn.values)
+		return normalizeRawParamValue(pn.values)
 	}
 
 	if IsParamIndex(pn.items[0].key) {
