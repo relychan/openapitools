@@ -48,10 +48,7 @@ func DecodeHeaderParameter(
 	}
 
 	if definition == nil || definition.Schema == nil {
-		rawResults, parseErr := parseHeaderArrayParam(definition, rawValues)
-		if parseErr != nil {
-			return nil, []httperror.ValidationError{*parseErr}
-		}
+		rawResults := parseHeaderArrayParam(rawValues)
 
 		return normalizeRawParamValue(rawResults), nil
 	}
@@ -119,10 +116,7 @@ func decodeHeaderArrayParam(
 	definition *oaschema.Parameter,
 	rawValues []string,
 ) (any, []httperror.ValidationError) {
-	rawParts, parseErr := parseHeaderArrayParam(definition, rawValues)
-	if parseErr != nil {
-		return nil, []httperror.ValidationError{*parseErr}
-	}
+	rawParts := parseHeaderArrayParam(rawValues)
 
 	results, errs := decodeParamFromArray(rawParts, definition.Schema)
 	if len(errs) > 0 {
@@ -144,10 +138,7 @@ func decodeHeaderObjectParam(
 	definition *oaschema.Parameter,
 	rawValues []string,
 ) (any, []httperror.ValidationError) {
-	rawParts, parseErr := parseHeaderArrayParam(definition, rawValues)
-	if parseErr != nil {
-		return nil, []httperror.ValidationError{*parseErr}
-	}
+	rawParts := parseHeaderArrayParam(rawValues)
 
 	explode := definition.Explode != nil && *definition.Explode
 
@@ -168,10 +159,7 @@ func decodeHeaderObjectParam(
 	return decoder.Result, nil
 }
 
-func parseHeaderArrayParam(
-	definition *oaschema.Parameter,
-	rawValues []string,
-) ([]string, *httperror.ValidationError) {
+func parseHeaderArrayParam(rawValues []string) []string {
 	valueCount := 0
 
 	for _, value := range rawValues {
@@ -185,7 +173,7 @@ func parseHeaderArrayParam(
 	}
 
 	if valueCount == len(rawValues) {
-		return rawValues, nil
+		return rawValues
 	}
 
 	results := make([]string, 0, valueCount)
@@ -204,7 +192,7 @@ func parseHeaderArrayParam(
 		results = []string{""}
 	}
 
-	return slices.Clip(results), nil
+	return slices.Clip(results)
 }
 
 // Splits header values into a key→value map according to the serialization style.
