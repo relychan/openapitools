@@ -20,11 +20,11 @@ import (
 // goarch: arm64
 // pkg: github.com/relychan/openapitools/tests/benchmarks
 // cpu: Apple M3 Pro
-// BenchmarkProxyClient/http_client_get-11         	   35140	     33729 ns/op	    9902 B/op	     124 allocs/op
-// BenchmarkProxyClient/proxy_rest_get-11          	   33762	     34781 ns/op	   12015 B/op	     152 allocs/op
-// BenchmarkProxyClient/http_client_graphql-11     	   30514	     39332 ns/op	   12656 B/op	     162 allocs/op
-// BenchmarkProxyClient/proxy_client_graphql_get-11    27678	     43267 ns/op	   17379 B/op	     218 allocs/op
-// BenchmarkProxyClient/proxy_client_graphql_post-11   26456	     45346 ns/op	   18363 B/op	     228 allocs/op
+// BenchmarkProxyClient/http_client_get-11         	   27229	     46687 ns/op	    9899 B/op	     124 allocs/op
+// BenchmarkProxyClient/proxy_rest_get-11          	   25870	     46087 ns/op	   12178 B/op	     153 allocs/op
+// BenchmarkProxyClient/http_client_graphql-11     	   23952	     50106 ns/op	   12244 B/op	     157 allocs/op
+// BenchmarkProxyClient/proxy_client_graphql_get-11    22506	     53113 ns/op	   16910 B/op	     210 allocs/op
+// BenchmarkProxyClient/proxy_client_graphql_post-11   21350	     55748 ns/op	   17721 B/op	     220 allocs/op
 func BenchmarkProxyClient(b *testing.B) {
 	server := startMockServer()
 	defer server.Close()
@@ -43,6 +43,8 @@ func BenchmarkProxyClient(b *testing.B) {
 
 	b.Run("http_client_get", func(b *testing.B) {
 		c := gohttpc.NewClient()
+
+		b.ResetTimer()
 
 		for b.Loop() {
 			res, err := c.R(http.MethodGet, server.URL+"/mock").Execute(context.TODO())
@@ -70,6 +72,8 @@ func BenchmarkProxyClient(b *testing.B) {
 		if err != nil {
 			panic(err)
 		}
+
+		b.ResetTimer()
 
 		for b.Loop() {
 			request := c.R(http.MethodPost, server.URL+"/graphql")
