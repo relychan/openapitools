@@ -344,3 +344,145 @@ func TestDecodeHeaderParameter_MultiType(t *testing.T) {
 		assert.Equal(t, "007", result)
 	})
 }
+
+// goos: darwin
+// goarch: arm64
+// pkg: github.com/relychan/openapitools/oasvalidator/parameter
+// cpu: Apple M3 Pro
+// BenchmarkDecodeHeaderParameter/MissingOptional-11         	50759810	        23.77 ns/op	       0 B/op	       0 allocs/op
+// BenchmarkDecodeHeaderParameter/NoSchema_Single-11         	26734170	        44.24 ns/op	      16 B/op	       1 allocs/op
+// BenchmarkDecodeHeaderParameter/NoSchema_CommaSeparated-11 	 9048547	       130.5 ns/op	     104 B/op	       2 allocs/op
+// BenchmarkDecodeHeaderParameter/String-11                  	 5783558	       210.7 ns/op	      65 B/op	       5 allocs/op
+// BenchmarkDecodeHeaderParameter/Integer-11                 	 5070550	       239.0 ns/op	      65 B/op	       5 allocs/op
+// BenchmarkDecodeHeaderParameter/Boolean-11                 	 5640459	       213.4 ns/op	      65 B/op	       5 allocs/op
+// BenchmarkDecodeHeaderParameter/Number-11                  	 4718089	       253.1 ns/op	      80 B/op	       6 allocs/op
+// BenchmarkDecodeHeaderParameter/Array_CommaSeparated-11    	  935188	        1284 ns/op	     568 B/op	      34 allocs/op
+// BenchmarkDecodeHeaderParameter/Array_MultipleHeaderValues-11  4354665	       275.8 ns/op	     232 B/op	       8 allocs/op
+// BenchmarkDecodeHeaderParameter/Object_NonExplode-11            995085	        1198 ns/op	    1115 B/op	      25 allocs/op
+// BenchmarkDecodeHeaderParameter/Object_Explode-11              1853228	       651.7 ns/op	     944 B/op	      13 allocs/op
+func BenchmarkDecodeHeaderParameter(b *testing.B) {
+	headers := http.Header{
+		"X-Token": {"abc"},
+		"X-Ids":   {"1,2,3,4,5"},
+		"X-Name":  {"hello"},
+		"X-Count": {"42"},
+		"X-Flag":  {"true"},
+		"X-Price": {"3.14"},
+		"X-Tags":  {"foo,bar", "baz,qux"},
+		"X-Color": {"R,100,G,200,B,50"},
+		"X-User":  {"role=admin,firstName=Alex,age=30"},
+	}
+
+	b.Run("MissingOptional", func(b *testing.B) {
+		def := &oaschema.Parameter{Name: "X-Optional", Required: false}
+
+		for b.Loop() {
+			DecodeHeaderParameter(def, headers)
+		}
+	})
+
+	b.Run("NoSchema_Single", func(b *testing.B) {
+		def := &oaschema.Parameter{Name: "X-Token", Required: true}
+
+		for b.Loop() {
+			DecodeHeaderParameter(def, headers)
+		}
+	})
+
+	b.Run("NoSchema_CommaSeparated", func(b *testing.B) {
+		def := &oaschema.Parameter{Name: "X-Ids"}
+
+		for b.Loop() {
+			DecodeHeaderParameter(def, headers)
+		}
+	})
+
+	b.Run("String", func(b *testing.B) {
+		def := &oaschema.Parameter{Name: "X-Name", Schema: stringSchema()}
+
+		for b.Loop() {
+			DecodeHeaderParameter(def, headers)
+		}
+	})
+
+	b.Run("Integer", func(b *testing.B) {
+		def := &oaschema.Parameter{Name: "X-Count", Schema: intSchema()}
+
+		for b.Loop() {
+			DecodeHeaderParameter(def, headers)
+		}
+	})
+
+	b.Run("Boolean", func(b *testing.B) {
+		def := &oaschema.Parameter{Name: "X-Flag", Schema: boolSchema()}
+
+		for b.Loop() {
+			DecodeHeaderParameter(def, headers)
+		}
+	})
+
+	b.Run("Number", func(b *testing.B) {
+		def := &oaschema.Parameter{
+			Name:   "X-Price",
+			Schema: &base.Schema{Type: []string{oaschema.Number}},
+		}
+
+		for b.Loop() {
+			DecodeHeaderParameter(def, headers)
+		}
+	})
+
+	b.Run("Array_CommaSeparated", func(b *testing.B) {
+		def := &oaschema.Parameter{Name: "X-Ids", Schema: intArraySchema()}
+		for b.Loop() {
+			DecodeHeaderParameter(def, headers)
+		}
+	})
+
+	b.Run("Array_MultipleHeaderValues", func(b *testing.B) {
+		def := &oaschema.Parameter{
+			Name:   "X-Tags",
+			Schema: &base.Schema{Type: []string{oaschema.Array}},
+		}
+
+		for b.Loop() {
+			DecodeHeaderParameter(def, headers)
+		}
+	})
+
+	b.Run("Object_NonExplode", func(b *testing.B) {
+		props := orderedmap.New[string, *base.SchemaProxy]()
+		props.Set("R", base.CreateSchemaProxy(intSchema()))
+		props.Set("G", base.CreateSchemaProxy(intSchema()))
+		props.Set("B", base.CreateSchemaProxy(intSchema()))
+
+		explode := false
+		def := &oaschema.Parameter{
+			Name:    "X-Color",
+			Explode: &explode,
+			Schema:  &base.Schema{Type: []string{oaschema.Object}, Properties: props},
+		}
+
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodeHeaderParameter(def, headers)
+		}
+	})
+
+	b.Run("Object_Explode", func(b *testing.B) {
+		explode := true
+		def := &oaschema.Parameter{
+			Name:    "X-User",
+			Explode: &explode,
+			Schema:  &base.Schema{Type: []string{oaschema.Object}},
+		}
+		headers := http.Header{"X-User": {"role=admin,firstName=Alex,age=30"}}
+
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodeHeaderParameter(def, headers)
+		}
+	})
+}

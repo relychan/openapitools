@@ -556,3 +556,178 @@ func objectSchema(props map[string]*base.Schema) *base.Schema {
 		Properties: m,
 	}
 }
+
+// goos: darwin
+// goarch: arm64
+// pkg: github.com/relychan/openapitools/oasvalidator/parameter
+// cpu: Apple M3 Pro
+// BenchmarkDecodePathValue_SimpleStyle_Integer/Integer-11         	 						 5008507	       247.5 ns/op	      81 B/op	       6 allocs/op
+// BenchmarkDecodePathValue_SimpleStyle_Integer/String-11          	 						 5598610	       215.2 ns/op	      81 B/op	       6 allocs/op
+// BenchmarkDecodePathValue_SimpleStyle_Integer/Boolean-11         	 						 5319555	       225.1 ns/op	      81 B/op	       6 allocs/op
+// BenchmarkDecodePathValue_SimpleStyle_Integer/SimpleStyle_Array_NonExplode-11         	 1747910	       690.4 ns/op	     331 B/op	      19 allocs/op
+// BenchmarkDecodePathValue_SimpleStyle_Integer/LabelStyle_Array_NonExplode-11          	 1725672	       694.0 ns/op	     331 B/op	      19 allocs/op
+// BenchmarkDecodePathValue_SimpleStyle_Integer/LabelStyle_Array_Explode-11             	 1737430	       694.2 ns/op	     331 B/op	      19 allocs/op
+// BenchmarkDecodePathValue_SimpleStyle_Integer/MatrixStyle_Array_NonExplode-11         	 1672635	       716.7 ns/op	     331 B/op	      19 allocs/op
+// BenchmarkDecodePathValue_SimpleStyle_Integer/MatrixStyle_Array_Explode-11            	 1704873	       702.2 ns/op	     379 B/op	      20 allocs/op
+// BenchmarkDecodePathValue_SimpleStyle_Integer/SimpleStyle_Object_NonExplode-11        	 1552296	       772.2 ns/op	     962 B/op	      18 allocs/op
+// BenchmarkDecodePathValue_SimpleStyle_Integer/SimpleStyle_Object_Explode-11           	 1600528	       747.4 ns/op	     898 B/op	      17 allocs/op
+// BenchmarkDecodePathValue_SimpleStyle_Integer/LabelStyle_Object_NonExplode-11         	 1541792	       781.5 ns/op	     962 B/op	      18 allocs/op
+// BenchmarkDecodePathValue_SimpleStyle_Integer/LabelStyle_Object_Explode-11            	 1602512	       747.3 ns/op	     898 B/op	      17 allocs/op
+// BenchmarkDecodePathValue_SimpleStyle_Integer/MatrixStyle_Object_NonExplode-11        	 1499632	       799.1 ns/op	     962 B/op	      18 allocs/op
+// BenchmarkDecodePathValue_SimpleStyle_Integer/MatrixStyle_Object_Explode-11           	 1613696	       744.7 ns/op	     898 B/op	      17 allocs/op
+// BenchmarkDecodePathValue_SimpleStyle_Integer/NoSchema_SimpleStyle_Single-11          	28659766	        42.24 ns/op	      32 B/op	       2 allocs/op
+// BenchmarkDecodePathValue_SimpleStyle_Integer/NoSchema_SimpleStyle_CSV-11             	17908220	        67.53 ns/op	      72 B/op	       2 allocs/op
+func BenchmarkDecodePathValue_SimpleStyle_Integer(b *testing.B) {
+	b.Run("Integer", func(b *testing.B) {
+		def := pathParam("id", oaschema.EncodingStyleSimple, false, intSchema())
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, "42")
+		}
+	})
+
+	b.Run("String", func(b *testing.B) {
+		def := pathParam("name", oaschema.EncodingStyleSimple, false, stringSchema())
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, "alice")
+		}
+	})
+
+	b.Run("Boolean", func(b *testing.B) {
+		def := pathParam("flag", oaschema.EncodingStyleSimple, false, boolSchema())
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, "true")
+		}
+	})
+
+	b.Run("SimpleStyle_Array_NonExplode", func(b *testing.B) {
+		def := pathParam("id", oaschema.EncodingStyleSimple, false, intArraySchema())
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, "3,4,5")
+		}
+	})
+
+	b.Run("LabelStyle_Array_NonExplode", func(b *testing.B) {
+		def := pathParam("id", oaschema.EncodingStyleLabel, false, intArraySchema())
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, ".3,4,5")
+		}
+	})
+
+	b.Run("LabelStyle_Array_Explode", func(b *testing.B) {
+		def := pathParam("id", oaschema.EncodingStyleLabel, true, intArraySchema())
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, ".3.4.5")
+		}
+	})
+
+	b.Run("MatrixStyle_Array_NonExplode", func(b *testing.B) {
+		def := pathParam("id", oaschema.EncodingStyleMatrix, false, intArraySchema())
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, ";id=3,4,5")
+		}
+	})
+
+	b.Run("MatrixStyle_Array_Explode", func(b *testing.B) {
+		def := pathParam("id", oaschema.EncodingStyleMatrix, true, stringArraySchema())
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, ";id=3;id=4;id=5")
+		}
+	})
+
+	twoFieldObjectSchema := objectSchema(map[string]*base.Schema{
+		"role":      stringSchema(),
+		"firstName": stringSchema(),
+	})
+
+	b.Run("SimpleStyle_Object_NonExplode", func(b *testing.B) {
+		def := pathParam("user", oaschema.EncodingStyleSimple, false, twoFieldObjectSchema)
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, "role,admin,firstName,Alex")
+		}
+	})
+
+	b.Run("SimpleStyle_Object_Explode", func(b *testing.B) {
+		def := pathParam("user", oaschema.EncodingStyleSimple, true, twoFieldObjectSchema)
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, "role=admin,firstName=Alex")
+		}
+	})
+
+	b.Run("LabelStyle_Object_NonExplode", func(b *testing.B) {
+		def := pathParam("user", oaschema.EncodingStyleLabel, false, twoFieldObjectSchema)
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, ".role,admin,firstName,Alex")
+		}
+	})
+
+	b.Run("LabelStyle_Object_Explode", func(b *testing.B) {
+		def := pathParam("user", oaschema.EncodingStyleLabel, true, twoFieldObjectSchema)
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, ".role=admin.firstName=Alex")
+		}
+	})
+
+	b.Run("MatrixStyle_Object_NonExplode", func(b *testing.B) {
+		def := pathParam("id", oaschema.EncodingStyleMatrix, false, twoFieldObjectSchema)
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, ";id=role,admin,firstName,Alex")
+		}
+	})
+
+	b.Run("MatrixStyle_Object_Explode", func(b *testing.B) {
+		def := pathParam("id", oaschema.EncodingStyleMatrix, true, twoFieldObjectSchema)
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, ";role=admin;firstName=Alex")
+		}
+	})
+
+	b.Run("NoSchema_SimpleStyle_Single", func(b *testing.B) {
+		s := oaschema.EncodingStyleSimple
+		e := false
+		def := &oaschema.Parameter{Name: "id", In: oaschema.InPath, Style: &s, Explode: &e}
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, "3")
+		}
+	})
+
+	b.Run("NoSchema_SimpleStyle_CSV", func(b *testing.B) {
+		s := oaschema.EncodingStyleSimple
+		e := false
+		def := &oaschema.Parameter{Name: "id", In: oaschema.InPath, Style: &s, Explode: &e}
+		b.ResetTimer()
+
+		for b.Loop() {
+			DecodePathValue(def, "3,4,5")
+		}
+	})
+}
