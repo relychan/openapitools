@@ -75,15 +75,25 @@ func (opd *objectParamDecoder) Decode(schema *base.Schema) []httperror.Validatio
 		}
 	}
 
-	for _, oo := range schema.OneOf {
-		decodeErrs := opd.decodeOrUnionItem(oo)
-		if len(decodeErrs) > 0 {
-			errs = append(errs, decodeErrs...)
+	if len(schema.OneOf) > 0 {
+		var oneOfSuccess bool
 
-			continue
+		for _, oo := range schema.OneOf {
+			decodeErrs := opd.decodeOrUnionItem(oo)
+			if len(decodeErrs) > 0 {
+				errs = append(errs, decodeErrs...)
+
+				continue
+			}
+
+			oneOfSuccess = true
+
+			break
 		}
 
-		break
+		if !oneOfSuccess {
+			return errs
+		}
 	}
 
 	errFuncs := oasvalidator.ValidateObject(schema, opd.Result)

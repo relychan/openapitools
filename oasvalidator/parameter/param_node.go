@@ -16,11 +16,13 @@ package parameter
 
 import (
 	"log/slog"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/pb33f/libopenapi/datamodel/high/base"
+	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
@@ -211,30 +213,82 @@ func (pn ParameterNode) String() string {
 	return pn.printIndent(0)
 }
 
-func (pn *ParameterNode) Decode(typeSchema *base.Schema) (any, []httperror.ValidationError) {
-	if oaschema.IsSchemaTypeEmpty(typeSchema) {
+func (pn *ParameterNode) Decode(schema *base.Schema) (any, []httperror.ValidationError) {
+	if oaschema.IsSchemaTypeEmpty(schema) {
 		return pn.decodeArbitrary(), nil
 	}
 
-	result, _, errs := pn.decodeFromSchemaTypes(typeSchema)
+	schemaTypes, nullable := oaschema.GetSchemaTypes(schema)
+	if len(pn.values) == 0 && len(pn.items) == 0 {
+		if nullable {
+			return nil, nil
+		}
 
-	return result, errs
+		return nil, []httperror.ValidationError{
+			{
+				Code:      oasvalidator.ErrCodeInvalidQueryParam,
+				Parameter: pn.key.String(),
+				Detail:    "Parameter must not be null",
+			},
+		}
+	}
+
+	if slices.Contains(schemaTypes, oaschema.Object) {
+		result, errs := pn.decodeObject(schema)
+		if len(errs) == 0 {
+			return result, nil
+		}
+
+		if len(schemaTypes) == 1 {
+			return nil, errs
+		}
+
+		schemaTypes = slices.DeleteFunc(schemaTypes, func(t string) bool {
+			return t == oaschema.Object
+		})
+	}
+
+	if slices.Contains(schemaTypes, oaschema.Array) {
+		result, errs := pn.decodeArray(schema)
+		if len(errs) == 0 {
+			return result, nil
+		}
+
+		if len(schemaTypes) == 1 {
+			return nil, errs
+		}
+
+		schemaTypes = slices.DeleteFunc(schemaTypes, func(t string) bool {
+			return t == oaschema.Array
+		})
+	}
+
+	result, _, errs := pn.decodeFromSchemaTypes(schemaTypes)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	errFuncs := oasvalidator.ValidateValue(schema, result)
+	if len(errFuncs) > 0 {
+		return nil, oasvalidator.CollectErrorsFunc(errFuncs, func(ve *httperror.ValidationError) {
+			ve.Code = oasvalidator.ErrCodeInvalidQueryParam
+			ve.Parameter = pn.key.String()
+		})
+	}
+
+	return result, nil
 }
 
 // decodeFromSchemaTypes tries each declared schema type in order and returns the first
 // successful decode. The empty type and "null" are skipped; errors from the last failing
 // type are surfaced when all types fail.
 func (pn *ParameterNode) decodeFromSchemaTypes(
-	schemaDef *base.Schema,
+	schemaTypes []string,
 ) (any, string, []httperror.ValidationError) {
 	var finalErrors []httperror.ValidationError
 
-	for _, typeName := range schemaDef.Type {
-		if typeName == "" || typeName == oaschema.Null {
-			continue
-		}
-
-		result, resultType, errs := pn.decodeFromSchemaType(schemaDef, typeName)
+	for _, typeName := range schemaTypes {
+		result, resultType, errs := decodePrimitiveQueryValuesFromSchemaType(typeName, pn.values)
 		if len(errs) == 0 {
 			return result, resultType, nil
 		}
@@ -245,29 +299,7 @@ func (pn *ParameterNode) decodeFromSchemaTypes(
 	return nil, "", finalErrors
 }
 
-func (pn *ParameterNode) decodeFromSchemaType(
-	schemaDef *base.Schema,
-	typeName string,
-) (any, string, []httperror.ValidationError) {
-	switch typeName {
-	case oaschema.Array:
-		result, errs := pn.decodeFromArray(schemaDef)
-		for _, ed := range errs {
-			ed.Code = oasvalidator.ErrCodeInvalidQueryParam
-			ed.Parameter = pn.key.String()
-		}
-
-		return result, typeName, errs
-	case oaschema.Object:
-		result, err := pn.decodeFromObject(schemaDef)
-
-		return result, typeName, err
-	default:
-		return decodePrimitiveQueryValuesFromSchemaType(typeName, pn.values)
-	}
-}
-
-func (pn *ParameterNode) decodeFromArray(
+func (pn *ParameterNode) decodeArray(
 	schemaDef *base.Schema,
 ) (any, []httperror.ValidationError) {
 	errFuncs := oasvalidator.ValidateArray(schemaDef, pn.items, compareParameterNodes)
@@ -277,17 +309,43 @@ func (pn *ParameterNode) decodeFromArray(
 		return nil, errs
 	}
 
-	if len(pn.items) == 0 {
-		return pn.values, nil
+	results, errs := pn.decodeArrayValues(schemaDef)
+	if len(errs) > 0 {
+		return nil, errs
 	}
 
-	if schemaDef.Items.A == nil {
+	errFuncs = oasvalidator.ValidateValue(schemaDef, results)
+	if len(errFuncs) > 0 {
+		return nil, oasvalidator.CollectErrorsFunc(errFuncs, func(ve *httperror.ValidationError) {
+			ve.Code = oasvalidator.ErrCodeInvalidQueryParam
+			ve.Parameter = pn.key.String()
+		})
+	}
+
+	return results, nil
+}
+
+func (pn *ParameterNode) decodeArrayValues(
+	schemaDef *base.Schema,
+) (any, []httperror.ValidationError) {
+	errFuncs := oasvalidator.ValidateArray(schemaDef, pn.items, compareParameterNodes)
+
+	errs := oasvalidator.CollectErrors(errFuncs)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	if schemaDef.Items == nil || schemaDef.Items.IsB() || schemaDef.Items.A == nil {
 		return pn.decodeArbitraryArray(), nil
 	}
 
 	itemSchema := schemaDef.Items.A.Schema()
 	if oaschema.IsSchemaTypeEmpty(itemSchema) {
 		return pn.decodeArbitraryArray(), nil
+	}
+
+	if len(pn.items) == 0 {
+		return decodeParamFromArray(pn.values, itemSchema)
 	}
 
 	results := make([]any, len(pn.items))
@@ -304,13 +362,121 @@ func (pn *ParameterNode) decodeFromArray(
 	return results, errs
 }
 
-func (pn *ParameterNode) decodeFromObject(
+func (pn *ParameterNode) decodeObject(
 	schemaDef *base.Schema,
 ) (map[string]any, []httperror.ValidationError) {
-	var (
-		results = make(map[string]any)
-		errs    []httperror.ValidationError
-	)
+	results := make(map[string]any)
+
+	errs := pn.decodeObjectProperties(schemaDef, results)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	for _, ao := range schemaDef.AllOf {
+		if ao == nil {
+			continue
+		}
+
+		aoSchema := ao.Schema()
+		if aoSchema == nil {
+			continue
+		}
+
+		decodeErrs := pn.decodeObjectProperties(aoSchema, results)
+		if len(decodeErrs) > 0 {
+			errs = append(errs, decodeErrs...)
+		}
+	}
+
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	if len(schemaDef.AnyOf) > 0 {
+		var anyOfSuccess bool
+
+		for _, ao := range schemaDef.AnyOf {
+			decodeErrs := pn.decodeObjectOr(ao, results)
+			if len(decodeErrs) > 0 {
+				errs = append(errs, decodeErrs...)
+
+				continue
+			}
+
+			anyOfSuccess = true
+		}
+
+		if !anyOfSuccess {
+			return nil, errs
+		}
+	}
+
+	if len(schemaDef.OneOf) > 0 {
+		var oneOfSuccess bool
+
+		for _, oo := range schemaDef.OneOf {
+			decodeErrs := pn.decodeObjectOr(oo, results)
+			if len(decodeErrs) > 0 {
+				errs = append(errs, decodeErrs...)
+
+				continue
+			}
+
+			oneOfSuccess = true
+
+			break
+		}
+
+		if !oneOfSuccess {
+			return nil, errs
+		}
+	}
+
+	errFuncs := oasvalidator.ValidateObject(schemaDef, results)
+	if len(errFuncs) > 0 {
+		return nil, oasvalidator.CollectErrors(errFuncs)
+	}
+
+	return results, nil
+}
+
+func (pn *ParameterNode) decodeObjectOr(
+	proxy *base.SchemaProxy,
+	results map[string]any,
+) []httperror.ValidationError {
+	if proxy == nil {
+		return nil
+	}
+
+	aoSchema := proxy.Schema()
+	if aoSchema == nil {
+		return nil
+	}
+
+	if oaschema.IsSchemaObjectEmpty(aoSchema) {
+		errFuncs := oasvalidator.ValidateObject(aoSchema, results)
+		if len(errFuncs) > 0 {
+			return oasvalidator.CollectErrors(errFuncs)
+		}
+
+		return nil
+	}
+
+	orResults, errs := pn.decodeObject(aoSchema)
+	if len(errs) > 0 {
+		return errs
+	}
+
+	maps.Copy(results, orResults)
+
+	return nil
+}
+
+func (pn *ParameterNode) decodeObjectProperties(
+	schemaDef *base.Schema,
+	results map[string]any,
+) []httperror.ValidationError {
+	var errs []httperror.ValidationError
 
 	if schemaDef.Properties != nil {
 		for iter := schemaDef.Properties.First(); iter != nil; iter = iter.Next() {
@@ -354,20 +520,20 @@ func (pn *ParameterNode) decodeFromObject(
 	}
 
 	if len(pn.items) == 0 || len(errs) > 0 {
-		return nil, slices.Clip(errs)
+		return errs
 	}
 
 	errs = pn.decodeObjectAdditionalProperties(schemaDef, results)
 	if len(errs) > 0 {
-		return nil, errs
+		return errs
 	}
 
 	errs = pn.decodeObjectPatternProperties(schemaDef, results)
 	if len(errs) > 0 {
-		return nil, errs
+		return errs
 	}
 
-	return results, nil
+	return nil
 }
 
 // decodeObjectPatternProperties matches node children against schema patternProperties.
@@ -524,6 +690,10 @@ func (pn *ParameterNode) decodeArbitrary() any {
 }
 
 func (pn *ParameterNode) decodeArbitraryArray() []any {
+	if len(pn.items) == 0 {
+		return goutils.ToAnySlice(pn.values)
+	}
+
 	results := make([]any, 0, len(pn.items))
 
 	for _, item := range pn.items {

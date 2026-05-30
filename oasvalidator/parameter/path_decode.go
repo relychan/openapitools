@@ -80,7 +80,7 @@ func DecodePathValue(
 		}
 
 		if len(schemaTypes) == 1 {
-			return nil, enrichHeaderErrors(errs, definition.Name)
+			return nil, enrichPathParamErrors(errs, definition.Name)
 		}
 
 		schemaTypes = slices.DeleteFunc(schemaTypes, func(t string) bool {
@@ -88,14 +88,19 @@ func DecodePathValue(
 		})
 	}
 
+	rawValues, parseErr := parsePathArrayParam(definition.Name, value, style, explode)
+	if parseErr != nil {
+		return nil, []httperror.ValidationError{*parseErr}
+	}
+
 	if slices.Contains(schemaTypes, oaschema.Array) {
-		results, errs := decodePathArrayParam(definition, value, style, explode)
+		results, errs := decodePathArrayParam(definition, rawValues, style, explode)
 		if len(errs) == 0 {
 			return results, nil
 		}
 
 		if len(schemaTypes) == 1 {
-			return nil, enrichHeaderErrors(errs, definition.Name)
+			return nil, enrichPathParamErrors(errs, definition.Name)
 		}
 
 		schemaTypes = slices.DeleteFunc(schemaTypes, func(t string) bool {
@@ -104,13 +109,13 @@ func DecodePathValue(
 	}
 
 	decoder := paramDecoder{
-		RawValues: []string{value},
+		RawValues: rawValues,
 		Schema:    definition.Schema,
 	}
 
 	result, errs := decoder.Decode(schemaTypes)
 	if len(errs) > 0 {
-		return nil, enrichHeaderErrors(errs, definition.Name)
+		return nil, enrichPathParamErrors(errs, definition.Name)
 	}
 
 	return result, nil
@@ -118,16 +123,11 @@ func DecodePathValue(
 
 func decodePathArrayParam(
 	definition *oaschema.Parameter,
-	rawValue string,
+	rawValues []string,
 	style oaschema.ParameterEncodingStyle,
 	explode bool,
 ) (any, []httperror.ValidationError) {
-	rawParts, parseErr := parsePathArrayParam(definition.Name, rawValue, style, explode)
-	if parseErr != nil {
-		return nil, []httperror.ValidationError{*parseErr}
-	}
-
-	results, errs := decodeParamFromArray(rawParts, definition.Schema)
+	results, errs := decodeParamFromArray(rawValues, definition.Schema)
 	if len(errs) == 0 {
 		return results, nil
 	}
@@ -158,7 +158,7 @@ func decodePathObjectParam(
 
 	errs := decoder.Decode(definition.Schema)
 	if len(errs) > 0 {
-		return nil, enrichHeaderErrors(errs, definition.Name)
+		return nil, enrichPathParamErrors(errs, definition.Name)
 	}
 
 	return decoder.Result, nil
@@ -375,4 +375,16 @@ func newInvalidPathObjectErrorMessage(style oaschema.ParameterEncodingStyle, exp
 
 		return "Invalid syntax for simple style in parameter value. The object value must follow this format: key1,value1,key2,value2"
 	}
+}
+
+func enrichPathParamErrors(
+	errs []httperror.ValidationError,
+	name string,
+) []httperror.ValidationError {
+	for i := range errs {
+		errs[i].Code = oasvalidator.ErrCodeInvalidURLParam
+		errs[i].Parameter = name
+	}
+
+	return errs
 }

@@ -133,9 +133,7 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 						Type: []string{oaschema.Object},
 						Properties: func() *orderedmap.Map[string, *base.SchemaProxy] {
 							result := orderedmap.New[string, *base.SchemaProxy]()
-							result.Set("role", base.CreateSchemaProxy(&base.Schema{
-								Type: []string{oaschema.String},
-							}))
+							result.Set("role", base.CreateSchemaProxy(stringSchema()))
 
 							return result
 						}(),
@@ -158,9 +156,7 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 					Schema: &base.Schema{
 						Type: []string{oaschema.Array},
 						Items: &base.DynamicValue[*base.SchemaProxy, bool]{
-							A: base.CreateSchemaProxy(&base.Schema{
-								Type: []string{oaschema.Integer},
-							}),
+							A: base.CreateSchemaProxy(intArraySchema()),
 						},
 					},
 				},
@@ -185,19 +181,13 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 						Type: []string{oaschema.Object},
 						Properties: func() *orderedmap.Map[string, *base.SchemaProxy] {
 							result := orderedmap.New[string, *base.SchemaProxy]()
-							result.Set("R", base.CreateSchemaProxy(&base.Schema{
-								Type: []string{oaschema.Number},
-							}))
-							result.Set("G", base.CreateSchemaProxy(&base.Schema{
-								Type: []string{oaschema.Number},
-							}))
+							result.Set("R", base.CreateSchemaProxy(numberSchema()))
+							result.Set("G", base.CreateSchemaProxy(numberSchema()))
 
 							return result
 						}(),
 						Items: &base.DynamicValue[*base.SchemaProxy, bool]{
-							A: base.CreateSchemaProxy(&base.Schema{
-								Type: []string{oaschema.Integer},
-							}),
+							A: base.CreateSchemaProxy(intArraySchema()),
 						},
 					},
 				},

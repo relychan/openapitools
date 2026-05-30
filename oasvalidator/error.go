@@ -466,7 +466,7 @@ func ParameterRequiredError(name string) *httperror.ValidationError {
 	return &httperror.ValidationError{
 		Code:      ErrCodeValidationError,
 		Parameter: name,
-		Detail:    "Required parameter '" + name + "' is missing in the object",
+		Detail:    "Required parameter '" + name + "' is missing",
 	}
 }
 
