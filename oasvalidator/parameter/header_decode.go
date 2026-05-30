@@ -118,7 +118,7 @@ func decodeHeaderArrayParam(
 ) (any, []httperror.ValidationError) {
 	rawParts := parseHeaderArrayParam(rawValues)
 
-	results, errs := decodeParamFromArray(rawParts, definition.Schema)
+	results, errs := decodeArrayParam(rawParts, definition.Schema)
 	if len(errs) > 0 {
 		return nil, enrichHeaderErrors(errs, definition.Name)
 	}

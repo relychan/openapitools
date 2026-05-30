@@ -47,7 +47,7 @@ func NormalizeType(typeName string) (string, bool) {
 }
 
 // ExtractSchemaTypes returns available types of the schema, and check if it is nullable.
-func ExtractSchemaTypes(schema *base.Schema) ( //nolint:revive,nonamedreturns
+func ExtractSchemaTypes(schema *base.Schema) ( //nolint:revive,nonamedreturns,cyclop
 	types []string,
 	allOf []*base.Schema,
 	oneOf []*base.Schema,
@@ -118,7 +118,7 @@ func ExtractSchemaTypes(schema *base.Schema) ( //nolint:revive,nonamedreturns
 
 // GetSchemaTypes returns available types of the schema, and check if it is nullable.
 func GetSchemaTypes(schema *base.Schema) ([]string, bool) {
-	types, _, _, _, isNullable := ExtractSchemaTypes(schema)
+	types, _, _, _, isNullable := ExtractSchemaTypes(schema) //nolint:dogsled
 
 	return types, isNullable
 }

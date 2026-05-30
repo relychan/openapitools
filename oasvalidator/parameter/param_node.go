@@ -168,7 +168,7 @@ func (pn *ParameterNode) InsertNode(keys ParamKeys, values []string) *httperror.
 	// best-effort to converting the key to index if other keys in the list are indexes.
 	switch selector := keys[0].(type) {
 	case ParamIndex:
-		if len(pn.items) == 1 {
+		if len(pn.items) >= 1 {
 			key, ok := pn.items[0].key.(ParamKey)
 			if ok {
 				indexKey, err := strconv.Atoi(string(key))
@@ -180,7 +180,7 @@ func (pn *ParameterNode) InsertNode(keys ParamKeys, values []string) *httperror.
 			}
 		}
 	case ParamKey:
-		if len(pn.items) > 1 {
+		if len(pn.items) >= 1 {
 			_, ok := pn.items[0].key.(ParamIndex)
 			if ok {
 				indexKey, err := strconv.Atoi(string(selector))
@@ -302,19 +302,12 @@ func (pn *ParameterNode) decodeFromSchemaTypes(
 func (pn *ParameterNode) decodeArray(
 	schemaDef *base.Schema,
 ) (any, []httperror.ValidationError) {
-	errFuncs := oasvalidator.ValidateArray(schemaDef, pn.items, compareParameterNodes)
-
-	errs := oasvalidator.CollectErrors(errFuncs)
-	if len(errs) > 0 {
-		return nil, errs
-	}
-
 	results, errs := pn.decodeArrayValues(schemaDef)
 	if len(errs) > 0 {
 		return nil, errs
 	}
 
-	errFuncs = oasvalidator.ValidateValue(schemaDef, results)
+	errFuncs := oasvalidator.ValidateValue(schemaDef, results)
 	if len(errFuncs) > 0 {
 		return nil, oasvalidator.CollectErrorsFunc(errFuncs, func(ve *httperror.ValidationError) {
 			ve.Code = oasvalidator.ErrCodeInvalidQueryParam
@@ -328,13 +321,6 @@ func (pn *ParameterNode) decodeArray(
 func (pn *ParameterNode) decodeArrayValues(
 	schemaDef *base.Schema,
 ) (any, []httperror.ValidationError) {
-	errFuncs := oasvalidator.ValidateArray(schemaDef, pn.items, compareParameterNodes)
-
-	errs := oasvalidator.CollectErrors(errFuncs)
-	if len(errs) > 0 {
-		return nil, errs
-	}
-
 	if schemaDef.Items == nil || schemaDef.Items.IsB() || schemaDef.Items.A == nil {
 		return pn.decodeArbitraryArray(), nil
 	}
@@ -345,17 +331,20 @@ func (pn *ParameterNode) decodeArrayValues(
 	}
 
 	if len(pn.items) == 0 {
-		return decodeParamFromArray(pn.values, itemSchema)
+		return decodeArrayParamWithItemSchema(pn.values, itemSchema)
 	}
 
-	results := make([]any, len(pn.items))
+	var (
+		results = make([]any, 0, len(pn.items))
+		errs    []httperror.ValidationError
+	)
 
-	for i, item := range pn.items {
+	for _, item := range pn.items {
 		itemValue, decodeErrors := item.Decode(itemSchema)
 		if len(decodeErrors) > 0 {
 			errs = append(errs, decodeErrors...)
 		} else {
-			results[i] = itemValue
+			results = append(results, itemValue)
 		}
 	}
 
@@ -544,7 +533,7 @@ func (pn *ParameterNode) decodeObjectPatternProperties(
 	schemaDef *base.Schema,
 	results map[string]any,
 ) []httperror.ValidationError {
-	if schemaDef.PatternProperties == nil && schemaDef.PatternProperties.Len() == 0 {
+	if schemaDef.PatternProperties == nil || schemaDef.PatternProperties.Len() == 0 {
 		return nil
 	}
 

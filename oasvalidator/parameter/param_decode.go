@@ -178,7 +178,7 @@ func (pd *paramDecoder) decodeFromSchemaType(
 ) (any, string, []httperror.ValidationError) {
 	switch typeName {
 	case oaschema.Array:
-		result, err := decodeParamFromArray(pd.RawValues, pd.Schema)
+		result, err := decodeArrayParam(pd.RawValues, pd.Schema)
 
 		return result, typeName, err
 	default:
@@ -203,7 +203,7 @@ func (pd *paramDecoder) decodeFromSchemaType(
 	}
 }
 
-func decodeParamFromArray(
+func decodeArrayParam(
 	rawValues []string,
 	schema *base.Schema,
 ) ([]any, []httperror.ValidationError) {
@@ -216,6 +216,13 @@ func decodeParamFromArray(
 		return goutils.ToAnySlice(rawValues), nil
 	}
 
+	return decodeArrayParamWithItemSchema(rawValues, itemSchema)
+}
+
+func decodeArrayParamWithItemSchema(
+	rawValues []string,
+	itemSchema *base.Schema,
+) ([]any, []httperror.ValidationError) {
 	results := make([]any, 0, len(rawValues))
 
 	for i, value := range rawValues {

@@ -153,12 +153,7 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 					In:      oaschema.InQuery,
 					Explode: new(false),
 					Style:   new(oaschema.EncodingStyleSpaceDelimited),
-					Schema: &base.Schema{
-						Type: []string{oaschema.Array},
-						Items: &base.DynamicValue[*base.SchemaProxy, bool]{
-							A: base.CreateSchemaProxy(intArraySchema()),
-						},
-					},
+					Schema:  intArraySchema(),
 				},
 			},
 		},
@@ -186,9 +181,6 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 
 							return result
 						}(),
-						Items: &base.DynamicValue[*base.SchemaProxy, bool]{
-							A: base.CreateSchemaProxy(intArraySchema()),
-						},
 					},
 				},
 			},

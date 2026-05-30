@@ -384,7 +384,8 @@ func ValidateArrayAndItems[T any](
 
 	errs := ValidateArray(typeSchema, value, compare)
 
-	if len(value) == 0 || typeSchema.Items == nil || (typeSchema.Items.IsB() || typeSchema.Items.A == nil) {
+	if len(value) == 0 || typeSchema.Items == nil ||
+		(typeSchema.Items.IsB() || typeSchema.Items.A == nil) {
 		return errs
 	}
 

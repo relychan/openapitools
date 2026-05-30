@@ -15,18 +15,14 @@
 package parameter
 
 import (
-	"fmt"
 	"net/url"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 
-	"github.com/pb33f/libopenapi/datamodel/high/base"
 	"github.com/relychan/goutils"
-	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
-	"github.com/relychan/openapitools/oasvalidator"
 )
 
 // EncodeQueryEscape encodes the values into “URL encoded” form ("bar=baz&foo=quux") sorted by key with escape.
@@ -536,50 +532,4 @@ func parseDelimitedStyle(
 	}
 
 	return slices.Clip(results), true
-}
-
-// Decodes a single split element (array item or object property value) against itemSchema.
-// String is given priority to avoid lossy parsing.
-func decodeItemValueFromSchemaTypes(
-	itemSchema *base.Schema,
-	value any,
-) (any, *httperror.ValidationError) {
-	if len(itemSchema.Type) == 0 {
-		return value, nil
-	}
-
-	if slices.Contains(itemSchema.Type, oaschema.String) {
-		return value, nil
-	}
-
-	var finalError *httperror.ValidationError
-
-	for _, typeName := range itemSchema.Type {
-		if typeName == "" {
-			continue
-		}
-
-		result, primitiveType, err := oasvalidator.DecodePrimitiveValueFromType(
-			value,
-			typeName,
-		)
-		if err != nil {
-			finalError = &httperror.ValidationError{
-				Detail: err.Error(),
-			}
-		} else if primitiveType != "" {
-			return result, nil
-		}
-	}
-
-	if finalError != nil {
-		return nil, finalError
-	}
-
-	return nil, &httperror.ValidationError{
-		Detail: fmt.Sprintf(
-			"Unsupported types or nested fields in parameter: %v",
-			itemSchema.Type,
-		),
-	}
 }

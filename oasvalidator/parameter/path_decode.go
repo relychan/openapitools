@@ -94,7 +94,7 @@ func DecodePathValue(
 	}
 
 	if slices.Contains(schemaTypes, oaschema.Array) {
-		results, errs := decodePathArrayParam(definition, rawValues, style, explode)
+		results, errs := decodePathArrayParam(definition, rawValues)
 		if len(errs) == 0 {
 			return results, nil
 		}
@@ -124,10 +124,8 @@ func DecodePathValue(
 func decodePathArrayParam(
 	definition *oaschema.Parameter,
 	rawValues []string,
-	style oaschema.ParameterEncodingStyle,
-	explode bool,
 ) (any, []httperror.ValidationError) {
-	results, errs := decodeParamFromArray(rawValues, definition.Schema)
+	results, errs := decodeArrayParam(rawValues, definition.Schema)
 	if len(errs) == 0 {
 		return results, nil
 	}

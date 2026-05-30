@@ -209,7 +209,7 @@ func decodeQueryArrayParam(
 		rawValues, _ = splitNonExplodeDelimitedStyle(rawValues, style, false)
 	}
 
-	results, errs := decodeParamFromArray(rawValues, definition.Schema)
+	results, errs := decodeArrayParam(rawValues, definition.Schema)
 	if len(errs) > 0 {
 		return nil, enrichQueryErrors(errs, definition.Name)
 	}
@@ -429,29 +429,6 @@ func decodePrimitiveQueryValuesFromSchemaType(
 	}
 	// Return raw values with unknown type.
 	return rawValues, "", nil
-}
-
-// addParameterErrors appends src errors into dest, promoting the nested Parameter
-// name to Pointer so the path context is preserved, then setting Parameter to the
-// parent name.  This lets callers reconstruct a full JSON-pointer error path.
-func addParameterErrors(
-	dest []httperror.ValidationError,
-	src []httperror.ValidationError,
-	name string,
-) []httperror.ValidationError {
-	dest = slices.Grow(dest, len(src))
-
-	for _, de := range src {
-		if de.Parameter != "" {
-			de.Pointer = "/" + de.Parameter
-		}
-
-		de.Parameter = name
-
-		dest = append(dest, de)
-	}
-
-	return dest
 }
 
 func newInvalidQueryNonExplodedObjectError(
