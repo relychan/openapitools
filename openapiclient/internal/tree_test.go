@@ -266,6 +266,7 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 		path            string
 		method          string
 		shouldFind      bool
+		statusCode      int
 		expectedParams  map[string]any
 		expectedPattern string
 	}{
@@ -377,11 +378,8 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 			name:       "double_slash_path",
 			path:       "/posts//comments",
 			method:     http.MethodGet,
-			shouldFind: true, // Router matches this with empty param
-			expectedParams: map[string]any{
-				"id": "", // Empty param value
-			},
-			expectedPattern: "/posts/{id}/comments",
+			shouldFind: false,
+			statusCode: http.StatusBadRequest,
 		},
 		{
 			name:            "trailing_slash_mismatch",
@@ -404,7 +402,12 @@ func TestRouteFindingEdgeCases(t *testing.T) {
 				assert.Equal(t, tc.expectedPattern, route.Pattern)
 				assert.Equal(t, tc.expectedParams, route.ParamValues)
 			} else {
-				assert.Equal(t, http.StatusNotFound, err.Status)
+				statusCode := tc.statusCode
+				if statusCode == 0 {
+					statusCode = http.StatusNotFound
+				}
+
+				assert.Equal(t, statusCode, err.Status)
 				assert.True(t, route == nil, "expected not to find route for path: %s", tc.path)
 			}
 		})

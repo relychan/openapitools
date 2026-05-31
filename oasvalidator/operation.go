@@ -48,8 +48,6 @@ func ValidateOperation(
 		result.RequestBody = &oaschema.RequestBody{
 			Required: operation.RequestBody.Required != nil &&
 				*operation.RequestBody.Required,
-			Encoding:     result.RequestBody.Encoding,
-			ItemEncoding: result.RequestBody.ItemEncoding,
 		}
 
 		requestContentType, requestBodyMediaType := getRequestBodyContentSchema(
@@ -83,6 +81,8 @@ func ValidateOperation(
 			}
 
 			result.RequestBody.ItemSchema = itemSchema
+			result.RequestBody.Encoding = requestBodyMediaType.Encoding
+			result.RequestBody.ItemEncoding = requestBodyMediaType.ItemEncoding
 		}
 	}
 

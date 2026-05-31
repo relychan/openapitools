@@ -241,7 +241,7 @@ func (*RESTfulHandler) decodeRawResponse(
 		span.SetStatus(codes.Error, respErr.Detail)
 		span.RecordError(err)
 
-		return nil, err
+		return nil, respErr
 	}
 
 	span.SetStatus(codes.Ok, "")

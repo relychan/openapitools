@@ -8,8 +8,8 @@ import (
 	"maps"
 	"strings"
 
+	"github.com/invopop/jsonschema"
 	"github.com/relychan/goutils"
-	"github.com/relychan/jsonschema"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/graphqlhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler"

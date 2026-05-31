@@ -83,8 +83,8 @@ func ExtractSchemaTypes(schema *base.Schema) ( //nolint:revive,nonamedreturns,cy
 		}
 
 		if ((item.Properties != nil && item.Properties.Len() > 0) ||
-			(schema.AdditionalProperties != nil &&
-				(schema.AdditionalProperties.A != nil && schema.AdditionalProperties.B)) ||
+			(item.AdditionalProperties != nil &&
+				(item.AdditionalProperties.A != nil && item.AdditionalProperties.B)) ||
 			(item.PatternProperties != nil && item.PatternProperties.Len() > 0)) &&
 			!slices.Contains(types, Object) {
 			types = append(types, Object)
@@ -92,7 +92,7 @@ func ExtractSchemaTypes(schema *base.Schema) ( //nolint:revive,nonamedreturns,cy
 			return
 		}
 
-		if schema.Items != nil && (schema.Items.B || schema.Items.A != nil) &&
+		if item.Items != nil && (item.Items.B || item.Items.A != nil) &&
 			!slices.Contains(types, Array) {
 			types = append(types, Array)
 		}

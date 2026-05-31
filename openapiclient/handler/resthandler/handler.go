@@ -235,6 +235,7 @@ func (re *RESTfulHandler) handleRequest(
 		contentTypeTo = contentTypeFrom
 	}
 
+	options.ForwardResponseHeaders(writer, resp)
 	writer.Header()[httpheader.ContentType] = []string{contentTypeTo}
 	writer.WriteHeader(resp.StatusCode)
 
