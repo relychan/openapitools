@@ -78,38 +78,6 @@ const (
 	ErrCodeOpenAPISchemaError = "openapi_schema_error"
 )
 
-// ErrorFunc abstracts a function to create an error detail lazily.
-type ErrorFunc func() *httperror.ValidationError
-
-// CollectErrors collects error functions to error details.
-func CollectErrors(errFuncs []ErrorFunc) []httperror.ValidationError {
-	return CollectErrorsFunc(errFuncs, nil)
-}
-
-// CollectErrorsFunc collects error functions to error details.
-func CollectErrorsFunc(
-	errFuncs []ErrorFunc,
-	modifyFunc func(*httperror.ValidationError),
-) []httperror.ValidationError {
-	if len(errFuncs) == 0 {
-		return nil
-	}
-
-	results := make([]httperror.ValidationError, len(errFuncs))
-
-	for i, fn := range errFuncs {
-		err := fn()
-
-		if modifyFunc != nil {
-			modifyFunc(err)
-		}
-
-		results[i] = *err
-	}
-
-	return results
-}
-
 // MinContainsError returns a validation error when fewer array items match the contains schema than required.
 func MinContainsError(expected int64, actual int64) *httperror.ValidationError {
 	return &httperror.ValidationError{
@@ -120,13 +88,6 @@ func MinContainsError(expected int64, actual int64) *httperror.ValidationError {
 	}
 }
 
-// MinContainsErrorFunc returns an ErrorFunc that lazily creates a MinContainsError.
-func MinContainsErrorFunc(expected int64, actual int64) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return MinContainsError(expected, actual)
-	}
-}
-
 // MaxContainsError returns a validation error when more array items match the contains schema than allowed.
 func MaxContainsError(expected int64, actual int64) *httperror.ValidationError {
 	return &httperror.ValidationError{
@@ -134,13 +95,6 @@ func MaxContainsError(expected int64, actual int64) *httperror.ValidationError {
 		Detail: "Require maximum " + strconv.FormatInt(expected, 10) +
 			" items to match contains schema, but got: " +
 			strconv.FormatInt(actual, 10),
-	}
-}
-
-// MaxContainsErrorFunc returns an ErrorFunc that lazily creates a MaxContainsError.
-func MaxContainsErrorFunc(expected int64, actual int64) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return MaxContainsError(expected, actual)
 	}
 }
 
@@ -178,16 +132,6 @@ func UnionTypeMismatchedError(
 		Detail: "Inconsistent data types in " + unionType + ". Expected one of [" +
 			strings.Join(expected, ", ") + "], but got: " +
 			strings.Join(actual, ", ") + "]",
-	}
-}
-
-// InvalidTypeErrorFunc returns an ErrorFunc that lazily creates an InvalidTypeError.
-func InvalidTypeErrorFunc(
-	expected []string,
-	actual string,
-) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return InvalidTypeError(expected, actual)
 	}
 }
 
@@ -232,16 +176,6 @@ func EnumValidationError(
 	}
 }
 
-// EnumValidationErrorFunc returns an ErrorFunc that lazily creates an EnumValidationError.
-func EnumValidationErrorFunc(
-	typeSchema *base.Schema,
-	actual string,
-) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return EnumValidationError(typeSchema, actual)
-	}
-}
-
 // MultipleOfValidationError returns a validation error when a number is not a multiple of the required divisor.
 func MultipleOfValidationError(
 	multipleOf float64,
@@ -254,16 +188,6 @@ func MultipleOfValidationError(
 	return &httperror.ValidationError{
 		Code:   ErrCodeValidationError,
 		Detail: detail,
-	}
-}
-
-// MultipleOfValidationErrorFunc returns an ErrorFunc that lazily creates a MultipleOfValidationError.
-func MultipleOfValidationErrorFunc(
-	multipleOf float64,
-	actual float64,
-) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return MultipleOfValidationError(multipleOf, actual)
 	}
 }
 
@@ -288,13 +212,6 @@ func MaximumValidationError(
 	}
 }
 
-// MaximumValidationErrorFunc returns an ErrorFunc that lazily creates a MaximumValidationError.
-func MaximumValidationErrorFunc(expected float64, actual float64, exclusive bool) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return MaximumValidationError(expected, actual, exclusive)
-	}
-}
-
 // MinimumValidationError returns a validation error when a number is below the allowed minimum.
 func MinimumValidationError(
 	expected float64,
@@ -316,13 +233,6 @@ func MinimumValidationError(
 	}
 }
 
-// MinimumValidationErrorFunc returns an ErrorFunc that lazily creates a MinimumValidationError.
-func MinimumValidationErrorFunc(expected float64, actual float64, exclusive bool) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return MinimumValidationError(expected, actual, exclusive)
-	}
-}
-
 // MaxLengthValidationError returns a validation error when a string exceeds the allowed maximum length.
 func MaxLengthValidationError(expected int64, actual int64) *httperror.ValidationError {
 	detail := "The length of the string value must be less than " +
@@ -332,13 +242,6 @@ func MaxLengthValidationError(expected int64, actual int64) *httperror.Validatio
 	return &httperror.ValidationError{
 		Code:   ErrCodeValidationError,
 		Detail: detail,
-	}
-}
-
-// MaxLengthValidationErrorFunc returns an ErrorFunc that lazily creates a MaxLengthValidationError.
-func MaxLengthValidationErrorFunc(expected int64, actual int64) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return MaxLengthValidationError(expected, actual)
 	}
 }
 
@@ -354,25 +257,11 @@ func MinLengthValidationError(expected int64, actual int64) *httperror.Validatio
 	}
 }
 
-// MinLengthValidationErrorFunc returns an ErrorFunc that lazily creates a MinLengthValidationError.
-func MinLengthValidationErrorFunc(expected int64, actual int64) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return MinLengthValidationError(expected, actual)
-	}
-}
-
 // PatternValidationError returns a validation error when a string does not match the required regex pattern.
 func PatternValidationError(expected string) *httperror.ValidationError {
 	return &httperror.ValidationError{
 		Code:   ErrCodeValidationError,
 		Detail: "The value does not match pattern: " + expected,
-	}
-}
-
-// PatternValidationErrorFunc returns an ErrorFunc that lazily creates a PatternValidationError.
-func PatternValidationErrorFunc(expected string) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return PatternValidationError(expected)
 	}
 }
 
@@ -386,13 +275,6 @@ func ArrayMaxItemsValidationError(expected, actual int64) *httperror.ValidationE
 	}
 }
 
-// ArrayMaxItemsValidationErrorFunc returns an ErrorFunc that lazily creates an ArrayMaxItemsValidationError.
-func ArrayMaxItemsValidationErrorFunc(expected, actual int64) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return ArrayMaxItemsValidationError(expected, actual)
-	}
-}
-
 // ArrayMinItemsValidationError returns a validation error for minimum items in array.
 func ArrayMinItemsValidationError(expected, actual int64) *httperror.ValidationError {
 	return &httperror.ValidationError{
@@ -403,25 +285,11 @@ func ArrayMinItemsValidationError(expected, actual int64) *httperror.ValidationE
 	}
 }
 
-// ArrayMinItemsValidationErrorFunc returns an ErrorFunc that lazily creates an ArrayMinItemsValidationError.
-func ArrayMinItemsValidationErrorFunc(expected, actual int64) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return ArrayMinItemsValidationError(expected, actual)
-	}
-}
-
 // ArrayUniqueItemsValidationError returns a validation error for unique items array.
 func ArrayUniqueItemsValidationError[T any](duplicates []T) *httperror.ValidationError {
 	return &httperror.ValidationError{
 		Code:   ErrCodeValidationError,
 		Detail: fmt.Sprintf("Array contains the following duplicates: %v", duplicates),
-	}
-}
-
-// ArrayUniqueItemsValidationErrorFunc returns an ErrorFunc that lazily creates an ArrayUniqueItemsValidationError.
-func ArrayUniqueItemsValidationErrorFunc[T any](duplicates []T) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return ArrayUniqueItemsValidationError(duplicates)
 	}
 }
 
@@ -435,13 +303,6 @@ func ObjectMinPropertiesValidationError(expected, actual int64) *httperror.Valid
 	}
 }
 
-// ObjectMinPropertiesValidationErrorFunc returns an ErrorFunc that lazily creates an ObjectMinPropertiesValidationError.
-func ObjectMinPropertiesValidationErrorFunc(expected, actual int64) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return ObjectMinPropertiesValidationError(expected, actual)
-	}
-}
-
 // ObjectMaxPropertiesValidationError returns a validation error for maximum properties in object.
 func ObjectMaxPropertiesValidationError(expected, actual int64) *httperror.ValidationError {
 	return &httperror.ValidationError{
@@ -449,13 +310,6 @@ func ObjectMaxPropertiesValidationError(expected, actual int64) *httperror.Valid
 		Detail: "Object must have a maximum properties of " +
 			strconv.FormatInt(expected, 10) + ", but got " +
 			strconv.FormatInt(actual, 10) + " items",
-	}
-}
-
-// ObjectMaxPropertiesValidationErrorFunc returns an ErrorFunc that lazily creates an ObjectMaxPropertiesValidationError.
-func ObjectMaxPropertiesValidationErrorFunc(expected, actual int64) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return ObjectMinPropertiesValidationError(expected, actual)
 	}
 }
 
@@ -468,26 +322,12 @@ func ObjectRequiredPropertyError(name string) *httperror.ValidationError {
 	}
 }
 
-// ObjectRequiredPropertyErrorFunc returns an ErrorFunc that lazily creates an ObjectRequiredPropertyError.
-func ObjectRequiredPropertyErrorFunc(name string) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return ObjectRequiredPropertyError(name)
-	}
-}
-
 // ObjectDependentRequiredError returns a validation error for a missing dependent required property in object.
 func ObjectDependentRequiredError(name string, dependent string) *httperror.ValidationError {
 	return &httperror.ValidationError{
 		Code:    ErrCodeValidationError,
 		Pointer: "/" + dependent,
 		Detail:  "Property '" + dependent + "' is required if '" + name + "' exists in the object",
-	}
-}
-
-// ObjectDependentRequiredErrorFunc returns an ErrorFunc that lazily creates an ObjectDependentRequiredError.
-func ObjectDependentRequiredErrorFunc(name string, dependent string) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return ObjectDependentRequiredError(name, dependent)
 	}
 }
 
@@ -500,24 +340,10 @@ func ParameterRequiredError(name string) *httperror.ValidationError {
 	}
 }
 
-// ParameterRequiredErrorFunc returns an ErrorFunc that lazily creates a ParameterRequiredError.
-func ParameterRequiredErrorFunc(name string) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return ParameterRequiredError(name)
-	}
-}
-
 // ObjectPropertyKeyTypeError returns a validation error for invalid object key error.
 func ObjectPropertyKeyTypeError(actualType string) *httperror.ValidationError {
 	return &httperror.ValidationError{
 		Code:   ErrCodeValidationError,
 		Detail: "Object property key must be string, but got: " + actualType,
-	}
-}
-
-// ObjectPropertyKeyTypeErrorFunc returns an ErrorFunc that lazily creates an ObjectPropertyKeyTypeError.
-func ObjectPropertyKeyTypeErrorFunc(actualType string) ErrorFunc {
-	return func() *httperror.ValidationError {
-		return ObjectPropertyKeyTypeError(actualType)
 	}
 }

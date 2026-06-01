@@ -124,12 +124,9 @@ func decodeHeaderArrayParam(
 		return nil, enrichHeaderErrors(errs, definition.Name)
 	}
 
-	errFuncs := oasvalidator.ValidateValue(definition.Schema, results)
-	if len(errFuncs) > 0 {
-		return nil, oasvalidator.CollectErrorsFunc(errFuncs, func(ve *httperror.ValidationError) {
-			ve.Code = oasvalidator.ErrCodeInvalidHeader
-			ve.Header = definition.Name
-		})
+	errs = oasvalidator.ValidateValue(definition.Schema, results)
+	if len(errs) > 0 {
+		return nil, enrichHeaderErrors(errs, definition.Name)
 	}
 
 	return results, nil

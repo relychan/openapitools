@@ -17,7 +17,6 @@ package parameter
 import (
 	"log/slog"
 	"maps"
-	"slices"
 
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	"github.com/relychan/goutils/httperror"
@@ -114,9 +113,9 @@ func (opd *objectParamDecoder) Decode(schema *base.Schema) []httperror.Validatio
 		}
 	}
 
-	errFuncs := oasvalidator.ValidateObject(schema, opd.Result)
-	if len(errFuncs) > 0 {
-		return oasvalidator.CollectErrors(errFuncs)
+	errs = oasvalidator.ValidateObject(schema, opd.Result)
+	if len(errs) > 0 {
+		return errs
 	}
 
 	return nil
@@ -127,10 +126,7 @@ func (opd *objectParamDecoder) Decode(schema *base.Schema) []httperror.Validatio
 func (opd *objectParamDecoder) decodeProperties(
 	schema *base.Schema,
 ) []httperror.ValidationError {
-	var (
-		parsedKeys = make([]string, 0, len(opd.RawValues))
-		errs       []httperror.ValidationError
-	)
+	var errs []httperror.ValidationError
 
 	if schema.Properties != nil {
 		for iter := schema.Properties.First(); iter != nil; iter = iter.Next() {
@@ -140,8 +136,6 @@ func (opd *objectParamDecoder) decodeProperties(
 			if !ok {
 				continue
 			}
-
-			parsedKeys = append(parsedKeys, key)
 
 			propSchemaProxy := iter.Value()
 			if propSchemaProxy == nil {
@@ -163,12 +157,12 @@ func (opd *objectParamDecoder) decodeProperties(
 		return errs
 	}
 
-	errs = opd.decodeObjectAdditionalProperties(schema, parsedKeys)
+	errs = opd.decodeObjectAdditionalProperties(schema)
 	if len(errs) > 0 {
 		return errs
 	}
 
-	errs = opd.decodeObjectPatternProperties(schema, parsedKeys)
+	errs = opd.decodeObjectPatternProperties(schema)
 	if len(errs) > 0 {
 		return errs
 	}
@@ -190,9 +184,9 @@ func (opd *objectParamDecoder) decodeOrUnionItem(
 	}
 
 	if oaschema.IsSchemaObjectEmpty(aoSchema) {
-		errFuncs := oasvalidator.ValidateObject(aoSchema, opd.Result)
-		if len(errFuncs) > 0 {
-			return oasvalidator.CollectErrors(errFuncs)
+		errs := oasvalidator.ValidateObject(aoSchema, opd.Result)
+		if len(errs) > 0 {
+			return errs
 		}
 
 		return nil
@@ -218,7 +212,6 @@ func (opd *objectParamDecoder) decodeOrUnionItem(
 // matching entries not already present in Result. Regex compile failures are logged and skipped.
 func (opd *objectParamDecoder) decodeObjectPatternProperties(
 	schema *base.Schema,
-	parsedKeys []string,
 ) []httperror.ValidationError {
 	if schema.PatternProperties == nil || schema.PatternProperties.Len() == 0 {
 		return nil
@@ -248,8 +241,11 @@ func (opd *objectParamDecoder) decodeObjectPatternProperties(
 		}
 
 		for key, values := range opd.RawValues {
-			if len(parsedKeys) > 0 && slices.Contains(parsedKeys, key) {
-				continue
+			if schema.Properties != nil {
+				_, present := schema.Properties.Get(key)
+				if present {
+					continue
+				}
 			}
 
 			_, present := opd.Result[key]
@@ -286,7 +282,6 @@ func (opd *objectParamDecoder) decodeObjectPatternProperties(
 // properties. Skips when AdditionalProperties is absent or false.
 func (opd *objectParamDecoder) decodeObjectAdditionalProperties(
 	schema *base.Schema,
-	parsedKeys []string,
 ) []httperror.ValidationError {
 	if schema.AdditionalProperties == nil ||
 		(!schema.AdditionalProperties.B && schema.AdditionalProperties.A == nil) {
@@ -303,8 +298,11 @@ func (opd *objectParamDecoder) decodeObjectAdditionalProperties(
 	}
 
 	for key, rawValues := range opd.RawValues {
-		if len(parsedKeys) > 0 && slices.Contains(parsedKeys, key) {
-			continue
+		if schema.Properties != nil {
+			_, present := schema.Properties.Get(key)
+			if present {
+				continue
+			}
 		}
 
 		_, present := opd.Result[key]

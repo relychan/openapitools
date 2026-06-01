@@ -276,10 +276,7 @@ func (pn *ParameterNode) Decode(schema *base.Schema) (any, []httperror.Validatio
 
 	errFuncs := oasvalidator.ValidateValue(schema, result)
 	if len(errFuncs) > 0 {
-		return nil, oasvalidator.CollectErrorsFunc(errFuncs, func(ve *httperror.ValidationError) {
-			ve.Code = oasvalidator.ErrCodeInvalidQueryParam
-			ve.Parameter = pn.key.String()
-		})
+		return nil, enrichQueryErrors(errs, pn.key.String())
 	}
 
 	return result, nil
@@ -314,12 +311,9 @@ func (pn *ParameterNode) decodeArray(
 		return nil, errs
 	}
 
-	errFuncs := oasvalidator.ValidateValue(schemaDef, results)
-	if len(errFuncs) > 0 {
-		return nil, oasvalidator.CollectErrorsFunc(errFuncs, func(ve *httperror.ValidationError) {
-			ve.Code = oasvalidator.ErrCodeInvalidQueryParam
-			ve.Parameter = pn.key.String()
-		})
+	errs = oasvalidator.ValidateValue(schemaDef, results)
+	if len(errs) > 0 {
+		return nil, enrichQueryErrors(errs, pn.key.String())
 	}
 
 	return results, nil
@@ -432,9 +426,9 @@ func (pn *ParameterNode) decodeObject(
 		}
 	}
 
-	errFuncs := oasvalidator.ValidateObject(schemaDef, results)
-	if len(errFuncs) > 0 {
-		return nil, oasvalidator.CollectErrors(errFuncs)
+	errs = oasvalidator.ValidateObjectWithoutProperties(schemaDef, results)
+	if len(errs) > 0 {
+		return nil, enrichQueryErrors(errs, pn.key.String())
 	}
 
 	return results, nil
@@ -455,9 +449,9 @@ func (pn *ParameterNode) decodeObjectOr(
 	}
 
 	if oaschema.IsSchemaObjectEmpty(aoSchema) {
-		errFuncs := oasvalidator.ValidateObject(aoSchema, results)
-		if len(errFuncs) > 0 {
-			return oasvalidator.CollectErrors(errFuncs)
+		errs := oasvalidator.ValidateObjectWithoutProperties(aoSchema, results)
+		if len(errs) > 0 {
+			return errs
 		}
 
 		return nil

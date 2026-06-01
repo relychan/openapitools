@@ -131,12 +131,9 @@ func decodePathArrayParam(
 		return results, nil
 	}
 
-	errFuncs := oasvalidator.ValidateValue(definition.Schema, results)
-	if len(errFuncs) > 0 {
-		return nil, oasvalidator.CollectErrorsFunc(errFuncs, func(ve *httperror.ValidationError) {
-			ve.Code = oasvalidator.ErrCodeInvalidURLParam
-			ve.Parameter = definition.Name
-		})
+	errs = oasvalidator.ValidateValue(definition.Schema, results)
+	if len(errs) > 0 {
+		return nil, enrichPathParamErrors(errs, definition.Name)
 	}
 
 	return results, nil

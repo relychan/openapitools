@@ -16,6 +16,7 @@ package oasvalidator
 
 import (
 	"cmp"
+	"log/slog"
 	"math"
 	"reflect"
 	"slices"
@@ -27,11 +28,12 @@ import (
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator/regexps"
 	"go.yaml.in/yaml/v4"
 )
 
 // ValidateContains validates the contains rule against an array value.
-func ValidateContains(typeSchema *base.Schema, value []any) ErrorFunc {
+func ValidateContains(typeSchema *base.Schema, value []any) *httperror.ValidationError {
 	if typeSchema == nil || typeSchema.Contains == nil ||
 		((typeSchema.MinContains == nil || *typeSchema.MinContains <= 0) &&
 			(typeSchema.MaxContains == nil)) {
@@ -53,21 +55,683 @@ func ValidateContains(typeSchema *base.Schema, value []any) ErrorFunc {
 	}
 
 	if typeSchema.MinContains != nil && containsCount < *typeSchema.MinContains {
-		return MinContainsErrorFunc(*typeSchema.MinContains, containsCount)
+		return MinContainsError(*typeSchema.MinContains, containsCount)
 	}
 
 	if typeSchema.MaxContains != nil && containsCount > *typeSchema.MaxContains {
-		return MaxContainsErrorFunc(*typeSchema.MinContains, containsCount)
+		return MaxContainsError(*typeSchema.MinContains, containsCount)
 	}
 
 	return nil
 }
 
+// ValidateValueWithSchemaProxy validates a value against an OpenAPI schema proxy.
+func ValidateValueWithSchemaProxy(
+	schemaProxy *base.SchemaProxy,
+	value any,
+) []httperror.ValidationError {
+	if schemaProxy == nil {
+		return nil
+	}
+
+	schema := schemaProxy.Schema()
+	if schema == nil {
+		return nil
+	}
+
+	return ValidateValue(schema, value)
+}
+
 // ValidateValue validates a value against an OpenAPI schema.
-func ValidateValue( //nolint:gocyclo,cyclop,funlen
+func ValidateValue(typeSchema *base.Schema, value any) []httperror.ValidationError {
+	errFuncs := validateValueOnly(typeSchema, value)
+
+	for _, ao := range typeSchema.AllOf {
+		errFns := ValidateValueWithSchemaProxy(ao, value)
+		if len(errFns) > 0 {
+			errFuncs = append(errFuncs, errFns...)
+		}
+	}
+
+	if len(typeSchema.AnyOf) > 0 {
+		var (
+			aoErrFuncs   []httperror.ValidationError
+			isSuccessful bool
+		)
+
+		for _, ao := range typeSchema.AnyOf {
+			errFns := ValidateValueWithSchemaProxy(ao, value)
+			if len(errFns) > 0 {
+				aoErrFuncs = append(aoErrFuncs, errFns...)
+			} else {
+				isSuccessful = true
+			}
+		}
+
+		if !isSuccessful {
+			errFuncs = append(errFuncs, aoErrFuncs...)
+		}
+	}
+
+	if len(typeSchema.OneOf) > 0 {
+		var (
+			ooErrFuncs   []httperror.ValidationError
+			isSuccessful bool
+		)
+
+		for _, oo := range typeSchema.OneOf {
+			errFns := ValidateValueWithSchemaProxy(oo, value)
+			if len(errFns) > 0 {
+				ooErrFuncs = append(ooErrFuncs, errFns...)
+
+				continue
+			}
+
+			isSuccessful = true
+
+			break
+		}
+
+		if !isSuccessful {
+			errFuncs = append(errFuncs, ooErrFuncs...)
+		}
+	}
+
+	return errFuncs
+}
+
+// ValidateBoolean validates a boolean value against an OpenAPI schema.
+func ValidateBoolean(typeSchema *base.Schema, value bool) []httperror.ValidationError {
+	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Boolean) {
+		return []httperror.ValidationError{*InvalidTypeError(typeSchema.Type, oaschema.Boolean)}
+	}
+
+	if !ValidateEnum(typeSchema, value) {
+		return []httperror.ValidationError{
+			*EnumValidationError(typeSchema, strconv.FormatBool(value)),
+		}
+	}
+
+	return nil
+}
+
+// ValidateNullableBoolean validates a nullable boolean value against an OpenAPI schema.
+func ValidateNullableBoolean(typeSchema *base.Schema, value *bool) []httperror.ValidationError {
+	if !CanNull(typeSchema, value == nil) {
+		return []httperror.ValidationError{*NotNullError()}
+	}
+
+	return ValidateBoolean(typeSchema, *value)
+}
+
+// ValidateString validates a string value against an OpenAPI schema.
+func ValidateString(typeSchema *base.Schema, value string) []httperror.ValidationError {
+	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.String) {
+		return []httperror.ValidationError{*InvalidTypeError(typeSchema.Type, oaschema.String)}
+	}
+
+	if !ValidateEnum(typeSchema, value) {
+		return []httperror.ValidationError{
+			*EnumValidationError(typeSchema, value),
+		}
+	}
+
+	valueLength := int64(len(value))
+
+	var errs []httperror.ValidationError
+
+	alError := validateArrayLength(typeSchema, valueLength)
+	if alError != nil {
+		errs = append(errs, *alError)
+	}
+
+	if typeSchema.Pattern == "" {
+		return errs
+	}
+
+	pattern, err := regexp2.Compile(typeSchema.Pattern, regexp2.None)
+	// ignore compile error on runtime.
+	if err != nil {
+		return errs
+	}
+
+	matched, err := pattern.MatchString(value)
+	if err != nil {
+		errs = append(errs, httperror.ValidationError{
+			Code:   ErrCodeValidationError,
+			Detail: "Failed to validate string value against regular expression: " + err.Error(),
+		})
+	} else if !matched {
+		errs = append(errs, *PatternValidationError(typeSchema.Pattern))
+	}
+
+	return errs
+}
+
+// ValidateNullableString validates a nullable string value against an OpenAPI schema.
+func ValidateNullableString(typeSchema *base.Schema, value *string) []httperror.ValidationError {
+	if !CanNull(typeSchema, value == nil) {
+		return []httperror.ValidationError{*NotNullError()}
+	}
+
+	return ValidateString(typeSchema, *value)
+}
+
+// ValidateNumber validates a number value against an OpenAPI schema.
+func ValidateNumber[T float32 | float64](typeSchema *base.Schema, value T) []httperror.ValidationError {
+	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Number) {
+		return []httperror.ValidationError{*InvalidTypeError(typeSchema.Type, oaschema.Number)}
+	}
+
+	val := float64(value)
+
+	if !ValidateEnum(typeSchema, value) {
+		return []httperror.ValidationError{
+			*EnumValidationError(
+				typeSchema,
+				strconv.FormatFloat(val, 'f', -1, 64),
+			),
+		}
+	}
+
+	return validateNumberRules(typeSchema, val)
+}
+
+// ValidateNullableNumber validates a nullable number value against an OpenAPI schema.
+func ValidateNullableNumber[T float32 | float64](typeSchema *base.Schema, value *T) []httperror.ValidationError {
+	if !CanNull(typeSchema, value == nil) {
+		return []httperror.ValidationError{*NotNullError()}
+	}
+
+	return ValidateNumber(typeSchema, *value)
+}
+
+// ValidateInteger validates a number value against an OpenAPI schema.
+func ValidateInteger[T int | int8 | int16 | int32 | int64 | uint | uint8 | uint16 | uint32 | uint64](
+	typeSchema *base.Schema,
+	value T,
+) []httperror.ValidationError {
+	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Integer) {
+		return []httperror.ValidationError{*InvalidTypeError(typeSchema.Type, oaschema.Integer)}
+	}
+
+	if !ValidateEnum(typeSchema, value) {
+		return []httperror.ValidationError{
+			*EnumValidationError(
+				typeSchema,
+				strconv.FormatInt(int64(value), 10),
+			),
+		}
+	}
+
+	return validateNumberRules(typeSchema, float64(value))
+}
+
+// ValidateNullableInteger validates a nullable integer value against an OpenAPI schema.
+func ValidateNullableInteger[T int | int8 | int16 | int32 | int64 | uint | uint8 | uint16 | uint32 | uint64](
+	typeSchema *base.Schema,
+	value *T,
+) []httperror.ValidationError {
+	if !CanNull(typeSchema, value == nil) {
+		return []httperror.ValidationError{*NotNullError()}
+	}
+
+	return ValidateInteger(typeSchema, *value)
+}
+
+// ValidateArray validates an array value against an OpenAPI schema.
+func ValidateArray[T any](
+	typeSchema *base.Schema,
+	value []T,
+	compare func(a T, b T) int,
+) []httperror.ValidationError {
+	if !CanNull(typeSchema, value == nil) {
+		return []httperror.ValidationError{*NotNullError()}
+	}
+
+	valueLength := int64(len(value))
+
+	var errs []httperror.ValidationError
+
+	// array length validations
+	if typeSchema.MaxItems != nil && valueLength > *typeSchema.MaxItems {
+		errs = append(errs, *ArrayMaxItemsValidationError(*typeSchema.MaxItems, valueLength))
+	} else if typeSchema.MinItems != nil && valueLength < *typeSchema.MinItems {
+		errs = append(errs, *ArrayMinItemsValidationError(*typeSchema.MinItems, valueLength))
+	}
+
+	if compare != nil && typeSchema.UniqueItems != nil && *typeSchema.UniqueItems {
+		duplicatedItems := FindDuplicatedItemsFunc(value, compare)
+		if len(duplicatedItems) > 0 {
+			errs = append(errs, *ArrayUniqueItemsValidationError(duplicatedItems))
+		}
+	}
+
+	return errs
+}
+
+// ValidateArrayAndItems validates an array value and its items against an OpenAPI schema.
+func ValidateArrayAndItems[T any](
+	typeSchema *base.Schema,
+	value []T,
+	compare func(a T, b T) int,
+) []httperror.ValidationError {
+	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Array) {
+		return []httperror.ValidationError{*InvalidTypeError(typeSchema.Type, oaschema.Array)}
+	}
+
+	errs := ValidateArray(typeSchema, value, compare)
+
+	if len(value) == 0 || typeSchema.Items == nil ||
+		(typeSchema.Items.IsB() || typeSchema.Items.A == nil) {
+		return errs
+	}
+
+	itemSchema := typeSchema.Items.A.Schema()
+	if oaschema.IsSchemaTypeEmpty(itemSchema) {
+		return errs
+	}
+
+	for i, item := range value {
+		itemErrors := ValidateValue(itemSchema, item)
+		if len(itemErrors) > 0 {
+			errs = slices.Grow(errs, len(itemErrors))
+
+			for j := range itemErrors {
+				itemError := itemErrors[j]
+				itemError.PrependPointer("/" + strconv.Itoa(i))
+
+				errs = append(errs, itemError)
+			}
+		}
+	}
+
+	return errs
+}
+
+// ValidateObject validates an object value against an OpenAPI schema.
+func ValidateObject[T any](typeSchema *base.Schema, value map[string]T) []httperror.ValidationError {
+	errs := ValidateObjectWithoutProperties(typeSchema, value)
+
+	validateProperty := func(schema *base.Schema, prop T, key string) {
+		es := ValidateValue(schema, prop)
+		if len(es) > 0 {
+			errs = slices.Grow(errs, len(es))
+
+			for _, err := range es {
+				err.PrependPointer("/" + key)
+				errs = append(errs, err)
+			}
+		}
+	}
+
+	if typeSchema.Properties != nil && typeSchema.Properties.Len() > 0 {
+		for iter := typeSchema.Properties.First(); iter != nil; iter = iter.Next() {
+			key := iter.Key()
+
+			schemaProxy := iter.Value()
+			if schemaProxy == nil {
+				continue
+			}
+
+			propSchema := schemaProxy.Schema()
+			if propSchema == nil {
+				continue
+			}
+
+			validateProperty(propSchema, value[key], key)
+		}
+	}
+
+	if (typeSchema.AdditionalProperties == nil ||
+		(typeSchema.AdditionalProperties.IsB() && !typeSchema.AdditionalProperties.B)) &&
+		(typeSchema.PatternProperties == nil || typeSchema.PatternProperties.Len() == 0) {
+		return errs
+	}
+
+	if typeSchema.AdditionalProperties != nil && typeSchema.AdditionalProperties.IsA() &&
+		typeSchema.AdditionalProperties.A != nil {
+		propSchema := typeSchema.AdditionalProperties.A.Schema()
+		if propSchema != nil {
+			for key, prop := range value {
+				if typeSchema.Properties != nil {
+					_, present := typeSchema.Properties.Get(key)
+					if present {
+						continue
+					}
+				}
+
+				validateProperty(propSchema, prop, key)
+			}
+		}
+	}
+
+	if typeSchema.PatternProperties != nil && typeSchema.PatternProperties.Len() > 0 {
+		for iter := typeSchema.PatternProperties.First(); iter != nil; iter = iter.Next() {
+			rawPattern := iter.Key()
+
+			pattern, err := regexps.Get(rawPattern)
+			if err != nil {
+				// ignore compile error on runtime.
+				slog.Warn(
+					"failed to compile regular expression: "+err.Error(),
+					slog.String("pattern", rawPattern),
+				)
+
+				continue
+			}
+
+			schemaProxy := iter.Value()
+			if schemaProxy == nil {
+				continue
+			}
+
+			propSchema := schemaProxy.Schema()
+			if propSchema == nil {
+				continue
+			}
+
+			for key, prop := range value {
+				if typeSchema.Properties != nil {
+					_, present := typeSchema.Properties.Get(key)
+					if present {
+						continue
+					}
+				}
+
+				matched, err := pattern.MatchString(key)
+				if err != nil {
+					slog.Warn(
+						"failed to compile pattern property: "+err.Error(),
+						slog.String("pattern", key),
+						slog.String("name", key),
+					)
+
+					continue
+				}
+
+				if !matched {
+					continue
+				}
+
+				validateProperty(propSchema, prop, key)
+			}
+		}
+	}
+
+	return errs
+}
+
+// ValidateObjectWithoutProperties validates an object value against an OpenAPI schema.
+// This function only validates type, properties length and required properties.
+func ValidateObjectWithoutProperties[T any](typeSchema *base.Schema, value map[string]T) []httperror.ValidationError {
+	if !CanNull(typeSchema, value == nil) {
+		return []httperror.ValidationError{*NotNullError()}
+	}
+
+	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Object) {
+		return []httperror.ValidationError{*InvalidTypeError(typeSchema.Type, oaschema.Object)}
+	}
+
+	propertiesLength := int64(len(value))
+
+	var errs []httperror.ValidationError
+
+	propLenErr := validateObjectPropertiesLength(typeSchema, propertiesLength)
+	if propLenErr != nil {
+		errs = []httperror.ValidationError{*propLenErr}
+	}
+
+	for _, requiredKey := range typeSchema.Required {
+		_, present := value[requiredKey]
+		if !present {
+			errs = append(errs, *ObjectRequiredPropertyError(requiredKey))
+		}
+	}
+
+	if typeSchema.DependentRequired != nil {
+		for iter := typeSchema.DependentRequired.First(); iter != nil; iter = iter.Next() {
+			key := iter.Key()
+			dependents := iter.Value()
+
+			for _, dependent := range dependents {
+				_, present := value[dependent]
+				if !present {
+					errs = append(errs, *ObjectDependentRequiredError(key, dependent))
+				}
+			}
+		}
+	}
+
+	return errs
+}
+
+// CanNull checks if a nullable value is allowed by an OpenAPI schema.
+func CanNull(typeSchema *base.Schema, isNull bool) bool {
+	if !isNull || (typeSchema.Nullable != nil && *typeSchema.Nullable) {
+		return true
+	}
+
+	if slices.Contains(typeSchema.Type, oaschema.Null) {
+		return true
+	}
+
+	if len(typeSchema.Enum) > 0 && slices.ContainsFunc(typeSchema.Enum, func(enum *yaml.Node) bool {
+		return enum == nil || enum.Tag == goutils.YAMLNullTag
+	}) {
+		return true
+	}
+
+	return false
+}
+
+// ValidateEnum validates a value against a list of enum.
+func ValidateEnum[T comparable](typeSchema *base.Schema, value T) bool {
+	if typeSchema == nil {
+		return true
+	}
+
+	enums := typeSchema.Enum
+
+	if typeSchema.Const != nil {
+		enums = []*yaml.Node{typeSchema.Const}
+	}
+
+	if len(enums) == 0 {
+		return true
+	}
+
+	str, ok := any(value).(string)
+	if ok {
+		return slices.ContainsFunc(enums, func(enum *yaml.Node) bool {
+			return enum != nil && enum.Value == str
+		})
+	}
+
+	return slices.ContainsFunc(enums, func(enum *yaml.Node) bool {
+		if enum == nil {
+			return false
+		}
+
+		var comparedValue T
+
+		err := enum.Load(&comparedValue)
+		if err != nil {
+			return false
+		}
+
+		return comparedValue == value
+	})
+}
+
+// validateNumberRules checks multipleOf, maximum, and minimum constraints against a float64 value.
+func validateNumberRules(typeSchema *base.Schema, value float64) []httperror.ValidationError { //nolint:cyclop
+	var errs []httperror.ValidationError
+
+	if typeSchema.MultipleOf != nil && *typeSchema.MultipleOf > 0 &&
+		value != 0 &&
+		math.Mod(value, *typeSchema.MultipleOf) != 0 {
+		errs = append(errs, *MultipleOfValidationError(*typeSchema.MultipleOf, value))
+	}
+
+	switch {
+	case typeSchema.ExclusiveMaximum != nil &&
+		typeSchema.ExclusiveMaximum.N == 1 &&
+		value >= typeSchema.ExclusiveMaximum.B:
+		errs = append(errs, *MaximumValidationError(typeSchema.ExclusiveMaximum.B, value, true))
+	case typeSchema.ExclusiveMaximum != nil &&
+		typeSchema.ExclusiveMaximum.A &&
+		typeSchema.Maximum != nil &&
+		value >= *typeSchema.Maximum:
+		errs = append(errs, *MaximumValidationError(*typeSchema.Maximum, value, true))
+	case typeSchema.Maximum != nil && value > *typeSchema.Maximum:
+		errs = append(errs, *MaximumValidationError(*typeSchema.Maximum, value, false))
+	case typeSchema.ExclusiveMinimum != nil &&
+		typeSchema.ExclusiveMinimum.N == 1 &&
+		value <= typeSchema.ExclusiveMinimum.B:
+		errs = append(errs, *MinimumValidationError(typeSchema.ExclusiveMaximum.B, value, true))
+	case typeSchema.ExclusiveMinimum != nil &&
+		typeSchema.ExclusiveMinimum.A &&
+		typeSchema.Minimum != nil &&
+		value <= *typeSchema.Minimum:
+		errs = append(errs, *MinimumValidationError(*typeSchema.Minimum, value, true))
+	case typeSchema.Minimum != nil && value < *typeSchema.Minimum:
+		errs = append(errs, *MinimumValidationError(*typeSchema.Minimum, value, false))
+	default:
+	}
+
+	return errs
+}
+
+// validateArrayLength checks maxItems and minItems constraints against the given length.
+func validateArrayLength(typeSchema *base.Schema, length int64) *httperror.ValidationError {
+	// array length validations
+	if typeSchema.MaxItems != nil && length > *typeSchema.MaxItems {
+		return ArrayMaxItemsValidationError(*typeSchema.MaxItems, length)
+	}
+
+	if typeSchema.MinItems != nil && length < *typeSchema.MinItems {
+		return ArrayMinItemsValidationError(*typeSchema.MinItems, length)
+	}
+
+	return nil
+}
+
+// validateObjectReflection validates a reflect.Map value against an OpenAPI object schema,
+// checking type, property count, required keys, and dependent required keys.
+func validateObjectReflection(typeSchema *base.Schema, reflectValue reflect.Value) []httperror.ValidationError {
+	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Object) {
+		return []httperror.ValidationError{*InvalidTypeError(typeSchema.Type, oaschema.Object)}
+	}
+
+	var (
+		errs []httperror.ValidationError
+		keys []string
+	)
+
+	fieldCount := reflectValue.Len()
+
+	propLenErr := validateObjectPropertiesLength(typeSchema, int64(fieldCount))
+	if propLenErr != nil {
+		errs = []httperror.ValidationError{*propLenErr}
+	}
+
+	if fieldCount > 0 {
+		keys = make([]string, 0, fieldCount)
+
+		for _, reflectKey := range reflectValue.MapKeys() {
+			kind := reflectKey.Kind()
+
+			if kind != reflect.String {
+				errs = append(errs, *ObjectPropertyKeyTypeError(kind.String()))
+
+				return errs
+			}
+
+			keys = append(keys, reflectKey.String())
+		}
+	}
+
+	for _, requiredKey := range typeSchema.Required {
+		if !slices.Contains(keys, requiredKey) {
+			errs = append(errs, *ObjectRequiredPropertyError(requiredKey))
+		}
+	}
+
+	if typeSchema.DependentRequired != nil {
+		for iter := typeSchema.DependentRequired.First(); iter != nil; iter = iter.Next() {
+			key := iter.Key()
+			dependents := iter.Value()
+
+			for _, dependent := range dependents {
+				if !slices.Contains(keys, dependent) {
+					errs = append(errs, *ObjectDependentRequiredError(key, dependent))
+				}
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return errs
+	}
+
+	return nil
+}
+
+// validateObjectPropertiesLength checks maxProperties and minProperties constraints.
+func validateObjectPropertiesLength(typeSchema *base.Schema, propertiesLength int64) *httperror.ValidationError {
+	if typeSchema.MaxProperties != nil && *typeSchema.MaxProperties < propertiesLength {
+		return ObjectMaxPropertiesValidationError(*typeSchema.MaxProperties, propertiesLength)
+	}
+
+	if typeSchema.MinProperties != nil && *typeSchema.MinProperties > propertiesLength {
+		return ObjectMinPropertiesValidationError(*typeSchema.MinProperties, propertiesLength)
+	}
+
+	return nil
+}
+
+// validateValueReflection validates an arbitrary reflect.Value against an OpenAPI schema by
+// unwrapping pointers and dispatching to the appropriate typed validator.
+func validateValueReflection(typeSchema *base.Schema, value reflect.Value) []httperror.ValidationError {
+	reflectValue, notNull := goutils.UnwrapPointerFromReflectValue(value)
+	if !notNull {
+		return nil
+	}
+
+	valueKind := reflectValue.Kind()
+
+	switch valueKind {
+	case reflect.Bool:
+		return ValidateBoolean(typeSchema, reflectValue.Bool())
+	case reflect.String:
+		return ValidateString(typeSchema, reflectValue.String())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return ValidateInteger(typeSchema, reflectValue.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return ValidateInteger(typeSchema, reflectValue.Uint())
+	case reflect.Float32, reflect.Float64:
+		return ValidateNumber(typeSchema, reflectValue.Float())
+	case reflect.Slice, reflect.Array:
+		valueLength := reflectValue.Len()
+
+		alError := validateArrayLength(typeSchema, int64(valueLength))
+		if alError != nil {
+			return []httperror.ValidationError{*alError}
+		}
+
+		return nil
+	case reflect.Map:
+		return validateObjectReflection(typeSchema, reflectValue)
+	default:
+		return nil
+	}
+}
+
+func validateValueOnly( //nolint:gocyclo,cyclop,funlen
 	typeSchema *base.Schema,
 	value any,
-) []ErrorFunc {
+) []httperror.ValidationError {
 	switch val := value.(type) {
 	case bool:
 		return ValidateBoolean(typeSchema, val)
@@ -75,11 +739,11 @@ func ValidateValue( //nolint:gocyclo,cyclop,funlen
 		return ValidateNullableBoolean(typeSchema, val)
 	case []byte:
 		if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.String) {
-			return []ErrorFunc{InvalidTypeErrorFunc(typeSchema.Type, oaschema.String)}
+			return []httperror.ValidationError{*InvalidTypeError(typeSchema.Type, oaschema.String)}
 		}
 
 		if (typeSchema.Nullable == nil || !*typeSchema.Nullable) && val == nil {
-			return []ErrorFunc{NotNullError}
+			return []httperror.ValidationError{*NotNullError()}
 		}
 
 		return nil
@@ -197,489 +861,5 @@ func ValidateValue( //nolint:gocyclo,cyclop,funlen
 		return ValidateObject(typeSchema, val)
 	default:
 		return validateValueReflection(typeSchema, reflect.ValueOf(value))
-	}
-}
-
-// ValidateBoolean validates a boolean value against an OpenAPI schema.
-func ValidateBoolean(typeSchema *base.Schema, value bool) []ErrorFunc {
-	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Boolean) {
-		return []ErrorFunc{InvalidTypeErrorFunc(typeSchema.Type, oaschema.Boolean)}
-	}
-
-	if !ValidateEnum(typeSchema, value) {
-		return []ErrorFunc{
-			EnumValidationErrorFunc(typeSchema, strconv.FormatBool(value)),
-		}
-	}
-
-	return nil
-}
-
-// ValidateNullableBoolean validates a nullable boolean value against an OpenAPI schema.
-func ValidateNullableBoolean(typeSchema *base.Schema, value *bool) []ErrorFunc {
-	if !CanNull(typeSchema, value == nil) {
-		return []ErrorFunc{NotNullError}
-	}
-
-	return ValidateBoolean(typeSchema, *value)
-}
-
-// ValidateString validates a string value against an OpenAPI schema.
-func ValidateString(typeSchema *base.Schema, value string) []ErrorFunc {
-	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.String) {
-		return []ErrorFunc{InvalidTypeErrorFunc(typeSchema.Type, oaschema.String)}
-	}
-
-	if !ValidateEnum(typeSchema, value) {
-		return []ErrorFunc{
-			EnumValidationErrorFunc(typeSchema, value),
-		}
-	}
-
-	valueLength := int64(len(value))
-
-	var errs []ErrorFunc
-
-	alError := validateArrayLength(typeSchema, valueLength)
-	if alError != nil {
-		errs = append(errs, alError)
-	}
-
-	if typeSchema.Pattern == "" {
-		return errs
-	}
-
-	pattern, err := regexp2.Compile(typeSchema.Pattern, regexp2.None)
-	// ignore compile error on runtime.
-	if err != nil {
-		return errs
-	}
-
-	matched, err := pattern.MatchString(value)
-	if err != nil {
-		errs = append(errs, func() *httperror.ValidationError {
-			return &httperror.ValidationError{
-				Code:   ErrCodeValidationError,
-				Detail: "Failed to validate string value against regular expression: " + err.Error(),
-			}
-		})
-	} else if !matched {
-		errs = append(errs, PatternValidationErrorFunc(typeSchema.Pattern))
-	}
-
-	return errs
-}
-
-// ValidateNullableString validates a nullable string value against an OpenAPI schema.
-func ValidateNullableString(typeSchema *base.Schema, value *string) []ErrorFunc {
-	if !CanNull(typeSchema, value == nil) {
-		return []ErrorFunc{NotNullError}
-	}
-
-	return ValidateString(typeSchema, *value)
-}
-
-// ValidateNumber validates a number value against an OpenAPI schema.
-func ValidateNumber[T float32 | float64](typeSchema *base.Schema, value T) []ErrorFunc {
-	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Number) {
-		return []ErrorFunc{InvalidTypeErrorFunc(typeSchema.Type, oaschema.Number)}
-	}
-
-	val := float64(value)
-
-	if !ValidateEnum(typeSchema, value) {
-		return []ErrorFunc{
-			EnumValidationErrorFunc(
-				typeSchema,
-				strconv.FormatFloat(val, 'f', -1, 64),
-			),
-		}
-	}
-
-	return validateNumberRules(typeSchema, val)
-}
-
-// ValidateNullableNumber validates a nullable number value against an OpenAPI schema.
-func ValidateNullableNumber[T float32 | float64](typeSchema *base.Schema, value *T) []ErrorFunc {
-	if !CanNull(typeSchema, value == nil) {
-		return []ErrorFunc{NotNullError}
-	}
-
-	return ValidateNumber(typeSchema, *value)
-}
-
-// ValidateInteger validates a number value against an OpenAPI schema.
-func ValidateInteger[T int | int8 | int16 | int32 | int64 | uint | uint8 | uint16 | uint32 | uint64](
-	typeSchema *base.Schema,
-	value T,
-) []ErrorFunc {
-	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Integer) {
-		return []ErrorFunc{InvalidTypeErrorFunc(typeSchema.Type, oaschema.Integer)}
-	}
-
-	if !ValidateEnum(typeSchema, value) {
-		return []ErrorFunc{
-			EnumValidationErrorFunc(
-				typeSchema,
-				strconv.FormatInt(int64(value), 10),
-			),
-		}
-	}
-
-	return validateNumberRules(typeSchema, float64(value))
-}
-
-// ValidateNullableInteger validates a nullable integer value against an OpenAPI schema.
-func ValidateNullableInteger[T int | int8 | int16 | int32 | int64 | uint | uint8 | uint16 | uint32 | uint64](
-	typeSchema *base.Schema,
-	value *T,
-) []ErrorFunc {
-	if !CanNull(typeSchema, value == nil) {
-		return []ErrorFunc{NotNullError}
-	}
-
-	return ValidateInteger(typeSchema, *value)
-}
-
-// ValidateArray validates an array value against an OpenAPI schema.
-func ValidateArray[T any](
-	typeSchema *base.Schema,
-	value []T,
-	compare func(a T, b T) int,
-) []ErrorFunc {
-	if !CanNull(typeSchema, value == nil) {
-		return []ErrorFunc{NotNullError}
-	}
-
-	valueLength := int64(len(value))
-
-	var errs []ErrorFunc
-
-	// array length validations
-	if typeSchema.MaxItems != nil && valueLength > *typeSchema.MaxItems {
-		errs = append(errs, ArrayMaxItemsValidationErrorFunc(*typeSchema.MaxItems, valueLength))
-	} else if typeSchema.MinItems != nil && valueLength < *typeSchema.MinItems {
-		errs = append(errs, ArrayMinItemsValidationErrorFunc(*typeSchema.MinItems, valueLength))
-	}
-
-	if compare != nil && typeSchema.UniqueItems != nil && *typeSchema.UniqueItems {
-		duplicatedItems := FindDuplicatedItemsFunc(value, compare)
-		if len(duplicatedItems) > 0 {
-			errs = append(errs, ArrayUniqueItemsValidationErrorFunc(duplicatedItems))
-		}
-	}
-
-	return errs
-}
-
-// ValidateArrayAndItems validates an array value and its items against an OpenAPI schema.
-func ValidateArrayAndItems[T any](
-	typeSchema *base.Schema,
-	value []T,
-	compare func(a T, b T) int,
-) []ErrorFunc {
-	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Array) {
-		return []ErrorFunc{InvalidTypeErrorFunc(typeSchema.Type, oaschema.Array)}
-	}
-
-	errs := ValidateArray(typeSchema, value, compare)
-
-	if len(value) == 0 || typeSchema.Items == nil ||
-		(typeSchema.Items.IsB() || typeSchema.Items.A == nil) {
-		return errs
-	}
-
-	itemSchema := typeSchema.Items.A.Schema()
-	if oaschema.IsSchemaTypeEmpty(itemSchema) {
-		return errs
-	}
-
-	for i, item := range value {
-		itemErrors := ValidateValue(itemSchema, item)
-		if len(itemErrors) > 0 {
-			errs = slices.Grow(errs, len(itemErrors))
-
-			for j := range itemErrors {
-				itemError := itemErrors[j]
-
-				errs = append(errs, func() *httperror.ValidationError {
-					result := itemError()
-					if result.Pointer == "" {
-						result.Pointer = "/" + strconv.Itoa(i)
-					} else {
-						result.Pointer = "/" + strconv.Itoa(i) + result.Pointer
-					}
-
-					return result
-				})
-			}
-		}
-	}
-
-	return errs
-}
-
-// ValidateObject validates an object value against an OpenAPI schema.
-func ValidateObject[T any](typeSchema *base.Schema, value map[string]T) []ErrorFunc {
-	if !CanNull(typeSchema, value == nil) {
-		return []ErrorFunc{NotNullError}
-	}
-
-	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Object) {
-		return []ErrorFunc{InvalidTypeErrorFunc(typeSchema.Type, oaschema.Object)}
-	}
-
-	propertiesLength := int64(len(value))
-
-	var errs []ErrorFunc
-
-	propLenErr := validateObjectPropertiesLength(typeSchema, propertiesLength)
-	if propLenErr != nil {
-		errs = []ErrorFunc{propLenErr}
-	}
-
-	for _, requiredKey := range typeSchema.Required {
-		_, present := value[requiredKey]
-		if !present {
-			errs = append(errs, ObjectRequiredPropertyErrorFunc(requiredKey))
-		}
-	}
-
-	if typeSchema.DependentRequired != nil {
-		for iter := typeSchema.DependentRequired.First(); iter != nil; iter = iter.Next() {
-			key := iter.Key()
-			dependents := iter.Value()
-
-			for _, dependent := range dependents {
-				_, present := value[dependent]
-				if !present {
-					errs = append(errs, ObjectDependentRequiredErrorFunc(key, dependent))
-				}
-			}
-		}
-	}
-
-	return errs
-}
-
-// CanNull checks if a nullable value is allowed by an OpenAPI schema.
-func CanNull(typeSchema *base.Schema, isNull bool) bool {
-	if !isNull || (typeSchema.Nullable != nil && *typeSchema.Nullable) {
-		return true
-	}
-
-	if slices.Contains(typeSchema.Type, oaschema.Null) {
-		return true
-	}
-
-	if len(typeSchema.Enum) > 0 && slices.ContainsFunc(typeSchema.Enum, func(enum *yaml.Node) bool {
-		return enum == nil || enum.Tag == goutils.YAMLNullTag
-	}) {
-		return true
-	}
-
-	return false
-}
-
-// ValidateEnum validates a value against a list of enum.
-func ValidateEnum[T comparable](typeSchema *base.Schema, value T) bool {
-	if typeSchema == nil {
-		return true
-	}
-
-	enums := typeSchema.Enum
-
-	if typeSchema.Const != nil {
-		enums = []*yaml.Node{typeSchema.Const}
-	}
-
-	if len(enums) == 0 {
-		return true
-	}
-
-	str, ok := any(value).(string)
-	if ok {
-		return slices.ContainsFunc(enums, func(enum *yaml.Node) bool {
-			return enum != nil && enum.Value == str
-		})
-	}
-
-	return slices.ContainsFunc(enums, func(enum *yaml.Node) bool {
-		if enum == nil {
-			return false
-		}
-
-		var comparedValue T
-
-		err := enum.Load(&comparedValue)
-		if err != nil {
-			return false
-		}
-
-		return comparedValue == value
-	})
-}
-
-// validateNumberRules checks multipleOf, maximum, and minimum constraints against a float64 value.
-func validateNumberRules(typeSchema *base.Schema, value float64) []ErrorFunc { //nolint:cyclop
-	var errs []ErrorFunc
-
-	if typeSchema.MultipleOf != nil && *typeSchema.MultipleOf > 0 &&
-		value != 0 &&
-		math.Mod(value, *typeSchema.MultipleOf) != 0 {
-		errs = append(errs, MultipleOfValidationErrorFunc(*typeSchema.MultipleOf, value))
-	}
-
-	switch {
-	case typeSchema.ExclusiveMaximum != nil &&
-		typeSchema.ExclusiveMaximum.N == 1 &&
-		value >= typeSchema.ExclusiveMaximum.B:
-		errs = append(errs, MaximumValidationErrorFunc(typeSchema.ExclusiveMaximum.B, value, true))
-	case typeSchema.ExclusiveMaximum != nil &&
-		typeSchema.ExclusiveMaximum.A &&
-		typeSchema.Maximum != nil &&
-		value >= *typeSchema.Maximum:
-		errs = append(errs, MaximumValidationErrorFunc(*typeSchema.Maximum, value, true))
-	case typeSchema.Maximum != nil && value > *typeSchema.Maximum:
-		errs = append(errs, MaximumValidationErrorFunc(*typeSchema.Maximum, value, false))
-	case typeSchema.ExclusiveMinimum != nil &&
-		typeSchema.ExclusiveMinimum.N == 1 &&
-		value <= typeSchema.ExclusiveMinimum.B:
-		errs = append(errs, MinimumValidationErrorFunc(typeSchema.ExclusiveMaximum.B, value, true))
-	case typeSchema.ExclusiveMinimum != nil &&
-		typeSchema.ExclusiveMinimum.A &&
-		typeSchema.Minimum != nil &&
-		value <= *typeSchema.Minimum:
-		errs = append(errs, MinimumValidationErrorFunc(*typeSchema.Minimum, value, true))
-	case typeSchema.Minimum != nil && value < *typeSchema.Minimum:
-		errs = append(errs, MinimumValidationErrorFunc(*typeSchema.Minimum, value, false))
-	default:
-	}
-
-	return errs
-}
-
-// validateArrayLength checks maxItems and minItems constraints against the given length.
-func validateArrayLength(typeSchema *base.Schema, length int64) ErrorFunc {
-	// array length validations
-	if typeSchema.MaxItems != nil && length > *typeSchema.MaxItems {
-		return ArrayMaxItemsValidationErrorFunc(*typeSchema.MaxItems, length)
-	}
-
-	if typeSchema.MinItems != nil && length < *typeSchema.MinItems {
-		return ArrayMinItemsValidationErrorFunc(*typeSchema.MinItems, length)
-	}
-
-	return nil
-}
-
-// validateObjectReflection validates a reflect.Map value against an OpenAPI object schema,
-// checking type, property count, required keys, and dependent required keys.
-func validateObjectReflection(typeSchema *base.Schema, reflectValue reflect.Value) []ErrorFunc {
-	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Object) {
-		return []ErrorFunc{InvalidTypeErrorFunc(typeSchema.Type, oaschema.Object)}
-	}
-
-	var (
-		errs []ErrorFunc
-		keys []string
-	)
-
-	fieldCount := reflectValue.Len()
-
-	propLenErr := validateObjectPropertiesLength(typeSchema, int64(fieldCount))
-	if propLenErr != nil {
-		errs = []ErrorFunc{propLenErr}
-	}
-
-	if fieldCount > 0 {
-		keys = make([]string, 0, fieldCount)
-
-		for _, reflectKey := range reflectValue.MapKeys() {
-			kind := reflectKey.Kind()
-
-			if kind != reflect.String {
-				errs = append(errs, ObjectPropertyKeyTypeErrorFunc(kind.String()))
-
-				return errs
-			}
-
-			keys = append(keys, reflectKey.String())
-		}
-	}
-
-	for _, requiredKey := range typeSchema.Required {
-		if !slices.Contains(keys, requiredKey) {
-			errs = append(errs, ObjectRequiredPropertyErrorFunc(requiredKey))
-		}
-	}
-
-	if typeSchema.DependentRequired != nil {
-		for iter := typeSchema.DependentRequired.First(); iter != nil; iter = iter.Next() {
-			key := iter.Key()
-			dependents := iter.Value()
-
-			for _, dependent := range dependents {
-				if !slices.Contains(keys, dependent) {
-					errs = append(errs, ObjectDependentRequiredErrorFunc(key, dependent))
-				}
-			}
-		}
-	}
-
-	if len(errs) > 0 {
-		return errs
-	}
-
-	return nil
-}
-
-// validateObjectPropertiesLength checks maxProperties and minProperties constraints.
-func validateObjectPropertiesLength(typeSchema *base.Schema, propertiesLength int64) ErrorFunc {
-	if typeSchema.MaxProperties != nil && *typeSchema.MaxProperties < propertiesLength {
-		return ObjectMaxPropertiesValidationErrorFunc(*typeSchema.MaxProperties, propertiesLength)
-	}
-
-	if typeSchema.MinProperties != nil && *typeSchema.MinProperties > propertiesLength {
-		return ObjectMinPropertiesValidationErrorFunc(*typeSchema.MinProperties, propertiesLength)
-	}
-
-	return nil
-}
-
-// validateValueReflection validates an arbitrary reflect.Value against an OpenAPI schema by
-// unwrapping pointers and dispatching to the appropriate typed validator.
-func validateValueReflection(typeSchema *base.Schema, value reflect.Value) []ErrorFunc {
-	reflectValue, notNull := goutils.UnwrapPointerFromReflectValue(value)
-	if !notNull {
-		return nil
-	}
-
-	valueKind := reflectValue.Kind()
-
-	switch valueKind {
-	case reflect.Bool:
-		return ValidateBoolean(typeSchema, reflectValue.Bool())
-	case reflect.String:
-		return ValidateString(typeSchema, reflectValue.String())
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return ValidateInteger(typeSchema, reflectValue.Int())
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return ValidateInteger(typeSchema, reflectValue.Uint())
-	case reflect.Float32, reflect.Float64:
-		return ValidateNumber(typeSchema, reflectValue.Float())
-	case reflect.Slice, reflect.Array:
-		valueLength := reflectValue.Len()
-
-		alError := validateArrayLength(typeSchema, int64(valueLength))
-		if alError != nil {
-			return []ErrorFunc{alError}
-		}
-
-		return nil
-	case reflect.Map:
-		return validateObjectReflection(typeSchema, reflectValue)
-	default:
-		return nil
 	}
 }

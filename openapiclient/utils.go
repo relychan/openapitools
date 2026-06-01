@@ -149,15 +149,14 @@ func validateRequestBody(requestBody *oaschema.RequestBody, body any) *httperror
 	}
 
 	if requestBody.Schema != nil {
-		errFuncs := oasvalidator.ValidateValue(
+		errs := oasvalidator.ValidateValue(
 			requestBody.Schema,
 			body,
 		)
-
-		if len(errFuncs) > 0 {
-			errs := oasvalidator.CollectErrorsFunc(errFuncs, func(ve *httperror.ValidationError) {
-				ve.Code = oasvalidator.ErrCodeRequestBodyError
-			})
+		if len(errs) > 0 {
+			for i := range errs {
+				errs[i].Code = oasvalidator.ErrCodeRequestBodyError
+			}
 
 			return httperror.NewBadRequestError(errs...)
 		}
