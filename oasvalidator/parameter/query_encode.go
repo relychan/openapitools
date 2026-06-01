@@ -47,6 +47,7 @@ func SetQueryParam(params url.Values, definition *oaschema.Parameter, value any)
 	qre.Set(queryParams)
 }
 
+// Set dispatches to the appropriate encoding strategy based on the resolved style and explode flag.
 func (qre *queryParamSetter) Set(params ParameterItems) {
 	if len(params) == 0 {
 		return
@@ -113,12 +114,14 @@ func (qre *queryParamSetter) setParamDelimitedStyleNonExplode(
 }
 
 // simple non-nested objects are serialized as paramName[prop1]=value1&paramName[prop2]=value2&...
+// setParamDeepObjects encodes each item using deep-object bracket notation.
 func (qre *queryParamSetter) setParamDeepObjects(params ParameterItems) {
 	for _, param := range params {
 		qre.setParamDeepObject(param)
 	}
 }
 
+// setParamDeepObject encodes a single item into bracket-notation query key, e.g. user[name]=Alex.
 func (qre *queryParamSetter) setParamDeepObject(param ParameterItem) {
 	if len(param.keys) == 0 {
 		// The parameter does not have nested object. Encode with the simple form format.

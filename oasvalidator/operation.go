@@ -21,6 +21,8 @@ import (
 	"github.com/relychan/openapitools/oaschema"
 )
 
+// ValidateOperation validates an OpenAPI operation, resolves component references, and returns
+// a normalized oaschema.Operation with validated parameters and request body schema.
 func ValidateOperation(
 	document *highv3.Document,
 	operation *highv3.Operation,
@@ -93,6 +95,8 @@ func ValidateOperation(
 	return result, nil
 }
 
+// applyOperationReference resolves $ref pointers on the operation's request body and responses
+// by merging fields from the matching component definitions.
 func applyOperationReference(document *highv3.Document, operation *highv3.Operation) {
 	if document == nil {
 		return
@@ -123,6 +127,8 @@ func applyOperationReference(document *highv3.Document, operation *highv3.Operat
 	}
 }
 
+// applyRequestBodyReference resolves a $ref on the operation's request body, replacing or
+// merging fields from the matching component request body.
 func applyRequestBodyReference(document *highv3.Document, operation *highv3.Operation) {
 	if operation.RequestBody == nil || operation.RequestBody.Reference == "" ||
 		document.Components == nil || document.Components.RequestBodies == nil ||
@@ -165,6 +171,8 @@ func applyRequestBodyReference(document *highv3.Document, operation *highv3.Oper
 	)
 }
 
+// applyResponseReference resolves a $ref on a response object, replacing or merging fields
+// from the matching component response.
 func applyResponseReference(document *highv3.Document, response *highv3.Response) *highv3.Response {
 	if response.Reference == "" {
 		return response
@@ -216,6 +224,8 @@ func applyResponseReference(document *highv3.Document, response *highv3.Response
 	return response
 }
 
+// getRequestBodyContentSchema returns the preferred content type and media type for the request body,
+// preferring application/json when multiple content types are declared.
 func getRequestBodyContentSchema(operation *highv3.Operation) (string, *highv3.MediaType) {
 	contents := operation.RequestBody.Content
 

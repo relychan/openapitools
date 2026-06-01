@@ -23,6 +23,7 @@ import (
 	"github.com/samber/lo"
 )
 
+// ValidateSchemaProxy dereferences a SchemaProxy and validates the resulting schema.
 func ValidateSchemaProxy(proxy *base.SchemaProxy) (*base.Schema, []httperror.ValidationError) {
 	if proxy == nil {
 		return nil, nil
@@ -33,6 +34,8 @@ func ValidateSchemaProxy(proxy *base.SchemaProxy) (*base.Schema, []httperror.Val
 	return schema, ValidateSchema(schema)
 }
 
+// ValidateSchema normalizes types and nullability, flattens allOf into the schema, and validates
+// type consistency across anyOf/oneOf union branches.
 func ValidateSchema(schema *base.Schema) []httperror.ValidationError {
 	if schema == nil {
 		return nil
@@ -82,6 +85,8 @@ func ValidateSchema(schema *base.Schema) []httperror.ValidationError {
 	return nil
 }
 
+// validateAllOfSchema merges every allOf sub-schema into schema in-place, reconciling types,
+// constraints, and properties, then clears schema.AllOf.
 func validateAllOfSchema( //nolint:gocognit,gocyclo,cyclop,funlen,maintidx
 	schema *base.Schema,
 ) []httperror.ValidationError {
@@ -291,6 +296,8 @@ func validateAllOfSchema( //nolint:gocognit,gocyclo,cyclop,funlen,maintidx
 	return nil
 }
 
+// mergeDynamicValue merges two DynamicValue fields, preferring a non-nil schema (A side) over
+// a boolean (B side) and preserving dest when src adds nothing new.
 func mergeDynamicValue(
 	dest, src *base.DynamicValue[*base.SchemaProxy, bool],
 ) *base.DynamicValue[*base.SchemaProxy, bool] {
@@ -317,6 +324,8 @@ func mergeDynamicValue(
 	return dest
 }
 
+// evaluateSchemaMaximum normalizes the maximum/exclusiveMaximum pair: removes redundant constraints
+// so that only the stricter bound remains.
 func evaluateSchemaMaximum(schema *base.Schema) {
 	if schema.ExclusiveMaximum != nil && schema.ExclusiveMaximum.IsA() &&
 		!schema.ExclusiveMaximum.A {
@@ -342,6 +351,7 @@ func evaluateSchemaMaximum(schema *base.Schema) {
 	}
 }
 
+// mergeSchemaMaximum returns the stricter (lower) of two optional upper bounds.
 func mergeSchemaMaximum[T int64 | float64](dest, src *T) *T {
 	if src == nil {
 		return dest
@@ -354,6 +364,8 @@ func mergeSchemaMaximum[T int64 | float64](dest, src *T) *T {
 	return dest
 }
 
+// mergeSchemaExclusiveMaximum merges the exclusiveMaximum from src into dest, keeping the
+// stricter constraint and removing the weaker counterpart (maximum vs. exclusiveMaximum).
 func mergeSchemaExclusiveMaximum(dest, src *base.Schema) { //nolint:dupl
 	if src.ExclusiveMaximum == nil {
 		return
@@ -406,6 +418,8 @@ func mergeSchemaExclusiveMaximum(dest, src *base.Schema) { //nolint:dupl
 	}
 }
 
+// evaluateSchemaMinimum normalizes the minimum/exclusiveMinimum pair: removes redundant constraints
+// so that only the stricter bound remains.
 func evaluateSchemaMinimum(schema *base.Schema) {
 	if schema.ExclusiveMinimum != nil && schema.ExclusiveMinimum.IsA() &&
 		!schema.ExclusiveMinimum.A {
@@ -431,6 +445,7 @@ func evaluateSchemaMinimum(schema *base.Schema) {
 	}
 }
 
+// mergeSchemaMinimum returns the stricter (higher) of two optional lower bounds.
 func mergeSchemaMinimum[T int64 | float64](dest, src *T) *T {
 	if src == nil {
 		return dest
@@ -443,6 +458,8 @@ func mergeSchemaMinimum[T int64 | float64](dest, src *T) *T {
 	return dest
 }
 
+// mergeSchemaExclusiveMinimum merges the exclusiveMinimum from src into dest, keeping the
+// stricter constraint and removing the weaker counterpart (minimum vs. exclusiveMinimum).
 func mergeSchemaExclusiveMinimum(dest, src *base.Schema) { //nolint:dupl
 	if src.ExclusiveMinimum == nil {
 		return
@@ -495,6 +512,7 @@ func mergeSchemaExclusiveMinimum(dest, src *base.Schema) { //nolint:dupl
 	}
 }
 
+// validateAllOfOrAnyOf validates each schema proxy and collects the union of declared types across all branches.
 func validateAllOfOrAnyOf(proxies []*base.SchemaProxy) ([]string, []httperror.ValidationError) {
 	var unionTypes []string
 
@@ -524,6 +542,8 @@ func validateAllOfOrAnyOf(proxies []*base.SchemaProxy) ([]string, []httperror.Va
 	return unionTypes, nil
 }
 
+// validateIntersectedTypes returns the intersection of types and srcTypes, or an error if the
+// intersection is empty (incompatible types across an allOf/anyOf/oneOf boundary).
 func validateIntersectedTypes(
 	types, srcTypes []string,
 	errorType string,

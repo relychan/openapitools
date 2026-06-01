@@ -112,6 +112,7 @@ func DecodeHeaderParameter(
 	return result, nil
 }
 
+// decodeHeaderArrayParam splits comma-joined header values and decodes the resulting array.
 func decodeHeaderArrayParam(
 	definition *oaschema.Parameter,
 	rawValues []string,
@@ -134,6 +135,8 @@ func decodeHeaderArrayParam(
 	return results, nil
 }
 
+// decodeHeaderObjectParam splits header values and decodes them as an object, handling
+// exploded (key=value,key=value) and non-exploded (key,value,key,value) forms.
 func decodeHeaderObjectParam(
 	definition *oaschema.Parameter,
 	rawValues []string,
@@ -159,6 +162,8 @@ func decodeHeaderObjectParam(
 	return decoder.Result, nil
 }
 
+// parseHeaderArrayParam splits comma-joined values in rawValues into individual items.
+// Returns rawValues unchanged when no commas are present, avoiding an allocation.
 func parseHeaderArrayParam(rawValues []string) []string {
 	valueCount := 0
 
@@ -231,6 +236,7 @@ func splitObjectFromHeaderValues(
 	return values, nil
 }
 
+// enrichHeaderErrors stamps each error with the header error code and the header name.
 func enrichHeaderErrors(errs []httperror.ValidationError, name string) []httperror.ValidationError {
 	for i := range errs {
 		errs[i].Code = oasvalidator.ErrCodeInvalidHeader

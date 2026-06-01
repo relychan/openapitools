@@ -203,6 +203,8 @@ func (pd *paramDecoder) decodeFromSchemaType(
 	}
 }
 
+// decodeArrayParam decodes raw string values into a typed []any guided by the array schema.
+// Falls back to []any of raw strings when schema items are absent or untyped.
 func decodeArrayParam(
 	rawValues []string,
 	schema *base.Schema,
@@ -219,6 +221,8 @@ func decodeArrayParam(
 	return decodeArrayParamWithItemSchema(rawValues, itemSchema)
 }
 
+// decodeArrayParamWithItemSchema decodes each raw value against itemSchema, accumulating
+// pointer-annotated errors so the caller can locate the failing array element.
 func decodeArrayParamWithItemSchema(
 	rawValues []string,
 	itemSchema *base.Schema,

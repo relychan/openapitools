@@ -121,6 +121,7 @@ func DecodePathValue(
 	return result, nil
 }
 
+// decodePathArrayParam decodes pre-split raw path values as an array and validates against schema.
 func decodePathArrayParam(
 	definition *oaschema.Parameter,
 	rawValues []string,
@@ -141,6 +142,7 @@ func decodePathArrayParam(
 	return results, nil
 }
 
+// decodePathObjectParam parses the raw path segment into a key→value map and decodes it as an object.
 func decodePathObjectParam(
 	definition *oaschema.Parameter,
 	rawValue string,
@@ -162,6 +164,8 @@ func decodePathObjectParam(
 	return decoder.Result, nil
 }
 
+// trimPathValueByStyle strips the style-specific prefix character ("." for label, ";" for matrix)
+// and returns an error when the prefix is missing.
 func trimPathValueByStyle(
 	name string,
 	rawValue string,
@@ -340,6 +344,7 @@ func parsePathObjectParam(
 	}
 }
 
+// newInvalidPathObjectError wraps newInvalidPathObjectErrorMessage in a ValidationError.
 func newInvalidPathObjectError(
 	name string,
 	style oaschema.ParameterEncodingStyle,
@@ -352,6 +357,8 @@ func newInvalidPathObjectError(
 	}
 }
 
+// newInvalidPathObjectErrorMessage returns a style- and explode-specific human-readable message
+// describing the expected path object serialization format.
 func newInvalidPathObjectErrorMessage(style oaschema.ParameterEncodingStyle, explode bool) string {
 	switch style {
 	case oaschema.EncodingStyleLabel:
@@ -375,6 +382,7 @@ func newInvalidPathObjectErrorMessage(style oaschema.ParameterEncodingStyle, exp
 	}
 }
 
+// enrichPathParamErrors stamps each error with the URL param error code and the parameter name.
 func enrichPathParamErrors(
 	errs []httperror.ValidationError,
 	name string,

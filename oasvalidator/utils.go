@@ -137,6 +137,7 @@ func FindDuplicatedItemsFunc[S ~[]E, E any](values S, compare func(a E, b E) int
 	return results
 }
 
+// CompareNullable compares two optional ordered values. nil sorts before any non-nil value.
 func CompareNullable[E cmp.Ordered](a *E, b *E) int {
 	if a == nil && b == nil {
 		return 0
@@ -153,6 +154,7 @@ func CompareNullable[E cmp.Ordered](a *E, b *E) int {
 	return cmp.Compare(*a, *b)
 }
 
+// CompareBoolean compares two boolean values, treating true as greater than false.
 func CompareBoolean(a bool, b bool) int {
 	if a == b {
 		return 0
@@ -165,6 +167,7 @@ func CompareBoolean(a bool, b bool) int {
 	return -1
 }
 
+// CompareNullableBoolean compares two optional booleans. nil sorts before false, false before true.
 func CompareNullableBoolean(a *bool, b *bool) int {
 	if (a == nil && b == nil) || a == b {
 		return 0

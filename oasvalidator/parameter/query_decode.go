@@ -84,6 +84,8 @@ func DecodeQueryFromParameters(
 	return results, nil
 }
 
+// decodeQueryFromParameter decodes a single query parameter using its style, explode setting,
+// and schema type; tries object, array, and scalar strategies in that order.
 func decodeQueryFromParameter(
 	definition *oaschema.Parameter,
 	values map[string][]string,
@@ -199,6 +201,7 @@ func decodeQueryFromParameter(
 	return result, true, nil
 }
 
+// decodeQueryArrayParam splits non-exploded values then decodes and validates the array.
 func decodeQueryArrayParam(
 	definition *oaschema.Parameter,
 	rawValues []string,
@@ -225,6 +228,8 @@ func decodeQueryArrayParam(
 	return results, nil
 }
 
+// decodeQueryObjectNonExplodeParam handles non-exploded object query params by splitting on
+// the style separator and parsing alternating key/value pairs before schema-decoding the result.
 func decodeQueryObjectNonExplodeParam(
 	definition *oaschema.Parameter,
 	rawValues []string,
@@ -258,6 +263,7 @@ func decodeQueryObjectNonExplodeParam(
 	return nil, enrichQueryErrors(errs, definition.Name)
 }
 
+// parseNonExplodeQueryObject builds a key→values map from an even-length alternating slice.
 func parseNonExplodeQueryObject(rawValues []string) (map[string][]string, bool) {
 	result := make(map[string][]string)
 
@@ -305,6 +311,8 @@ func decodeQueryDeepObjectFromParameters(
 	return errs
 }
 
+// decodeQueryDeepObjectFromParameter finds the parameter's root node in the pre-built tree
+// and decodes it with the parameter's schema, returning a required-error when the node is absent.
 func decodeQueryDeepObjectFromParameter(
 	definition *oaschema.Parameter,
 	rawNodes ParameterNodes,
@@ -431,6 +439,8 @@ func decodePrimitiveQueryValuesFromSchemaType(
 	return rawValues, "", nil
 }
 
+// newInvalidQueryNonExplodedObjectError builds a validation error with a style-specific
+// human-readable message describing the expected non-exploded object syntax.
 func newInvalidQueryNonExplodedObjectError(
 	name string,
 	style oaschema.ParameterEncodingStyle,
@@ -452,6 +462,7 @@ func newInvalidQueryNonExplodedObjectError(
 	}
 }
 
+// enrichQueryErrors stamps each error with the query error code and the parameter name.
 func enrichQueryErrors(errs []httperror.ValidationError, name string) []httperror.ValidationError {
 	for i := range errs {
 		errs[i].Code = oasvalidator.ErrCodeInvalidQueryParam

@@ -26,11 +26,14 @@ import (
 	"github.com/relychan/openapitools/oasvalidator/regexps"
 )
 
+// objectParamDecoder decodes a flat map[string][]string (from an exploded or non-exploded object
+// parameter) into a typed map[string]any guided by an OpenAPI schema.
 type objectParamDecoder struct {
 	RawValues map[string][]string
 	Result    map[string]any
 }
 
+// newObjectParamDecoder creates an objectParamDecoder from the given raw key→values map.
 func newObjectParamDecoder(rawValues map[string][]string) *objectParamDecoder {
 	return &objectParamDecoder{
 		RawValues: rawValues,
@@ -38,6 +41,7 @@ func newObjectParamDecoder(rawValues map[string][]string) *objectParamDecoder {
 	}
 }
 
+// Decode decodes all raw values into Result using schema, resolving allOf, anyOf, and oneOf.
 func (opd *objectParamDecoder) Decode(schema *base.Schema) []httperror.ValidationError {
 	if oaschema.IsSchemaObjectEmpty(schema) {
 		opd.Result = normalizeRawObjectValues(opd.RawValues)
@@ -118,6 +122,8 @@ func (opd *objectParamDecoder) Decode(schema *base.Schema) []httperror.Validatio
 	return nil
 }
 
+// decodeProperties decodes known schema properties then falls through to additional
+// and pattern properties for any keys not yet accounted for.
 func (opd *objectParamDecoder) decodeProperties(
 	schema *base.Schema,
 ) []httperror.ValidationError {
@@ -170,6 +176,7 @@ func (opd *objectParamDecoder) decodeProperties(
 	return nil
 }
 
+// decodeOrUnionItem decodes a single anyOf/oneOf branch and merges its result into opd.Result.
 func (opd *objectParamDecoder) decodeOrUnionItem(
 	proxy *base.SchemaProxy,
 ) []httperror.ValidationError {
@@ -207,6 +214,8 @@ func (opd *objectParamDecoder) decodeOrUnionItem(
 	return nil
 }
 
+// decodeObjectPatternProperties matches raw keys against schema patternProperties and decodes
+// matching entries not already present in Result. Regex compile failures are logged and skipped.
 func (opd *objectParamDecoder) decodeObjectPatternProperties(
 	schema *base.Schema,
 	parsedKeys []string,
@@ -273,6 +282,8 @@ func (opd *objectParamDecoder) decodeObjectPatternProperties(
 	return errs
 }
 
+// decodeObjectAdditionalProperties decodes raw keys not already parsed by explicit or pattern
+// properties. Skips when AdditionalProperties is absent or false.
 func (opd *objectParamDecoder) decodeObjectAdditionalProperties(
 	schema *base.Schema,
 	parsedKeys []string,
@@ -310,6 +321,8 @@ func (opd *objectParamDecoder) decodeObjectAdditionalProperties(
 	return errs
 }
 
+// decodeProperty decodes a single named property using paramDecoder and stores the result.
+// Pointer prefixes are prepended to validation errors for precise error location.
 func (opd *objectParamDecoder) decodeProperty(
 	key string,
 	rawValues []string,

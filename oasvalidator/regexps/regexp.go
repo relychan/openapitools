@@ -21,19 +21,23 @@ import (
 	"github.com/dlclark/regexp2"
 )
 
+// globalRegexpStore is the process-wide regex cache used by package-level Get.
 var globalRegexpStore = &RegexpStore{
 	regexps: make(map[string]*regexp2.Regexp),
 }
 
+// Get compiles pattern (if not already cached) using the global store and returns the result.
 func Get(pattern string) (*regexp2.Regexp, error) {
 	return globalRegexpStore.Get(pattern)
 }
 
+// RegexpStore is a thread-safe cache that compiles and stores regexp2 patterns on first use.
 type RegexpStore struct {
 	regexps map[string]*regexp2.Regexp
 	mutex   sync.RWMutex
 }
 
+// Get returns the compiled regexp for pattern, compiling and caching it on the first call.
 func (ps *RegexpStore) Get(pattern string) (*regexp2.Regexp, error) {
 	ps.mutex.RLock()
 

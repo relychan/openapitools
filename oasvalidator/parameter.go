@@ -62,6 +62,8 @@ L:
 	return nil, errs
 }
 
+// ValidateParameterDefinition validates a single parameter definition and returns a normalized
+// oaschema.Parameter, resolving location, style, and schema.
 func ValidateParameterDefinition(
 	param *highv3.Parameter,
 ) (*oaschema.Parameter, []httperror.ValidationError) {
@@ -125,12 +127,15 @@ func ValidateParameterDefinition(
 	return nil, errs
 }
 
+// setParameterErrorsLocation stamps each error with the parameter location and error code.
 func setParameterErrorsLocation(param *oaschema.Parameter, errs []httperror.ValidationError) {
 	for i := range errs {
 		setParameterErrorLocation(param, &errs[i])
 	}
 }
 
+// setParameterErrorLocation stamps a single error with the parameter name and the error code
+// appropriate for the parameter's location (header, query, or path).
 func setParameterErrorLocation(param *oaschema.Parameter, err *httperror.ValidationError) {
 	switch param.In {
 	case oaschema.InHeader:

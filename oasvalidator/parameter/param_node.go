@@ -33,6 +33,7 @@ import (
 // It is used as the working set when inserting and decoding deep-object query parameters.
 type ParameterNodes []*ParameterNode
 
+// Find returns the first node whose key equals key, or nil if not found.
 func (pn ParameterNodes) Find(key ParamSelector) *ParameterNode {
 	for _, node := range pn {
 		if node.key.Equal(key) {
@@ -43,6 +44,7 @@ func (pn ParameterNodes) Find(key ParamSelector) *ParameterNode {
 	return nil
 }
 
+// Insert inserts a leaf at the path described by keys, creating intermediate nodes as needed.
 func (pn *ParameterNodes) Insert(keys ParamKeys, values []string) *httperror.ValidationError {
 	if len(keys) == 0 {
 		return nil
@@ -77,6 +79,7 @@ func (pn *ParameterNodes) Insert(keys ParamKeys, values []string) *httperror.Val
 	return nil
 }
 
+// String implements fmt.Stringer for debugging.
 func (pn ParameterNodes) String() string {
 	if len(pn) == 0 {
 		return ""
@@ -104,6 +107,7 @@ type ParameterNode struct {
 	items  ParameterNodes
 }
 
+// FindNode returns the direct child node matching key, or nil if absent.
 func (pn *ParameterNode) FindNode(key ParamSelector) *ParameterNode {
 	if len(pn.items) == 0 {
 		return nil
@@ -213,6 +217,8 @@ func (pn ParameterNode) String() string {
 	return pn.printIndent(0)
 }
 
+// Decode resolves the node's raw values into a typed Go value guided by schema.
+// Object and array schema types are tried first; remaining scalar types are tried in declaration order.
 func (pn *ParameterNode) Decode(schema *base.Schema) (any, []httperror.ValidationError) {
 	if oaschema.IsSchemaTypeEmpty(schema) {
 		return pn.decodeArbitrary(), nil
@@ -299,6 +305,7 @@ func (pn *ParameterNode) decodeFromSchemaTypes(
 	return nil, "", finalErrors
 }
 
+// decodeArray decodes the node as an array value and runs schema-level array validation.
 func (pn *ParameterNode) decodeArray(
 	schemaDef *base.Schema,
 ) (any, []httperror.ValidationError) {
@@ -318,6 +325,8 @@ func (pn *ParameterNode) decodeArray(
 	return results, nil
 }
 
+// decodeArrayValues picks the decoding strategy (arbitrary vs. schema-guided) and
+// recurses into child nodes for nested deep-object arrays.
 func (pn *ParameterNode) decodeArrayValues(
 	schemaDef *base.Schema,
 ) (any, []httperror.ValidationError) {
@@ -351,6 +360,8 @@ func (pn *ParameterNode) decodeArrayValues(
 	return results, errs
 }
 
+// decodeObject decodes the node as a schema-typed object, processing allOf, anyOf,
+// and oneOf sub-schemas, then running object-level validation.
 func (pn *ParameterNode) decodeObject(
 	schemaDef *base.Schema,
 ) (map[string]any, []httperror.ValidationError) {
@@ -429,6 +440,7 @@ func (pn *ParameterNode) decodeObject(
 	return results, nil
 }
 
+// decodeObjectOr decodes a single anyOf/oneOf branch and merges successful properties into results.
 func (pn *ParameterNode) decodeObjectOr(
 	proxy *base.SchemaProxy,
 	results map[string]any,
@@ -461,6 +473,8 @@ func (pn *ParameterNode) decodeObjectOr(
 	return nil
 }
 
+// decodeObjectProperties decodes all known schema properties, then delegates to additional
+// and pattern property decoders for any remaining child nodes.
 func (pn *ParameterNode) decodeObjectProperties(
 	schemaDef *base.Schema,
 	results map[string]any,
@@ -662,6 +676,8 @@ func (pn *ParameterNode) decodeObjectAdditionalProperties(
 	return errs
 }
 
+// decodeArbitrary decodes without schema guidance: arrays when children are indexed,
+// objects when children are keyed, and raw scalar/slice otherwise.
 func (pn *ParameterNode) decodeArbitrary() any {
 	if len(pn.items) == 0 {
 		return normalizeRawParamValue(pn.values)
@@ -678,6 +694,7 @@ func (pn *ParameterNode) decodeArbitrary() any {
 	return results
 }
 
+// decodeArbitraryArray collects child or leaf values into a []any without schema guidance.
 func (pn *ParameterNode) decodeArbitraryArray() []any {
 	if len(pn.items) == 0 {
 		return goutils.ToAnySlice(pn.values)
@@ -692,12 +709,14 @@ func (pn *ParameterNode) decodeArbitraryArray() []any {
 	return results
 }
 
+// decodeArbitraryObject populates results with string-keyed children decoded arbitrarily.
 func (pn *ParameterNode) decodeArbitraryObject(results map[string]any) {
 	for _, node := range pn.items {
 		results[node.key.String()] = node.decodeArbitrary()
 	}
 }
 
+// printIndent renders the node as an indented tree string for debugging.
 func (pn ParameterNode) printIndent(indent int) string {
 	if len(pn.items) == 0 {
 		return strings.Repeat(" ", indent) + pn.key.String() +

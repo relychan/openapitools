@@ -132,12 +132,14 @@ func (k ParamIndex) String() string {
 	return strconv.Itoa(int(k))
 }
 
+// IsParamKey reports whether selector is a string key.
 func IsParamKey(selector ParamSelector) bool {
 	_, ok := selector.(ParamKey)
 
 	return ok
 }
 
+// IsParamIndex reports whether selector is a numeric index.
 func IsParamIndex(selector ParamSelector) bool {
 	_, ok := selector.(ParamIndex)
 

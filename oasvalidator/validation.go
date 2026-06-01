@@ -520,6 +520,7 @@ func ValidateEnum[T comparable](typeSchema *base.Schema, value T) bool {
 	})
 }
 
+// validateNumberRules checks multipleOf, maximum, and minimum constraints against a float64 value.
 func validateNumberRules(typeSchema *base.Schema, value float64) []ErrorFunc { //nolint:cyclop
 	var errs []ErrorFunc
 
@@ -558,6 +559,7 @@ func validateNumberRules(typeSchema *base.Schema, value float64) []ErrorFunc { /
 	return errs
 }
 
+// validateArrayLength checks maxItems and minItems constraints against the given length.
 func validateArrayLength(typeSchema *base.Schema, length int64) ErrorFunc {
 	// array length validations
 	if typeSchema.MaxItems != nil && length > *typeSchema.MaxItems {
@@ -571,6 +573,8 @@ func validateArrayLength(typeSchema *base.Schema, length int64) ErrorFunc {
 	return nil
 }
 
+// validateObjectReflection validates a reflect.Map value against an OpenAPI object schema,
+// checking type, property count, required keys, and dependent required keys.
 func validateObjectReflection(typeSchema *base.Schema, reflectValue reflect.Value) []ErrorFunc {
 	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Object) {
 		return []ErrorFunc{InvalidTypeErrorFunc(typeSchema.Type, oaschema.Object)}
@@ -630,6 +634,7 @@ func validateObjectReflection(typeSchema *base.Schema, reflectValue reflect.Valu
 	return nil
 }
 
+// validateObjectPropertiesLength checks maxProperties and minProperties constraints.
 func validateObjectPropertiesLength(typeSchema *base.Schema, propertiesLength int64) ErrorFunc {
 	if typeSchema.MaxProperties != nil && *typeSchema.MaxProperties < propertiesLength {
 		return ObjectMaxPropertiesValidationErrorFunc(*typeSchema.MaxProperties, propertiesLength)
@@ -642,7 +647,8 @@ func validateObjectPropertiesLength(typeSchema *base.Schema, propertiesLength in
 	return nil
 }
 
-// Validates a reflection value against an OpenAPI schema.
+// validateValueReflection validates an arbitrary reflect.Value against an OpenAPI schema by
+// unwrapping pointers and dispatching to the appropriate typed validator.
 func validateValueReflection(typeSchema *base.Schema, value reflect.Value) []ErrorFunc {
 	reflectValue, notNull := goutils.UnwrapPointerFromReflectValue(value)
 	if !notNull {

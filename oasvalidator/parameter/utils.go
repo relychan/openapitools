@@ -173,6 +173,8 @@ func EvaluateParameterValue(value any, parentKeys ParamKeys) ParameterItems {
 	}
 }
 
+// evaluateParameterValueReflection handles types not covered by EvaluateParameterValue's type
+// switch by using reflect — covers custom scalar types, struct slices, and reflect.Map.
 func evaluateParameterValueReflection(
 	value reflect.Value,
 	parentKeys ParamKeys,
@@ -287,6 +289,8 @@ func EncodeParamDelimitedStyleNonExplode(
 	return sb.String()
 }
 
+// buildParamDelimitedStyleNonExplode writes the delimited (non-explode) encoding into sb.
+// separator is written between entries; assignSymbol separates key from value for nested fields.
 func buildParamDelimitedStyleNonExplode(
 	sb *strings.Builder,
 	builtParams map[string][]string,
@@ -401,9 +405,8 @@ func parseDeepObjectKey(input string) (ParamKeys, bool) {
 	return results, true
 }
 
-// Unwraps a string slice into a scalar (nil, string, or []string) so that
-// parameters with a single value are not needlessly wrapped in a slice before
-// schema validation.
+// normalizeRawParamValue unwraps a string slice into a scalar (nil, string, or []string) so that
+// parameters with a single value are not needlessly wrapped in a slice before schema validation.
 func normalizeRawParamValue(values []string) any {
 	switch len(values) {
 	case 0:
@@ -415,6 +418,7 @@ func normalizeRawParamValue(values []string) any {
 	}
 }
 
+// normalizeRawObjectValues applies normalizeRawParamValue to every entry in a map.
 func normalizeRawObjectValues(values map[string][]string) map[string]any {
 	result := make(map[string]any, len(values))
 
@@ -425,6 +429,8 @@ func normalizeRawObjectValues(values map[string][]string) map[string]any {
 	return result
 }
 
+// parseNonExplodeObject converts an even-length alternating [key, value, ...] slice into a map.
+// Returns false when the slice length is odd or any key is empty.
 func parseNonExplodeObject(parts []string) (map[string][]string, bool) {
 	if len(parts)%2 != 0 {
 		return nil, false
@@ -448,6 +454,7 @@ func parseNonExplodeObject(parts []string) (map[string][]string, bool) {
 	return rawValues, true
 }
 
+// parseExplodeObjectParam splits rawValue on separator and parses key=value pairs into a map.
 func parseExplodeObjectParam(rawValue string, separator string) (map[string][]string, bool) {
 	result := make(map[string][]string)
 
@@ -458,6 +465,8 @@ func parseExplodeObjectParam(rawValue string, separator string) (map[string][]st
 	return result, true
 }
 
+// setExplodeObjectProperties parses key=value parts from rawValue split by separator into result.
+// Returns false if any part lacks a non-empty key.
 func setExplodeObjectProperties(
 	result map[string][]string,
 	rawValue string,
@@ -483,6 +492,8 @@ func setExplodeObjectProperties(
 	return true
 }
 
+// splitNonExplodeDelimitedStyle splits rawValues by the separator implied by style.
+// When isObject is true, an odd element count is invalid and false is returned.
 func splitNonExplodeDelimitedStyle(
 	rawValues []string,
 	style oaschema.ParameterEncodingStyle,
