@@ -24,6 +24,49 @@ import (
 	"github.com/relychan/openapitools/oasvalidator"
 )
 
+// DecodeHeaderParameters decodes header parameters from the header map value.
+// Each header value is encoded differently on each style, according to the [OpenAPI specification].
+//
+// [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
+func DecodeHeaderParameters(
+	definition []*oaschema.Parameter,
+	headers http.Header,
+) (map[string]any, []httperror.ValidationError) {
+	var (
+		results      = make(map[string]any, len(headers))
+		decodeErrors []httperror.ValidationError
+	)
+
+	for key, header := range headers {
+		if len(header) == 0 {
+			continue
+		}
+
+		results[strings.ToLower(key)] = header[0]
+	}
+
+	for _, def := range definition {
+		if def.In != oaschema.InHeader {
+			continue
+		}
+
+		value, errs := DecodeHeaderParameter(def, headers)
+		if len(errs) > 0 {
+			decodeErrors = append(decodeErrors, errs...)
+
+			continue
+		}
+
+		results[strings.ToLower(def.Name)] = value
+	}
+
+	if len(decodeErrors) > 0 {
+		return nil, decodeErrors
+	}
+
+	return results, nil
+}
+
 // DecodeHeaderParameter decodes a header parameter from the header map value.
 // The value is encoded differently on each style, according to the [OpenAPI specification].
 //

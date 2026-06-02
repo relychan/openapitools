@@ -26,7 +26,6 @@ import (
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
-	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"github.com/relychan/openapitools/openapiclient/internal"
@@ -133,36 +132,7 @@ func parseHTTPRequestBody(
 		return nil, respErr
 	}
 
-	validationError := validateRequestBody(route.Method.Operation.RequestBody, decodedBody)
-	if validationError != nil {
-		writeErrorResponse(writer, validationError.Status, validationError)
-
-		return nil, validationError
-	}
-
 	return decodedBody, nil
-}
-
-func validateRequestBody(requestBody *oaschema.RequestBody, body any) *httperror.HTTPError {
-	if requestBody == nil {
-		return nil
-	}
-
-	if requestBody.Schema != nil {
-		errs := oasvalidator.ValidateValue(
-			requestBody.Schema,
-			body,
-		)
-		if len(errs) > 0 {
-			for i := range errs {
-				errs[i].Code = oasvalidator.ErrCodeRequestBodyError
-			}
-
-			return httperror.NewBadRequestError(errs...)
-		}
-	}
-
-	return nil
 }
 
 func newUnsupportedContentTypeError(

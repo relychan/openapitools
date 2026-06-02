@@ -15,7 +15,9 @@
 package oasvalidator
 
 import (
+	"net/http"
 	"slices"
+	"strings"
 
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/goutils/httperror"
@@ -120,11 +122,15 @@ func ValidateParameterDefinition(
 		}
 	}
 
-	if len(errs) == 0 {
-		return result, nil
+	if len(errs) > 0 {
+		return nil, errs
 	}
 
-	return nil, errs
+	if result.In == oaschema.InHeader {
+		result.Name = http.CanonicalHeaderKey(strings.TrimSpace(result.Name))
+	}
+
+	return result, nil
 }
 
 // setParameterErrorsLocation stamps each error with the parameter location and error code.

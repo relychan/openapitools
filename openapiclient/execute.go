@@ -56,9 +56,22 @@ func (pc *ProxyClient) Execute(
 
 	request := proxyhandler.NewRequest(method, requestURL, header, body)
 
-	route, options, routeErr := pc.findRoute(span, request)
+	route, routeErr := pc.findRoute(span, request)
 	if routeErr != nil {
 		return nil, nil, routeErr
+	}
+
+	validationErr := validateRequest(route, request)
+	if validationErr != nil {
+		span.SetStatus(codes.Error, "Failed to validate request")
+		span.RecordError(validationErr)
+
+		return nil, nil, validationErr
+	}
+
+	options := &proxyhandler.ProxyHandleOptions{
+		Settings:   pc.settings,
+		NewRequest: pc.newRequestFunc(request, route),
 	}
 
 	response, responseBody, err := route.Method.Handler.Handle(ctx, request, options)
@@ -76,7 +89,7 @@ func (pc *ProxyClient) Execute(
 func (pc *ProxyClient) findRoute(
 	span trace.Span,
 	request *proxyhandler.Request,
-) (*internal.Route, *proxyhandler.ProxyHandleOptions, *httperror.HTTPError) {
+) (*internal.Route, *httperror.HTTPError) {
 	if pc.CustomAttributesFunc != nil {
 		span.SetAttributes(pc.CustomAttributesFunc(request)...)
 	}
@@ -98,7 +111,7 @@ func (pc *ProxyClient) findRoute(
 
 		routeError.Instance = request.Path()
 
-		return nil, nil, routeError
+		return nil, routeError
 	}
 
 	span.SetAttributes(
@@ -108,22 +121,7 @@ func (pc *ProxyClient) findRoute(
 
 	request.SetPath(requestPath)
 
-	err := validateRequestParameters(route, request)
-	if err != nil {
-		span.SetStatus(codes.Error, err.Detail)
-		span.RecordError(err)
-
-		err.Instance = request.Path()
-
-		return nil, nil, err
-	}
-
-	options := &proxyhandler.ProxyHandleOptions{
-		Settings:   pc.settings,
-		NewRequest: pc.newRequestFunc(request, route),
-	}
-
-	return route, options, nil
+	return route, nil
 }
 
 func (*ProxyClient) handleError(

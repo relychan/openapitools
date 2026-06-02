@@ -116,7 +116,7 @@ func MergeOrderedMap[K comparable, V any](dest, src *orderedmap.Map[K, V]) *orde
 	}
 
 	if dest == nil {
-		return dest
+		return src
 	}
 
 	for iter := src.First(); iter != nil; iter = iter.Next() {

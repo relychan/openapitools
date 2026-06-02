@@ -39,7 +39,7 @@ func (pc *ProxyClient) ServeHTTP(
 
 	req := proxyhandler.NewRequest(request.Method, request.URL, request.Header, nil)
 
-	route, options, notFoundErr := pc.findRoute(span, req)
+	route, notFoundErr := pc.findRoute(span, req)
 	if notFoundErr != nil {
 		writeErrorResponse(writer, notFoundErr.Status, notFoundErr)
 
@@ -48,13 +48,28 @@ func (pc *ProxyClient) ServeHTTP(
 
 	requestBody, err := parseHTTPRequestBody(route, writer, request)
 	if err != nil {
-		span.SetStatus(codes.Error, "failed to validate request body")
+		span.SetStatus(codes.Error, "failed to parse request body")
 		span.RecordError(err)
 
 		return
 	}
 
 	req.SetBody(requestBody)
+
+	validationErr := validateRequest(route, req)
+	if validationErr != nil {
+		span.SetStatus(codes.Error, "Failed to validate request")
+		span.RecordError(validationErr)
+
+		writeErrorResponse(writer, validationErr.Status, validationErr)
+
+		return
+	}
+
+	options := &proxyhandler.ProxyHandleOptions{
+		Settings:   pc.settings,
+		NewRequest: pc.newRequestFunc(req, route),
+	}
 
 	_, streamErr := route.Method.Handler.Stream(ctx, req, writer, options) //nolint:bodyclose
 	if streamErr != nil {
@@ -84,20 +99,26 @@ func (pc *ProxyClient) Stream(
 		semconv.URLOriginal(request.URL()),
 	)
 
-	route, options, notFoundErr := pc.findRoute(span, request)
+	route, notFoundErr := pc.findRoute(span, request)
 	if notFoundErr != nil {
 		writeErrorResponse(writer, notFoundErr.Status, notFoundErr)
 
 		return nil, notFoundErr
 	}
 
-	validationErr := validateRequestBody(route.Method.Operation.RequestBody, request.Body())
+	validationErr := validateRequest(route, request)
 	if validationErr != nil {
-		validationErr.Instance = request.Path()
+		span.SetStatus(codes.Error, "Failed to validate request")
+		span.RecordError(validationErr)
 
 		writeErrorResponse(writer, validationErr.Status, validationErr)
 
 		return nil, validationErr
+	}
+
+	options := &proxyhandler.ProxyHandleOptions{
+		Settings:   pc.settings,
+		NewRequest: pc.newRequestFunc(request, route),
 	}
 
 	response, err := route.Method.Handler.Stream(ctx, request, writer, options)

@@ -218,7 +218,10 @@ func ValidateNullableString(typeSchema *base.Schema, value *string) []httperror.
 }
 
 // ValidateNumber validates a number value against an OpenAPI schema.
-func ValidateNumber[T float32 | float64](typeSchema *base.Schema, value T) []httperror.ValidationError {
+func ValidateNumber[T float32 | float64](
+	typeSchema *base.Schema,
+	value T,
+) []httperror.ValidationError {
 	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Number) {
 		return []httperror.ValidationError{*InvalidTypeError(typeSchema.Type, oaschema.Number)}
 	}
@@ -238,7 +241,10 @@ func ValidateNumber[T float32 | float64](typeSchema *base.Schema, value T) []htt
 }
 
 // ValidateNullableNumber validates a nullable number value against an OpenAPI schema.
-func ValidateNullableNumber[T float32 | float64](typeSchema *base.Schema, value *T) []httperror.ValidationError {
+func ValidateNullableNumber[T float32 | float64](
+	typeSchema *base.Schema,
+	value *T,
+) []httperror.ValidationError {
 	if !CanNull(typeSchema, value == nil) {
 		return []httperror.ValidationError{*NotNullError()}
 	}
@@ -350,7 +356,10 @@ func ValidateArrayAndItems[T any](
 }
 
 // ValidateObject validates an object value against an OpenAPI schema.
-func ValidateObject[T any](typeSchema *base.Schema, value map[string]T) []httperror.ValidationError {
+func ValidateObject[T any]( //nolint:gocognit,gocyclo,cyclop,funlen
+	typeSchema *base.Schema,
+	value map[string]T,
+) []httperror.ValidationError {
 	errs := ValidateObjectWithoutProperties(typeSchema, value)
 
 	validateProperty := func(schema *base.Schema, prop T, key string) {
@@ -464,7 +473,10 @@ func ValidateObject[T any](typeSchema *base.Schema, value map[string]T) []httper
 
 // ValidateObjectWithoutProperties validates an object value against an OpenAPI schema.
 // This function only validates type, properties length and required properties.
-func ValidateObjectWithoutProperties[T any](typeSchema *base.Schema, value map[string]T) []httperror.ValidationError {
+func ValidateObjectWithoutProperties[T any](
+	typeSchema *base.Schema,
+	value map[string]T,
+) []httperror.ValidationError {
 	if !CanNull(typeSchema, value == nil) {
 		return []httperror.ValidationError{*NotNullError()}
 	}
@@ -565,7 +577,10 @@ func ValidateEnum[T comparable](typeSchema *base.Schema, value T) bool {
 }
 
 // validateNumberRules checks multipleOf, maximum, and minimum constraints against a float64 value.
-func validateNumberRules(typeSchema *base.Schema, value float64) []httperror.ValidationError { //nolint:cyclop
+func validateNumberRules( //nolint:cyclop
+	typeSchema *base.Schema,
+	value float64,
+) []httperror.ValidationError {
 	var errs []httperror.ValidationError
 
 	if typeSchema.MultipleOf != nil && *typeSchema.MultipleOf > 0 &&
@@ -619,7 +634,10 @@ func validateArrayLength(typeSchema *base.Schema, length int64) *httperror.Valid
 
 // validateObjectReflection validates a reflect.Map value against an OpenAPI object schema,
 // checking type, property count, required keys, and dependent required keys.
-func validateObjectReflection(typeSchema *base.Schema, reflectValue reflect.Value) []httperror.ValidationError {
+func validateObjectReflection(
+	typeSchema *base.Schema,
+	reflectValue reflect.Value,
+) []httperror.ValidationError {
 	if len(typeSchema.Type) > 0 && !slices.Contains(typeSchema.Type, oaschema.Object) {
 		return []httperror.ValidationError{*InvalidTypeError(typeSchema.Type, oaschema.Object)}
 	}
@@ -679,7 +697,10 @@ func validateObjectReflection(typeSchema *base.Schema, reflectValue reflect.Valu
 }
 
 // validateObjectPropertiesLength checks maxProperties and minProperties constraints.
-func validateObjectPropertiesLength(typeSchema *base.Schema, propertiesLength int64) *httperror.ValidationError {
+func validateObjectPropertiesLength(
+	typeSchema *base.Schema,
+	propertiesLength int64,
+) *httperror.ValidationError {
 	if typeSchema.MaxProperties != nil && *typeSchema.MaxProperties < propertiesLength {
 		return ObjectMaxPropertiesValidationError(*typeSchema.MaxProperties, propertiesLength)
 	}
@@ -693,7 +714,10 @@ func validateObjectPropertiesLength(typeSchema *base.Schema, propertiesLength in
 
 // validateValueReflection validates an arbitrary reflect.Value against an OpenAPI schema by
 // unwrapping pointers and dispatching to the appropriate typed validator.
-func validateValueReflection(typeSchema *base.Schema, value reflect.Value) []httperror.ValidationError {
+func validateValueReflection(
+	typeSchema *base.Schema,
+	value reflect.Value,
+) []httperror.ValidationError {
 	reflectValue, notNull := goutils.UnwrapPointerFromReflectValue(value)
 	if !notNull {
 		return nil

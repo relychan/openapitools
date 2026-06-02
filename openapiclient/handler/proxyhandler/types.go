@@ -101,18 +101,6 @@ func NewRequest(method string, uri *url.URL, headers http.Header, body any) *Req
 		result.query = uri.Query()
 	}
 
-	if len(headers) > 0 {
-		result.headerParams = make(map[string]any)
-
-		for key, header := range headers {
-			if len(header) == 0 {
-				continue
-			}
-
-			result.headerParams[strings.ToLower(key)] = header[0]
-		}
-	}
-
 	return result
 }
 
@@ -204,6 +192,11 @@ func (r *Request) QueryParams() map[string]any {
 // SetQueryParams sets query parameters for the request.
 func (r *Request) SetQueryParams(values map[string]any) {
 	r.queryParams = values
+}
+
+// SetHeaderParams sets decoded header parameters for the request.
+func (r *Request) SetHeaderParams(values map[string]any) {
+	r.headerParams = values
 }
 
 // ToMap converts the struct to map.

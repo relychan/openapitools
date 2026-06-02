@@ -17,6 +17,8 @@ package openapiclient
 import (
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils/httperror"
+	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/oasvalidator/parameter"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/internal"
@@ -56,21 +58,76 @@ func (pc *ProxyClient) newRequestFunc(
 	}
 }
 
+func validateRequest(route *internal.Route, request *proxyhandler.Request) *httperror.HTTPError {
+	errs := validateRequestParameters(route, request)
+	bodyErrs := validateRequestBody(route.Method.Operation.RequestBody, request.Body())
+
+	if len(bodyErrs) > 0 {
+		errs = append(errs, bodyErrs...)
+	}
+
+	if len(errs) > 0 {
+		err := httperror.NewBadRequestError(errs...)
+		err.Instance = request.Path()
+
+		return err
+	}
+
+	return nil
+}
+
+func validateRequestBody(requestBody *oaschema.RequestBody, body any) []httperror.ValidationError {
+	if requestBody == nil {
+		return nil
+	}
+
+	if requestBody.Schema != nil {
+		errs := oasvalidator.ValidateValue(
+			requestBody.Schema,
+			body,
+		)
+		if len(errs) > 0 {
+			for i := range errs {
+				errs[i].Code = oasvalidator.ErrCodeRequestBodyError
+			}
+
+			return errs
+		}
+	}
+
+	return nil
+}
+
 func validateRequestParameters(
 	route *internal.Route,
 	request *proxyhandler.Request,
-) *httperror.HTTPError {
+) []httperror.ValidationError {
 	request.SetURLParams(route.ParamValues)
 
-	queryParams, errs := parameter.DecodeQueryFromParameters(
+	queryParams, validationErrs := parameter.DecodeQueryFromParameters(
 		route.Method.Operation.Parameters,
 		request.Query(),
 	)
-	if len(errs) > 0 {
-		return httperror.NewBadRequestError(errs...)
+	if len(validationErrs) == 0 {
+		request.SetQueryParams(queryParams)
 	}
 
-	request.SetQueryParams(queryParams)
+	headers := request.Header()
+	if len(headers) > 0 {
+		headerParams, errs := parameter.DecodeHeaderParameters(
+			route.Method.Operation.Parameters,
+			headers,
+		)
+		if len(errs) == 0 {
+			request.SetHeaderParams(headerParams)
+		} else {
+			validationErrs = append(validationErrs, errs...)
+		}
+	}
+
+	if len(validationErrs) > 0 {
+		return validationErrs
+	}
 
 	return nil
 }

@@ -190,7 +190,7 @@ func (re *RESTfulHandler) writeRawResponse(
 			span.SetStatus(codes.Error, respErr.Detail)
 			span.RecordError(decodeError)
 
-			return err
+			return decodeError
 		}
 
 		writer.Header()[httpheader.ContentType] = []string{re.responseContentType}
