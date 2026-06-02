@@ -229,10 +229,7 @@ func (n *Node) insertChildStaticNode(
 	paramKeys []string,
 	options *proxyhandler.InsertRouteOptions,
 ) (*Node, error) {
-	rawSegment, remain, _, err := cutURLPath(search)
-	if err != nil {
-		return nil, err
-	}
+	rawSegment, remain := cutURLPath(search)
 
 	childIndex := slices.IndexFunc(n.children[ntStatic], func(child *Node) bool {
 		return child.key == rawSegment

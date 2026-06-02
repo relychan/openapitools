@@ -15,7 +15,6 @@
 package internal
 
 import (
-	"net/url"
 	"slices"
 
 	"github.com/pb33f/libopenapi/datamodel/high/base"
@@ -69,10 +68,10 @@ func extractParametersFromOperationV3(
 	return params
 }
 
-// cut the first path of the url and parse the query param if exists. Ignore fragments.
-func cutURLPath(search string) (string, string, url.Values, error) { //nolint:revive
+// cut the first path of the url and parse the query param if exists.
+func cutURLPath(search string) (string, string) { //nolint:revive
 	if search == "" {
-		return search, "", nil, nil
+		return search, ""
 	}
 
 	var endPathIndex int
@@ -84,26 +83,17 @@ L:
 		c := search[endPathIndex]
 
 		switch c {
-		case '/', '#':
+		case '/':
 			break L
-		case '?':
-			if endPathIndex == maxLength-1 {
-				return search[:endPathIndex], "", nil, nil
-			}
-
-			queryParams, err := url.ParseQuery(search[endPathIndex+1:])
-			if err != nil {
-				return "", "", nil, err
-			}
-
-			return search[:endPathIndex], "", queryParams, nil
+		case '?', '#':
+			return search[:endPathIndex], ""
 		default:
 		}
 	}
 
 	if endPathIndex == maxLength {
-		return search, "", nil, nil
+		return search, ""
 	}
 
-	return search[0:endPathIndex], search[endPathIndex+1:], nil, nil
+	return search[0:endPathIndex], search[endPathIndex+1:]
 }
