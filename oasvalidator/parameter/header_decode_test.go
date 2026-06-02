@@ -28,11 +28,14 @@ import (
 
 func TestDecodeHeaderParameter(t *testing.T) {
 	t.Run("missing_required_header", func(t *testing.T) {
-		def := &oaschema.Parameter{
-			Name:     "X-Token",
-			Required: true,
+		defs := []*oaschema.Parameter{
+			{
+				Name:     "X-Token",
+				In:       oaschema.InHeader,
+				Required: true,
+			},
 		}
-		_, errs := DecodeHeaderParameter(def, http.Header{})
+		_, errs := DecodeHeaderParameters(defs, http.Header{})
 		require.Len(t, errs, 1)
 		assert.Equal(t, oasvalidator.ErrCodeInvalidHeader, errs[0].Code)
 		assert.Equal(t, "X-Token", errs[0].Header)
@@ -43,7 +46,7 @@ func TestDecodeHeaderParameter(t *testing.T) {
 			Name:     "X-Optional",
 			Required: false,
 		}
-		result, errs := DecodeHeaderParameter(def, http.Header{})
+		result, errs := decodeHeaderParameter(def, http.Header{})
 		assert.Empty(t, errs)
 		assert.Nil(t, result)
 	})
@@ -53,7 +56,7 @@ func TestDecodeHeaderParameter(t *testing.T) {
 			Name: "X-Token",
 		}
 		headers := http.Header{"X-Token": {"abc"}}
-		result, errs := DecodeHeaderParameter(def, headers)
+		result, errs := decodeHeaderParameter(def, headers)
 		assert.Empty(t, errs)
 		assert.Equal(t, "abc", result)
 	})
@@ -63,7 +66,7 @@ func TestDecodeHeaderParameter(t *testing.T) {
 			Name: "X-Ids",
 		}
 		headers := http.Header{"X-Ids": {"1,2,3"}}
-		result, errs := DecodeHeaderParameter(def, headers)
+		result, errs := decodeHeaderParameter(def, headers)
 		assert.Empty(t, errs)
 		assert.Equal(t, []string{"1", "2", "3"}, result)
 	})
@@ -74,7 +77,7 @@ func TestDecodeHeaderParameter(t *testing.T) {
 			Schema: stringSchema(),
 		}
 		headers := http.Header{"X-Name": {"hello"}}
-		result, errs := DecodeHeaderParameter(def, headers)
+		result, errs := decodeHeaderParameter(def, headers)
 		assert.Empty(t, errs)
 		assert.Equal(t, "hello", result)
 	})
@@ -85,7 +88,7 @@ func TestDecodeHeaderParameter(t *testing.T) {
 			Schema: intSchema(),
 		}
 		headers := http.Header{"X-Count": {"42"}}
-		result, errs := DecodeHeaderParameter(def, headers)
+		result, errs := decodeHeaderParameter(def, headers)
 		assert.Empty(t, errs)
 		assert.Equal(t, int64(42), result)
 	})
@@ -96,7 +99,7 @@ func TestDecodeHeaderParameter(t *testing.T) {
 			Schema: intSchema(),
 		}
 		headers := http.Header{"X-Count": {"not-a-number"}}
-		_, errs := DecodeHeaderParameter(def, headers)
+		_, errs := decodeHeaderParameter(def, headers)
 		require.NotEmpty(t, errs)
 		assert.Equal(t, oasvalidator.ErrCodeInvalidHeader, errs[0].Code)
 		assert.Equal(t, "X-Count", errs[0].Header)
@@ -108,7 +111,7 @@ func TestDecodeHeaderParameter(t *testing.T) {
 			Schema: boolSchema(),
 		}
 		headers := http.Header{"X-Flag": {"true"}}
-		result, errs := DecodeHeaderParameter(def, headers)
+		result, errs := decodeHeaderParameter(def, headers)
 		assert.Empty(t, errs)
 		assert.Equal(t, true, result)
 	})
@@ -121,7 +124,7 @@ func TestDecodeHeaderParameter(t *testing.T) {
 			},
 		}
 		headers := http.Header{"X-Price": {"3.14"}}
-		result, errs := DecodeHeaderParameter(def, headers)
+		result, errs := decodeHeaderParameter(def, headers)
 		assert.Empty(t, errs)
 		assert.InDelta(t, float64(3.14), result, 1e-9)
 	})
@@ -134,7 +137,7 @@ func TestDecodeHeaderParameter_Array(t *testing.T) {
 			Schema: intArraySchema(),
 		}
 		headers := http.Header{"X-Ids": {"1,2,3"}}
-		result, errs := DecodeHeaderParameter(def, headers)
+		result, errs := decodeHeaderParameter(def, headers)
 		assert.Empty(t, errs)
 		assert.Equal(t, []any{int64(1), int64(2), int64(3)}, result)
 	})
@@ -148,7 +151,7 @@ func TestDecodeHeaderParameter_Array(t *testing.T) {
 		}
 		// HTTP allows multiple header lines for the same key
 		headers := http.Header{"X-Tags": {"foo,bar", "baz"}}
-		result, errs := DecodeHeaderParameter(def, headers)
+		result, errs := decodeHeaderParameter(def, headers)
 		assert.Empty(t, errs)
 		assert.Equal(t, []any{"foo", "bar", "baz"}, result)
 	})
@@ -159,7 +162,7 @@ func TestDecodeHeaderParameter_Array(t *testing.T) {
 			Schema: intArraySchema(),
 		}
 		headers := http.Header{"X-Ids": {"1,two,3"}}
-		_, errs := DecodeHeaderParameter(def, headers)
+		_, errs := decodeHeaderParameter(def, headers)
 		require.NotEmpty(t, errs)
 		assert.Equal(t, oasvalidator.ErrCodeInvalidHeader, errs[0].Code)
 		assert.Equal(t, "X-Ids", errs[0].Header)
@@ -184,7 +187,7 @@ func TestDecodeHeaderParameter_Object(t *testing.T) {
 			},
 		}
 		headers := http.Header{"X-Color": {"R,100,G,200"}}
-		result, errs := DecodeHeaderParameter(def, headers)
+		result, errs := decodeHeaderParameter(def, headers)
 		assert.Empty(t, errs)
 		assert.Equal(t, map[string]any{"R": int64(100), "G": int64(200)}, result)
 	})
@@ -199,7 +202,7 @@ func TestDecodeHeaderParameter_Object(t *testing.T) {
 			},
 		}
 		headers := http.Header{"X-User": {"role=admin,firstName=Alex"}}
-		result, errs := DecodeHeaderParameter(def, headers)
+		result, errs := decodeHeaderParameter(def, headers)
 		assert.Empty(t, errs)
 		assert.Equal(t, map[string]any{
 			"role":      "admin",
@@ -217,7 +220,7 @@ func TestDecodeHeaderParameter_Object(t *testing.T) {
 		}
 		// Odd number of comma-separated parts → not a valid key,value sequence
 		headers := http.Header{"X-Color": {"R,100,G"}}
-		_, errs := DecodeHeaderParameter(def, headers)
+		_, errs := decodeHeaderParameter(def, headers)
 		require.NotEmpty(t, errs)
 		assert.Equal(t, oasvalidator.ErrCodeInvalidHeader, errs[0].Code)
 		assert.Equal(t, "X-Color", errs[0].Header)
@@ -232,7 +235,7 @@ func TestDecodeHeaderParameter_Object(t *testing.T) {
 			},
 		}
 		headers := http.Header{"X-User": {"roleadmin"}}
-		_, errs := DecodeHeaderParameter(def, headers)
+		_, errs := decodeHeaderParameter(def, headers)
 		require.NotEmpty(t, errs)
 		assert.Equal(t, oasvalidator.ErrCodeInvalidHeader, errs[0].Code)
 		assert.Equal(t, "X-User", errs[0].Header)
@@ -338,7 +341,7 @@ func TestDecodeHeaderParameter_MultiType(t *testing.T) {
 			},
 		}
 		headers := http.Header{"X-Val": {"007"}}
-		result, errs := DecodeHeaderParameter(def, headers)
+		result, errs := decodeHeaderParameter(def, headers)
 		assert.Empty(t, errs)
 		// String type wins — no lossy parse
 		assert.Equal(t, "007", result)
@@ -377,7 +380,7 @@ func BenchmarkDecodeHeaderParameter(b *testing.B) {
 		def := &oaschema.Parameter{Name: "X-Optional", Required: false}
 
 		for b.Loop() {
-			DecodeHeaderParameter(def, headers)
+			decodeHeaderParameter(def, headers)
 		}
 	})
 
@@ -385,7 +388,7 @@ func BenchmarkDecodeHeaderParameter(b *testing.B) {
 		def := &oaschema.Parameter{Name: "X-Token", Required: true}
 
 		for b.Loop() {
-			DecodeHeaderParameter(def, headers)
+			decodeHeaderParameter(def, headers)
 		}
 	})
 
@@ -393,7 +396,7 @@ func BenchmarkDecodeHeaderParameter(b *testing.B) {
 		def := &oaschema.Parameter{Name: "X-Ids"}
 
 		for b.Loop() {
-			DecodeHeaderParameter(def, headers)
+			decodeHeaderParameter(def, headers)
 		}
 	})
 
@@ -401,7 +404,7 @@ func BenchmarkDecodeHeaderParameter(b *testing.B) {
 		def := &oaschema.Parameter{Name: "X-Name", Schema: stringSchema()}
 
 		for b.Loop() {
-			DecodeHeaderParameter(def, headers)
+			decodeHeaderParameter(def, headers)
 		}
 	})
 
@@ -409,7 +412,7 @@ func BenchmarkDecodeHeaderParameter(b *testing.B) {
 		def := &oaschema.Parameter{Name: "X-Count", Schema: intSchema()}
 
 		for b.Loop() {
-			DecodeHeaderParameter(def, headers)
+			decodeHeaderParameter(def, headers)
 		}
 	})
 
@@ -417,7 +420,7 @@ func BenchmarkDecodeHeaderParameter(b *testing.B) {
 		def := &oaschema.Parameter{Name: "X-Flag", Schema: boolSchema()}
 
 		for b.Loop() {
-			DecodeHeaderParameter(def, headers)
+			decodeHeaderParameter(def, headers)
 		}
 	})
 
@@ -428,14 +431,14 @@ func BenchmarkDecodeHeaderParameter(b *testing.B) {
 		}
 
 		for b.Loop() {
-			DecodeHeaderParameter(def, headers)
+			decodeHeaderParameter(def, headers)
 		}
 	})
 
 	b.Run("Array_CommaSeparated", func(b *testing.B) {
 		def := &oaschema.Parameter{Name: "X-Ids", Schema: intArraySchema()}
 		for b.Loop() {
-			DecodeHeaderParameter(def, headers)
+			decodeHeaderParameter(def, headers)
 		}
 	})
 
@@ -446,7 +449,7 @@ func BenchmarkDecodeHeaderParameter(b *testing.B) {
 		}
 
 		for b.Loop() {
-			DecodeHeaderParameter(def, headers)
+			decodeHeaderParameter(def, headers)
 		}
 	})
 
@@ -466,7 +469,7 @@ func BenchmarkDecodeHeaderParameter(b *testing.B) {
 		b.ResetTimer()
 
 		for b.Loop() {
-			DecodeHeaderParameter(def, headers)
+			decodeHeaderParameter(def, headers)
 		}
 	})
 
@@ -482,7 +485,7 @@ func BenchmarkDecodeHeaderParameter(b *testing.B) {
 		b.ResetTimer()
 
 		for b.Loop() {
-			DecodeHeaderParameter(def, headers)
+			decodeHeaderParameter(def, headers)
 		}
 	})
 }

@@ -182,7 +182,7 @@ func (pd *paramDecoder) decodeFromSchemaType(
 
 		return result, typeName, err
 	default:
-		result, typeName, errs := decodePrimitiveQueryValuesFromSchemaType(
+		result, decodedTypeName, errs := decodePrimitiveQueryValuesFromSchemaType(
 			typeName,
 			pd.RawValues,
 		)
@@ -191,7 +191,7 @@ func (pd *paramDecoder) decodeFromSchemaType(
 			return nil, "", errs
 		}
 
-		if typeName == "" {
+		if decodedTypeName == "" {
 			return nil, "", []httperror.ValidationError{
 				{
 					Detail: "Unsupported type: " + typeName,
@@ -199,7 +199,7 @@ func (pd *paramDecoder) decodeFromSchemaType(
 			}
 		}
 
-		return result, typeName, nil
+		return result, decodedTypeName, nil
 	}
 }
 

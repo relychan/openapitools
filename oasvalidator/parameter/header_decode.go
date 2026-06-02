@@ -42,15 +42,15 @@ func DecodeHeaderParameters(
 			continue
 		}
 
-		results[strings.ToLower(key)] = header[0]
+		results[strings.ToLower(key)] = normalizeRawParamValue(header)
 	}
 
 	for _, def := range definition {
-		if def.In != oaschema.InHeader {
+		if def == nil || def.In != oaschema.InHeader {
 			continue
 		}
 
-		value, errs := DecodeHeaderParameter(def, headers)
+		value, errs := decodeHeaderParameter(def, headers)
 		if len(errs) > 0 {
 			decodeErrors = append(decodeErrors, errs...)
 
@@ -67,15 +67,15 @@ func DecodeHeaderParameters(
 	return results, nil
 }
 
-// DecodeHeaderParameter decodes a header parameter from the header map value.
+// decodeHeaderParameter decodes a header parameter from the header map value.
 // The value is encoded differently on each style, according to the [OpenAPI specification].
 //
 // [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
-func DecodeHeaderParameter(
+func decodeHeaderParameter(
 	definition *oaschema.Parameter,
 	headers http.Header,
 ) (any, []httperror.ValidationError) {
-	rawValues, ok := headers[http.CanonicalHeaderKey(definition.Name)]
+	rawValues, ok := headers[definition.Name]
 	if !ok || len(rawValues) == 0 {
 		if !definition.Required {
 			return nil, nil
@@ -90,7 +90,7 @@ func DecodeHeaderParameter(
 		}
 	}
 
-	if definition == nil || definition.Schema == nil {
+	if definition.Schema == nil {
 		rawResults := parseHeaderArrayParam(rawValues)
 
 		return normalizeRawParamValue(rawResults), nil

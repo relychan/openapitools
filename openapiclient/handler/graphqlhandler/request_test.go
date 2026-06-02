@@ -25,6 +25,7 @@ import (
 	"github.com/jmespath-community/go-jmespath"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator/parameter"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/stretchr/testify/assert"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -210,6 +211,10 @@ func TestResolveRequestExtensions(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			headerParams, errs := parameter.DecodeHeaderParameters([]*oaschema.Parameter{}, tc.templateData.Header())
+			assert.Len(t, errs, 0)
+			tc.templateData.SetHeaderParams(headerParams)
+
 			result, err := tc.handler.resolveRequestExtensions(tc.templateData.ToMap())
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expected, result)
