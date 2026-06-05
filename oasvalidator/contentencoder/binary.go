@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package contenttype
+// Package contentencoder implements encoder functions for content types.
+package contentencoder
 
 import (
 	"encoding"

@@ -27,7 +27,7 @@ import (
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oasvalidator"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
+	"github.com/relychan/openapitools/oasvalidator/contentdecoder"
 	"github.com/relychan/openapitools/openapiclient/internal"
 )
 
@@ -119,7 +119,7 @@ func parseHTTPRequestBody(
 		return nil, err
 	}
 
-	decodedBody, err := contenttype.DecodeJSON(request.Body)
+	decodedBody, err := contentdecoder.DecodeJSON(request.Body)
 	if err != nil {
 		respErr := httperror.NewBadRequestError(httperror.ValidationError{
 			Detail: err.Error(),

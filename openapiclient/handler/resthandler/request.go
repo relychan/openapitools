@@ -27,9 +27,9 @@ import (
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
+	"github.com/relychan/openapitools/oasvalidator/contentencoder"
 	"github.com/relychan/openapitools/oasvalidator/parameter"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 )
 
 func (re *RESTfulHandler) prepareRequest(
@@ -175,7 +175,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	if ok && reader != nil {
 		req.SetBody(reader)
 	} else {
-		newBodyBytes, err := contenttype.Encode(contentType, newBody)
+		newBodyBytes, err := contentencoder.Encode(contentType, newBody)
 		if err != nil {
 			errDetail, ok := errors.AsType[*httperror.ValidationError](err)
 			if !ok {

@@ -29,6 +29,7 @@ var (
 	// ErrInvalidContentType occurs when the content type string is invalid.
 	ErrInvalidContentType     = errors.New("invalid content type")
 	errUnclosedTemplateString = errors.New("expected a closed curly bracket")
+	errInvalidIntegerString   = errors.New("the value is not a valid integer")
 )
 
 const (
@@ -235,7 +236,7 @@ func MinimumValidationError(
 
 // MaxLengthValidationError returns a validation error when a string exceeds the allowed maximum length.
 func MaxLengthValidationError(expected int64, actual int64) *httperror.ValidationError {
-	detail := "The length of the string value must be less than " +
+	detail := "The length of the string value must be less than or equal " +
 		strconv.FormatInt(expected, 10) +
 		", but got: " + strconv.FormatInt(actual, 10)
 
@@ -247,7 +248,7 @@ func MaxLengthValidationError(expected int64, actual int64) *httperror.Validatio
 
 // MinLengthValidationError returns a validation error when a string is shorter than the allowed minimum length.
 func MinLengthValidationError(expected int64, actual int64) *httperror.ValidationError {
-	detail := "The length of the string value must be less than " +
+	detail := "The length of the string value must be greater than or equal " +
 		strconv.FormatInt(expected, 10) +
 		", but got: " + strconv.FormatInt(actual, 10)
 

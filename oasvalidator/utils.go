@@ -20,6 +20,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 )
 
@@ -51,12 +52,32 @@ func ValidateContentType(contentType string) (string, error) {
 			continue
 		}
 
-		if parsed == httpheader.ContentTypeJSON {
-			return trimmed, nil
-		}
+		switch {
+		case httpheader.IsContentTypeJSON(parsed):
+			if parsed[:2] == "*/" {
+				return httpheader.ContentTypeJSON, nil
+			}
 
-		if result == "" {
-			result = trimmed
+			return trimmed, nil
+		case httpheader.IsContentTypeXML(parsed):
+			if parsed[:2] == "*/" {
+				result = httpheader.ContentTypeXML
+			} else {
+				result = trimmed
+			}
+		case httpheader.IsContentTypeText(parsed):
+			if parsed[len(parsed)-1] == '*' {
+				result = httpheader.ContentTypeTextPlain
+			} else {
+				result = trimmed
+			}
+		case httpheader.IsContentTypeMultipartForm(parsed):
+			if parsed[len(parsed)-1] == '*' {
+				result = httpheader.ContentTypeMultipartFormData
+			} else {
+				result = trimmed
+			}
+		default:
 		}
 	}
 
@@ -178,4 +199,18 @@ func CompareNullableBoolean(a *bool, b *bool) int {
 	}
 
 	return -1
+}
+
+func addErrorHints(
+	dest, errs []httperror.ValidationError,
+	hint string,
+) []httperror.ValidationError {
+	dest = slices.Grow(dest, len(errs))
+
+	for _, err := range errs {
+		err.Hint = hint
+		dest = append(dest, err)
+	}
+
+	return dest
 }

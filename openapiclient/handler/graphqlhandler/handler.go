@@ -30,8 +30,8 @@ import (
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
+	"github.com/relychan/openapitools/oasvalidator/contentencoder"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"github.com/vektah/gqlparser/v2/ast"
 	"go.opentelemetry.io/otel/trace"
 	"go.yaml.in/yaml/v4"
@@ -254,7 +254,7 @@ func (ge *GraphQLHandler) Stream(
 			return resp, err
 		}
 
-		_, err = contenttype.Write(writer, ge.responseContentType, respBody)
+		_, err = contentencoder.Write(writer, ge.responseContentType, respBody)
 
 		return resp, err
 	}

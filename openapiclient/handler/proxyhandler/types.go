@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/hasura/goenvconf"
+	"github.com/relychan/openapitools/oasvalidator/parameter"
 )
 
 var (
@@ -205,6 +206,10 @@ func (r *Request) ToMap() map[string]any {
 		"param":   r.urlParams,
 		"query":   r.queryParams,
 		"headers": r.headerParams,
+	}
+
+	if len(r.headerParams) == 0 && len(r.header) > 0 {
+		result["headers"] = parameter.NormalizeHeaders(r.header)
 	}
 
 	if r.body != nil {

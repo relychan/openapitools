@@ -23,6 +23,7 @@ import (
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
+	"github.com/relychan/openapitools/oasvalidator/contentdecoder"
 )
 
 // paramDecoder holds the resolved configuration and raw string values for a single parameter.
@@ -42,7 +43,14 @@ func (pd *paramDecoder) Decode( //nolint:cyclop
 	ts, allOf, oneOf, anyOf, isNullable := oaschema.ExtractSchemaTypes(pd.Schema)
 	if len(ts) == 0 {
 		if len(pd.RawValues) > 0 || isNullable {
-			return normalizeRawParamValue(pd.RawValues), nil
+			result := normalizeRawParamValue(pd.RawValues)
+
+			errs := oasvalidator.ValidateValue(pd.Schema, result)
+			if len(errs) > 0 {
+				return nil, errs
+			}
+
+			return result, nil
 		}
 
 		return nil, []httperror.ValidationError{
@@ -61,13 +69,13 @@ func (pd *paramDecoder) Decode( //nolint:cyclop
 		return nil, errs
 	}
 
-	errs = oasvalidator.ValidateSchema(pd.Schema)
+	errs = oasvalidator.ValidateValue(pd.Schema, result)
 	if len(errs) > 0 {
 		return nil, errs
 	}
 
 	for _, ao := range allOf {
-		errs = oasvalidator.ValidateSchema(ao)
+		errs := oasvalidator.ValidateValue(ao, result)
 		if len(errs) > 0 {
 			return nil, errs
 		}
@@ -80,11 +88,7 @@ func (pd *paramDecoder) Decode( //nolint:cyclop
 		)
 
 		for _, ao := range anyOf {
-			if len(ao.Type) > 0 && slices.Contains(ao.Type, resultType) {
-				continue
-			}
-
-			errs := oasvalidator.ValidateSchema(ao)
+			errs := oasvalidator.ValidateValue(ao, result)
 			if len(errs) > 0 {
 				anyOfErrs = append(anyOfErrs, errs...)
 
@@ -110,7 +114,7 @@ func (pd *paramDecoder) Decode( //nolint:cyclop
 				continue
 			}
 
-			errs := oasvalidator.ValidateSchema(oo)
+			errs := oasvalidator.ValidateValue(oo, result)
 			if len(errs) > 0 {
 				oneOfErrs = append(oneOfErrs, errs...)
 
@@ -238,7 +242,7 @@ func decodeArrayParamWithItemSchema(
 		itemValue, errs := decoder.Decode(nil)
 		if len(errs) > 0 {
 			for j, e := range errs {
-				e.Pointer = "/" + strconv.Itoa(i)
+				e.PrependPointer("/" + strconv.Itoa(i))
 				errs[j] = e
 			}
 
@@ -249,4 +253,70 @@ func decodeArrayParamWithItemSchema(
 	}
 
 	return results, nil
+}
+
+func decodeParameterFromContent(
+	definition *oaschema.Parameter,
+	rawValues []string,
+) (any, []httperror.ValidationError) {
+	decodedValues := make([]any, 0, len(rawValues))
+
+	for _, rawValue := range rawValues {
+		if rawValue == "" {
+			continue
+		}
+
+		decodedValue, err := contentdecoder.Unmarshal(
+			definition.Content.ContentType,
+			[]byte(rawValue),
+		)
+		if err != nil {
+			return nil, []httperror.ValidationError{
+				{
+					Detail: err.Error(),
+				},
+			}
+		}
+
+		decodedValues = append(decodedValues, decodedValue)
+	}
+
+	if definition.Content.Schema == nil {
+		return normalizeRawParamValue(decodedValues), nil
+	}
+
+	schemaTypes, nullable := oaschema.GetSchemaTypes(definition.Content.Schema)
+	if len(decodedValues) == 0 {
+		if nullable {
+			return nil, nil
+		}
+
+		return nil, []httperror.ValidationError{
+			{
+				Detail: "Field is required",
+			},
+		}
+	}
+
+	if !slices.Contains(schemaTypes, oaschema.Array) {
+		if len(decodedValues) > 1 {
+			return nil, []httperror.ValidationError{
+				*oasvalidator.InvalidTypeError(schemaTypes, oaschema.Array),
+			}
+		}
+
+		errs := oasvalidator.ValidateValue(definition.Content.Schema, decodedValues[0])
+		if len(errs) > 0 {
+			return nil, errs
+		}
+
+		return decodedValues[0], nil
+	}
+
+	errs := oasvalidator.ValidateValue(definition.Content.Schema, decodedValues)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	return decodedValues, nil
 }

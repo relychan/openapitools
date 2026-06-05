@@ -84,6 +84,40 @@ func DecodeQueryFromParameters(
 	return results, nil
 }
 
+func getQueryParameterRawValues(
+	definition *oaschema.Parameter,
+	values map[string][]string,
+	nullable bool,
+) ([]string, bool, []httperror.ValidationError) {
+	rawValues, present := values[definition.Name]
+	if !present {
+		if definition.Required {
+			err := oasvalidator.ParameterRequiredError(definition.Name)
+			err.Code = oasvalidator.ErrCodeInvalidQueryParam
+
+			return nil, false, []httperror.ValidationError{*err}
+		}
+
+		return nil, false, nil
+	}
+
+	if len(rawValues) == 0 {
+		if nullable {
+			return nil, true, nil
+		}
+
+		return nil, false, []httperror.ValidationError{
+			{
+				Code:   oasvalidator.ErrCodeInvalidQueryParam,
+				Detail: "Value must not be null",
+				Header: definition.Name,
+			},
+		}
+	}
+
+	return rawValues, true, nil
+}
+
 // decodeQueryFromParameter decodes a single query parameter using its style, explode setting,
 // and schema type; tries object, array, and scalar strategies in that order.
 func decodeQueryFromParameter(
@@ -97,6 +131,10 @@ func decodeQueryFromParameter(
 		nullable    bool
 		isObject    bool
 	)
+
+	if definition.Content != nil {
+		return decodeQueryFromParameterContent(definition, values)
+	}
 
 	if definition.Schema != nil {
 		schemaTypes, nullable = oaschema.GetSchemaTypes(definition.Schema)
@@ -124,30 +162,9 @@ func decodeQueryFromParameter(
 		isObject = false
 	}
 
-	rawValues, present := values[definition.Name]
-	if !present {
-		if definition.Required {
-			err := oasvalidator.ParameterRequiredError(definition.Name)
-			err.Code = oasvalidator.ErrCodeInvalidQueryParam
-
-			return nil, false, []httperror.ValidationError{*err}
-		}
-
-		return nil, false, nil
-	}
-
-	if len(rawValues) == 0 {
-		if nullable {
-			return nil, true, nil
-		}
-
-		return nil, false, []httperror.ValidationError{
-			{
-				Code:   oasvalidator.ErrCodeInvalidQueryParam,
-				Detail: "Value must not be null",
-				Header: definition.Name,
-			},
-		}
+	rawValues, present, errs := getQueryParameterRawValues(definition, values, nullable)
+	if len(errs) > 0 || len(rawValues) == 0 {
+		return rawValues, present, errs
 	}
 
 	if definition.Schema == nil {
@@ -299,7 +316,7 @@ func decodeQueryDeepObjectFromParameters(
 	for _, def := range definitions {
 		value, decodeErrs := decodeQueryDeepObjectFromParameter(def, rawNodes)
 		if len(decodeErrs) > 0 {
-			errs = append(errs, decodeErrs...)
+			errs = append(errs, enrichQueryErrors(decodeErrs, def.Name)...)
 		} else {
 			results[def.Name] = value
 		}
@@ -318,7 +335,6 @@ func decodeQueryDeepObjectFromParameter(
 	if node == nil {
 		if definition.Required {
 			err := oasvalidator.ParameterRequiredError(definition.Name)
-			err.Code = oasvalidator.ErrCodeInvalidQueryParam
 
 			return nil, []httperror.ValidationError{*err}
 		}
@@ -463,8 +479,25 @@ func newInvalidQueryNonExplodedObjectError(
 func enrichQueryErrors(errs []httperror.ValidationError, name string) []httperror.ValidationError {
 	for i := range errs {
 		errs[i].Code = oasvalidator.ErrCodeInvalidQueryParam
-		errs[i].Header = name
+		errs[i].Parameter = name
 	}
 
 	return errs
+}
+
+func decodeQueryFromParameterContent(
+	definition *oaschema.Parameter,
+	values map[string][]string,
+) (any, bool, []httperror.ValidationError) {
+	rawValues, present, errs := getQueryParameterRawValues(definition, values, true)
+	if len(errs) > 0 || !present {
+		return nil, present, errs
+	}
+
+	result, errs := decodeParameterFromContent(definition, rawValues)
+	if len(errs) > 0 {
+		return nil, false, enrichQueryErrors(errs, definition.Name)
+	}
+
+	return result, true, nil
 }

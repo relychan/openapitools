@@ -16,6 +16,8 @@
 package oasvalidator
 
 import (
+	"strings"
+
 	"github.com/relychan/goutils"
 	"github.com/relychan/openapitools/oaschema"
 )
@@ -43,6 +45,11 @@ func DecodePrimitiveValueFromType(value any, typeName string) (any, string, erro
 
 		return result, oaschema.String, nil
 	case "integer", "int", "int8", "int16", "int32", "int64":
+		s, ok := value.(string)
+		if ok && strings.Contains(s, ".") {
+			return nil, "", errInvalidIntegerString
+		}
+
 		result, err = goutils.DecodeNumber[int64](value)
 		if err != nil {
 			return nil, "", err
@@ -50,6 +57,11 @@ func DecodePrimitiveValueFromType(value any, typeName string) (any, string, erro
 
 		return result, oaschema.Integer, nil
 	case "uint", "uint8", "uint16", "uint32", "uint64":
+		s, ok := value.(string)
+		if ok && strings.Contains(s, ".") {
+			return nil, "", errInvalidIntegerString
+		}
+
 		result, err = goutils.DecodeNumber[uint64](value)
 		if err != nil {
 			return nil, "", err

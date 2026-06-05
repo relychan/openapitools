@@ -81,9 +81,9 @@ func validateRequestBody(requestBody *oaschema.RequestBody, body any) []httperro
 		return nil
 	}
 
-	if requestBody.Schema != nil {
+	if requestBody.Content != nil && requestBody.Content.Schema != nil {
 		errs := oasvalidator.ValidateValue(
-			requestBody.Schema,
+			requestBody.Content.Schema,
 			body,
 		)
 		if len(errs) > 0 {

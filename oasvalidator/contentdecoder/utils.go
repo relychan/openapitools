@@ -12,18 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package contenttype
+package contentdecoder
 
 import (
-	"encoding/json"
-	"io"
+	"net/http"
+
+	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/pb33f/libopenapi/orderedmap"
 )
 
-// DecodeJSON decodes an arbitrary JSON from a reader stream.
-func DecodeJSON(r io.Reader) (any, error) {
-	var result any
+func getHeadersFromSchema(
+	headers http.Header,
+	schema *orderedmap.Map[string, *highv3.Header],
+) http.Header {
+	result := http.Header{}
 
-	decoder := json.NewDecoder(r)
+	for iter := schema.First(); iter != nil; iter = iter.Next() {
+		key := iter.Key()
 
-	return result, decoder.Decode(&result)
+		value := headers.Get(key)
+		if value != "" {
+			result.Set(key, value)
+		}
+	}
+
+	return result
 }

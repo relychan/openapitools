@@ -26,8 +26,9 @@ import (
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oasvalidator"
+	"github.com/relychan/openapitools/oasvalidator/contentdecoder"
+	"github.com/relychan/openapitools/oasvalidator/contentencoder"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -44,7 +45,7 @@ func (re *RESTfulHandler) transformResponse(
 
 	span.SetAttributes(attribute.String("content_type.original", contentTypeFrom))
 
-	originalBody, err := contenttype.Decode(contentTypeFrom, resp.Body)
+	originalBody, err := contentdecoder.Decode(contentTypeFrom, resp.Body)
 
 	goutils.CloseResponse(resp)
 
@@ -176,7 +177,7 @@ func (re *RESTfulHandler) writeRawResponse(
 
 		goutils.CatchWarnErrorFunc(response.Body.Close)
 	} else {
-		decodedBody, decodeError := contenttype.Decode(contentType, response.Body)
+		decodedBody, decodeError := contentdecoder.Decode(contentType, response.Body)
 		goutils.CloseResponse(response)
 
 		if decodeError != nil {
@@ -190,13 +191,13 @@ func (re *RESTfulHandler) writeRawResponse(
 			span.SetStatus(codes.Error, respErr.Detail)
 			span.RecordError(decodeError)
 
-			return decodeError
+			return respErr
 		}
 
 		writer.Header()[httpheader.ContentType] = []string{re.responseContentType}
 		writer.WriteHeader(response.StatusCode)
 
-		_, err = contenttype.Write(writer, re.responseContentType, decodedBody)
+		_, err = contentencoder.Write(writer, re.responseContentType, decodedBody)
 	}
 
 	if err != nil {
@@ -210,7 +211,7 @@ func (re *RESTfulHandler) writeRawResponse(
 		span.SetStatus(codes.Error, respErr.Detail)
 		span.RecordError(err)
 
-		return err
+		return respErr
 	}
 
 	span.SetStatus(codes.Ok, "wrote response successfully")
@@ -229,7 +230,7 @@ func (*RESTfulHandler) decodeRawResponse(
 
 	contentType := httpheader.GetHeaderValue(response.Header, httpheader.ContentType)
 
-	decodedBody, err := contenttype.Decode(contentType, response.Body)
+	decodedBody, err := contentdecoder.Decode(contentType, response.Body)
 	if err != nil {
 		respErr := httperror.NewServerError(httperror.ValidationError{
 			Code:   oasvalidator.ErrCodeResponseDecodeBodyError,

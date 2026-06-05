@@ -3,6 +3,7 @@ module github.com/relychan/openapitools
 go 1.26
 
 require (
+	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/buger/jsonparser v1.2.0
 	github.com/dlclark/regexp2 v1.12.0
 	github.com/failsafe-go/failsafe-go v0.9.6
@@ -12,7 +13,7 @@ require (
 	github.com/pb33f/libopenapi v0.37.2
 	github.com/relychan/gohttpc v0.0.0-20260531030038-6fc91e67f25f
 	github.com/relychan/gotransform v0.0.0-20260404192235-bcef8d71746d
-	github.com/relychan/goutils v0.0.0-20260529174539-fae163d678da
+	github.com/relychan/goutils v0.0.0-20260605050055-e2c1246fd7f6
 	github.com/samber/lo v1.53.0
 	github.com/stretchr/testify v1.11.1
 	github.com/vektah/gqlparser/v2 v2.5.33
@@ -24,7 +25,6 @@ require (
 require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
-	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect

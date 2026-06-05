@@ -16,6 +16,7 @@ package oasvalidator
 
 import (
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
@@ -52,39 +53,13 @@ func ValidateOperation(
 				*operation.RequestBody.Required,
 		}
 
-		requestContentType, requestBodyMediaType := getRequestBodyContentSchema(
-			operation,
+		content, contentErrs := validateRequestContent(
+			operation.RequestBody.Content,
 		)
-
-		if requestContentType != "" {
-			contentType, err := ValidateContentType(requestContentType)
-			if err != nil {
-				errs = append(errs, httperror.ValidationError{
-					Detail:  err.Error() + " " + contentType,
-					Pointer: "/contentType",
-					Code:    ErrCodeOpenAPISchemaError,
-				})
-			}
-
-			result.RequestContentType = contentType
-		}
-
-		if requestBodyMediaType != nil {
-			bodySchema, validateErrors := ValidateSchemaProxy(requestBodyMediaType.Schema)
-			if len(validateErrors) > 0 {
-				errs = append(errs, validateErrors...)
-			}
-
-			result.RequestBody.Schema = bodySchema
-
-			itemSchema, validateErrors := ValidateSchemaProxy(requestBodyMediaType.ItemSchema)
-			if len(validateErrors) > 0 {
-				errs = append(errs, validateErrors...)
-			}
-
-			result.RequestBody.ItemSchema = itemSchema
-			result.RequestBody.Encoding = requestBodyMediaType.Encoding
-			result.RequestBody.ItemEncoding = requestBodyMediaType.ItemEncoding
+		if len(contentErrs) > 0 {
+			errs = append(errs, contentErrs...)
+		} else if content != nil {
+			result.RequestBody.Content = content
 		}
 	}
 
@@ -160,12 +135,12 @@ func applyRequestBodyReference(document *highv3.Document, operation *highv3.Oper
 		operation.RequestBody.Required = refBody.Required
 	}
 
-	operation.RequestBody.Content = oaschema.MergeOrderedMap(
+	operation.RequestBody.Content = oaschema.MergeDefaultOrderedMap(
 		operation.RequestBody.Content,
 		refBody.Content,
 	)
 
-	operation.RequestBody.Extensions = oaschema.MergeOrderedMap(
+	operation.RequestBody.Extensions = oaschema.MergeDefaultOrderedMap(
 		operation.RequestBody.Extensions,
 		refBody.Extensions,
 	)
@@ -201,22 +176,22 @@ func applyResponseReference(document *highv3.Document, response *highv3.Response
 		response.Summary = refResponse.Summary
 	}
 
-	response.Headers = oaschema.MergeOrderedMap(
+	response.Headers = oaschema.MergeDefaultOrderedMap(
 		response.Headers,
 		refResponse.Headers,
 	)
 
-	response.Links = oaschema.MergeOrderedMap(
+	response.Links = oaschema.MergeDefaultOrderedMap(
 		response.Links,
 		refResponse.Links,
 	)
 
-	response.Content = oaschema.MergeOrderedMap(
+	response.Content = oaschema.MergeDefaultOrderedMap(
 		response.Content,
 		refResponse.Content,
 	)
 
-	response.Extensions = oaschema.MergeOrderedMap(
+	response.Extensions = oaschema.MergeDefaultOrderedMap(
 		response.Extensions,
 		refResponse.Extensions,
 	)
@@ -224,15 +199,11 @@ func applyResponseReference(document *highv3.Document, response *highv3.Response
 	return response
 }
 
-// getRequestBodyContentSchema returns the preferred content type and media type for the request body,
+// getRequestContentSchema returns the preferred content type and media type for the request,
 // preferring application/json when multiple content types are declared.
-func getRequestBodyContentSchema(operation *highv3.Operation) (string, *highv3.MediaType) {
-	contents := operation.RequestBody.Content
-
-	if operation.RequestBody.Content == nil || contents.Len() == 0 {
-		return "", nil
-	}
-
+func getRequestContentSchema(
+	contents *orderedmap.Map[string, *highv3.MediaType],
+) (string, *highv3.MediaType) {
 	var (
 		defaultContentType   string
 		defaultContentSchema *highv3.MediaType
@@ -257,4 +228,59 @@ func getRequestBodyContentSchema(operation *highv3.Operation) (string, *highv3.M
 	}
 
 	return defaultContentType, defaultContentSchema
+}
+
+func validateRequestContent(
+	contents *orderedmap.Map[string, *highv3.MediaType],
+) (*oaschema.MediaType, []httperror.ValidationError) {
+	if contents == nil || contents.Len() == 0 {
+		return nil, nil
+	}
+
+	requestContentType, requestMediaType := getRequestContentSchema(contents)
+	if requestContentType == "" && requestMediaType == nil {
+		return nil, nil
+	}
+
+	var (
+		errs   []httperror.ValidationError
+		result = &oaschema.MediaType{}
+	)
+
+	if requestContentType != "" {
+		contentType, err := ValidateContentType(requestContentType)
+		if err != nil {
+			errs = append(errs, httperror.ValidationError{
+				Detail:  err.Error() + " " + requestContentType,
+				Pointer: "/contentType",
+				Code:    ErrCodeOpenAPISchemaError,
+			})
+		}
+
+		result.ContentType = contentType
+	}
+
+	if requestMediaType != nil {
+		bodySchema, validateErrors := ValidateSchemaProxy(requestMediaType.Schema)
+		if len(validateErrors) > 0 {
+			errs = append(errs, validateErrors...)
+		}
+
+		result.Schema = bodySchema
+
+		itemSchema, validateErrors := ValidateSchemaProxy(requestMediaType.ItemSchema)
+		if len(validateErrors) > 0 {
+			errs = append(errs, validateErrors...)
+		}
+
+		result.ItemSchema = itemSchema
+		result.Encoding = requestMediaType.Encoding
+		result.ItemEncoding = requestMediaType.ItemEncoding
+	}
+
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	return result, nil
 }

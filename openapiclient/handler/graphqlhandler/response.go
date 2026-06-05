@@ -27,7 +27,7 @@ import (
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oasvalidator"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
+	"github.com/relychan/openapitools/oasvalidator/contentencoder"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -227,7 +227,7 @@ func (ge *GraphQLHandler) writeTransformResponse(
 
 	writer.Header()[httpheader.ContentType] = []string{ge.responseContentType}
 
-	_, err = contenttype.Write(writer, ge.responseContentType, transformedBody)
+	_, err = contentencoder.Write(writer, ge.responseContentType, transformedBody)
 	if err != nil {
 		span.SetStatus(codes.Error, "failed to write response body")
 		span.RecordError(err)

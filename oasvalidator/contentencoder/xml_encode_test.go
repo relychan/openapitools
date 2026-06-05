@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package contenttype
+package contentencoder
 
 import (
 	"bytes"
 	"testing"
 
+	"github.com/relychan/openapitools/oasvalidator/contentdecoder"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -83,7 +84,7 @@ func TestCreateArbitraryXMLForm(t *testing.T) {
 			result, err := EncodeXML(tc.Body)
 			assert.NoError(t, err)
 
-			parsedResult, err := DecodeXML(bytes.NewBuffer(result))
+			parsedResult, err := contentdecoder.DecodeXML(bytes.NewBuffer(result))
 			assert.NoError(t, err)
 
 			assert.Equal(t, tc.Body, parsedResult)

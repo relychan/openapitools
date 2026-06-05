@@ -26,8 +26,8 @@ import (
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator/contentencoder"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 	"go.opentelemetry.io/otel/trace"
@@ -239,7 +239,7 @@ func (re *RESTfulHandler) handleRequest(
 	writer.Header()[httpheader.ContentType] = []string{contentTypeTo}
 	writer.WriteHeader(resp.StatusCode)
 
-	_, err = contenttype.Write(writer, contentTypeTo, transformedBody)
+	_, err = contentencoder.Write(writer, contentTypeTo, transformedBody)
 
 	re.printRequestLog(
 		ctx,

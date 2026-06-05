@@ -459,7 +459,7 @@ func patNextSegment(pattern string) (*patNextSegmentResult, error) {
 
 	var rePattern string
 
-	paramName := pattern[1:endIndex]
+	paramName := strings.Trim(pattern[1:endIndex], "*")
 
 	if regexIndex > 0 {
 		if regexIndex >= endIndex {

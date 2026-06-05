@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package contenttype
+package contentencoder
 
 import (
 	"encoding/json"
@@ -48,29 +48,5 @@ func Write(writer io.Writer, contentType string, body any) (int, error) {
 	default:
 		// Encode binary by default.
 		return WriteBinary(writer, body)
-	}
-}
-
-// Decode decodes the data by content type to arbitrary value.
-func Decode(contentType string, rawBody io.Reader) (any, error) {
-	if rawBody == nil {
-		return nil, nil
-	}
-
-	switch {
-	case httpheader.IsContentTypeJSON(contentType):
-		return DecodeJSON(rawBody)
-	case httpheader.IsContentTypeXML(contentType):
-		return DecodeXML(rawBody)
-	case httpheader.IsContentTypeText(contentType):
-		resultBytes, err := io.ReadAll(rawBody)
-		if err != nil {
-			return nil, err
-		}
-
-		return string(resultBytes), nil
-	default:
-		// Decode binary by default.
-		return io.ReadAll(rawBody)
 	}
 }

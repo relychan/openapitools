@@ -36,8 +36,8 @@ import (
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator/contentdecoder"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -389,7 +389,7 @@ func TestProxyClient_Auth(t *testing.T) {
 				contentType := writer.Header().Get(httpheader.ContentType)
 				assert.Equal(t, httpheader.ContentTypeTextPlain, contentType)
 
-				respBody, err := contenttype.Decode(contentType, writer.Body)
+				respBody, err := contentdecoder.Decode(contentType, writer.Body)
 				require.NoError(t, err)
 				require.Equal(t, tc.ResponseBody, respBody, "Content Type: "+contentType)
 			}

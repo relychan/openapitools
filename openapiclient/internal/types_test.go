@@ -125,7 +125,7 @@ func TestNewInvalidOperationMetadataError(t *testing.T) {
 
 			// Check if it's an RFC9457Error
 			rfc9457Err, ok := err.(httperror.HTTPError)
-			assert.True(t, ok, "error should be of type RFC9457Error")
+			assert.True(t, ok, "error should be of type HTTPError")
 
 			// Verify error properties
 			assert.Equal(t, tc.expectedStatus, rfc9457Err.Status)

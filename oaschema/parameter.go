@@ -64,6 +64,8 @@ type Parameter struct {
 	Style *ParameterEncodingStyle `json:"style,omitempty" yaml:"style,omitempty" jsonschema:"enum=simple,enum=label,enum=matrix,enum=form,enum=spaceDelimited,enum=pipeDelimited,enum=deepObject"`
 	// Schema of the parameter.
 	Schema *base.Schema `json:"-" yaml:"-"`
+	// Optional con
+	Content *MediaType `json:"-" yaml:"-"`
 }
 
 // Validate checks if the current parameter config is valid.

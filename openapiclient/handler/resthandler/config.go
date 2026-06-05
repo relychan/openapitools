@@ -200,7 +200,11 @@ func parseRequestContentType(
 	conf *ProxyRESTfulRequestConfig,
 ) (string, error) {
 	if conf == nil || conf.ContentType == "" {
-		return operation.RequestContentType, nil
+		if operation.RequestBody != nil && operation.RequestBody.Content != nil {
+			return operation.RequestBody.Content.ContentType, nil
+		}
+
+		return "", nil
 	}
 
 	result, err := oasvalidator.ValidateContentType(conf.ContentType)

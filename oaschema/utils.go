@@ -109,8 +109,11 @@ func GetResponseContentType(responses *highv3.Responses) string {
 	return ""
 }
 
-// MergeOrderedMap assigns properties of the source order map to another.
-func MergeOrderedMap[K comparable, V any](dest, src *orderedmap.Map[K, V]) *orderedmap.Map[K, V] {
+// MergeDefaultOrderedMap assigns properties of the source order map to another.
+// Existing properties will not be assigned.
+func MergeDefaultOrderedMap[K comparable, V any](
+	dest, src *orderedmap.Map[K, V],
+) *orderedmap.Map[K, V] {
 	if src == nil || src.Len() == 0 {
 		return dest
 	}
@@ -123,7 +126,7 @@ func MergeOrderedMap[K comparable, V any](dest, src *orderedmap.Map[K, V]) *orde
 		key := iter.Key()
 
 		_, present := dest.Get(key)
-		if present {
+		if !present {
 			dest.Set(key, iter.Value())
 		}
 	}

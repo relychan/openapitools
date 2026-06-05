@@ -23,7 +23,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dlclark/regexp2"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
@@ -84,45 +83,45 @@ func ValidateValueWithSchemaProxy(
 
 // ValidateValue validates a value against an OpenAPI schema.
 func ValidateValue(typeSchema *base.Schema, value any) []httperror.ValidationError {
-	errFuncs := validateValueOnly(typeSchema, value)
+	validationErrors := validateValueOnly(typeSchema, value)
 
-	for _, ao := range typeSchema.AllOf {
-		errFns := ValidateValueWithSchemaProxy(ao, value)
-		if len(errFns) > 0 {
-			errFuncs = append(errFuncs, errFns...)
+	for i, ao := range typeSchema.AllOf {
+		errs := ValidateValueWithSchemaProxy(ao, value)
+		if len(errs) > 0 {
+			validationErrors = addErrorHints(validationErrors, errs, "/allOf/"+strconv.Itoa(i))
 		}
 	}
 
 	if len(typeSchema.AnyOf) > 0 {
 		var (
-			aoErrFuncs   []httperror.ValidationError
+			aoErrors     []httperror.ValidationError
 			isSuccessful bool
 		)
 
-		for _, ao := range typeSchema.AnyOf {
-			errFns := ValidateValueWithSchemaProxy(ao, value)
-			if len(errFns) > 0 {
-				aoErrFuncs = append(aoErrFuncs, errFns...)
+		for i, ao := range typeSchema.AnyOf {
+			errs := ValidateValueWithSchemaProxy(ao, value)
+			if len(errs) > 0 {
+				aoErrors = addErrorHints(aoErrors, errs, "/anyOf/"+strconv.Itoa(i))
 			} else {
 				isSuccessful = true
 			}
 		}
 
 		if !isSuccessful {
-			errFuncs = append(errFuncs, aoErrFuncs...)
+			validationErrors = append(validationErrors, aoErrors...)
 		}
 	}
 
 	if len(typeSchema.OneOf) > 0 {
 		var (
-			ooErrFuncs   []httperror.ValidationError
+			ooErrors     []httperror.ValidationError
 			isSuccessful bool
 		)
 
-		for _, oo := range typeSchema.OneOf {
-			errFns := ValidateValueWithSchemaProxy(oo, value)
-			if len(errFns) > 0 {
-				ooErrFuncs = append(ooErrFuncs, errFns...)
+		for i, oo := range typeSchema.OneOf {
+			errs := ValidateValueWithSchemaProxy(oo, value)
+			if len(errs) > 0 {
+				ooErrors = addErrorHints(ooErrors, errs, "/oneOf/"+strconv.Itoa(i))
 
 				continue
 			}
@@ -133,11 +132,11 @@ func ValidateValue(typeSchema *base.Schema, value any) []httperror.ValidationErr
 		}
 
 		if !isSuccessful {
-			errFuncs = append(errFuncs, ooErrFuncs...)
+			validationErrors = append(validationErrors, ooErrors...)
 		}
 	}
 
-	return errFuncs
+	return validationErrors
 }
 
 // ValidateBoolean validates a boolean value against an OpenAPI schema.
@@ -170,6 +169,11 @@ func ValidateString(typeSchema *base.Schema, value string) []httperror.Validatio
 		return []httperror.ValidationError{*InvalidTypeError(typeSchema.Type, oaschema.String)}
 	}
 
+	formatErr := validateFormat(value, typeSchema.Format)
+	if formatErr != nil {
+		return []httperror.ValidationError{*formatErr}
+	}
+
 	if !ValidateEnum(typeSchema, value) {
 		return []httperror.ValidationError{
 			*EnumValidationError(typeSchema, value),
@@ -180,6 +184,12 @@ func ValidateString(typeSchema *base.Schema, value string) []httperror.Validatio
 
 	var errs []httperror.ValidationError
 
+	if typeSchema.MaxLength != nil && valueLength > *typeSchema.MaxLength {
+		errs = append(errs, *MaxLengthValidationError(*typeSchema.MaxLength, valueLength))
+	} else if typeSchema.MinLength != nil && valueLength < *typeSchema.MinLength {
+		errs = append(errs, *MinLengthValidationError(*typeSchema.MinLength, valueLength))
+	}
+
 	alError := validateArrayLength(typeSchema, valueLength)
 	if alError != nil {
 		errs = append(errs, *alError)
@@ -189,7 +199,7 @@ func ValidateString(typeSchema *base.Schema, value string) []httperror.Validatio
 		return errs
 	}
 
-	pattern, err := regexp2.Compile(typeSchema.Pattern, regexp2.None)
+	pattern, err := regexps.Get(typeSchema.Pattern)
 	// ignore compile error on runtime.
 	if err != nil {
 		return errs
@@ -348,6 +358,11 @@ func ValidateArrayAndItems[T any](
 				itemError.PrependPointer("/" + strconv.Itoa(i))
 
 				errs = append(errs, itemError)
+			}
+
+			// early stop the loop if there are too many errors.
+			if len(errs) >= 10 {
+				return errs
 			}
 		}
 	}

@@ -24,18 +24,11 @@ import (
 	"github.com/relychan/openapitools/oasvalidator"
 )
 
-// DecodeHeaderParameters decodes header parameters from the header map value.
-// Each header value is encoded differently on each style, according to the [OpenAPI specification].
-//
-// [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
-func DecodeHeaderParameters(
-	definition []*oaschema.Parameter,
-	headers http.Header,
-) (map[string]any, []httperror.ValidationError) {
-	var (
-		results      = make(map[string]any, len(headers))
-		decodeErrors []httperror.ValidationError
-	)
+// NormalizeHeaders normalize HTTP headers to a string value map.
+// Header keys are transformed to lowercase.
+// Header values are transformed to either string or array string if they have many items.
+func NormalizeHeaders(headers http.Header) map[string]any {
+	results := make(map[string]any, len(headers))
 
 	for key, header := range headers {
 		if len(header) == 0 {
@@ -44,6 +37,21 @@ func DecodeHeaderParameters(
 
 		results[strings.ToLower(key)] = normalizeRawParamValue(header)
 	}
+
+	return results
+}
+
+// DecodeHeaderParameters decodes header parameters from the header map value.
+// Each header value is encoded differently on each style, according to the [OpenAPI specification].
+//
+// [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
+func DecodeHeaderParameters(
+	definition []*oaschema.Parameter,
+	headers http.Header,
+) (map[string]any, []httperror.ValidationError) {
+	var decodeErrors []httperror.ValidationError
+
+	results := NormalizeHeaders(headers)
 
 	for _, def := range definition {
 		if def == nil || def.In != oaschema.InHeader {
@@ -88,6 +96,15 @@ func decodeHeaderParameter(
 				Header: definition.Name,
 			},
 		}
+	}
+
+	if definition.Content != nil {
+		result, errs := decodeParameterFromContent(definition, rawValues)
+		if len(errs) > 0 {
+			return nil, enrichHeaderErrors(errs, definition.Name)
+		}
+
+		return result, nil
 	}
 
 	if definition.Schema == nil {

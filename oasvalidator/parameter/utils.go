@@ -407,7 +407,7 @@ func parseDeepObjectKey(input string) (ParamKeys, bool) {
 
 // normalizeRawParamValue unwraps a string slice into a scalar (nil, string, or []string) so that
 // parameters with a single value are not needlessly wrapped in a slice before schema validation.
-func normalizeRawParamValue(values []string) any {
+func normalizeRawParamValue[T any](values []T) any {
 	switch len(values) {
 	case 0:
 		return nil

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package contenttype
+package contentdecoder
 
 import (
 	"strings"
@@ -94,51 +94,6 @@ func TestDecodeXML(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, tc.expected, result)
 			}
-		})
-	}
-}
-
-func TestDecodeXMLRoundtrip(t *testing.T) {
-	testCases := []struct {
-		name  string
-		input map[string]any
-	}{
-		{
-			name: "flat object",
-			input: map[string]any{
-				"id":     "10",
-				"status": "active",
-			},
-		},
-		{
-			name: "nested object",
-			input: map[string]any{
-				"user": map[string]any{
-					"name": "Alice",
-					"age":  "30",
-				},
-			},
-		},
-		{
-			name: "array of objects",
-			input: map[string]any{
-				"item": []any{
-					map[string]any{"id": "1", "name": "first"},
-					map[string]any{"id": "2", "name": "second"},
-				},
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			encoded, err := EncodeXML(tc.input)
-			require.NoError(t, err)
-
-			decoded, err := DecodeXML(strings.NewReader(string(encoded)))
-			require.NoError(t, err)
-
-			assert.Equal(t, tc.input, decoded)
 		})
 	}
 }

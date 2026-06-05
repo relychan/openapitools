@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package contenttype
+package contentencoder
 
 import (
 	"encoding/json"
@@ -28,6 +28,7 @@ import (
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oasvalidator"
+	"github.com/relychan/openapitools/oasvalidator/contentdecoder"
 )
 
 // MultipartWriter extends multipart.Writer with helpers.
@@ -52,7 +53,7 @@ func (w *MultipartWriter) WriteDataURI(
 		return newMultipartWriteError(name, err)
 	}
 
-	dataURI, err := DecodeDataURI(b64)
+	dataURI, err := contentdecoder.DecodeDataURI(b64)
 	if err != nil {
 		return newMultipartWriteError(name, err)
 	}

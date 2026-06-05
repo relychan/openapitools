@@ -179,11 +179,11 @@ func validateAllOfSchema( //nolint:gocognit,gocyclo,cyclop,funlen,maintidx
 		}
 
 		if allOf.DependentRequired != nil && schema.DependentRequired == nil {
-			oaschema.MergeOrderedMap(schema.DependentRequired, allOf.DependentRequired)
+			oaschema.MergeDefaultOrderedMap(schema.DependentRequired, allOf.DependentRequired)
 		}
 
 		if allOf.DependentSchemas != nil && schema.DependentSchemas == nil {
-			oaschema.MergeOrderedMap(schema.DependentSchemas, allOf.DependentSchemas)
+			oaschema.MergeDefaultOrderedMap(schema.DependentSchemas, allOf.DependentSchemas)
 		}
 
 		if allOf.Discriminator != nil && schema.Discriminator == nil {
@@ -220,7 +220,7 @@ func validateAllOfSchema( //nolint:gocognit,gocyclo,cyclop,funlen,maintidx
 		}
 
 		if allOf.Extensions != nil && allOf.Extensions.Len() > 0 {
-			oaschema.MergeOrderedMap(schema.Extensions, allOf.Extensions)
+			oaschema.MergeDefaultOrderedMap(schema.Extensions, allOf.Extensions)
 		}
 
 		if allOf.ExternalDocs != nil && schema.ExternalDocs == nil {
@@ -248,8 +248,8 @@ func validateAllOfSchema( //nolint:gocognit,gocyclo,cyclop,funlen,maintidx
 			schema.Pattern = allOf.Pattern
 		}
 
-		oaschema.MergeOrderedMap(schema.Properties, allOf.Properties)
-		oaschema.MergeOrderedMap(schema.PatternProperties, allOf.PatternProperties)
+		oaschema.MergeDefaultOrderedMap(schema.Properties, allOf.Properties)
+		oaschema.MergeDefaultOrderedMap(schema.PatternProperties, allOf.PatternProperties)
 
 		if len(allOf.PrefixItems) > 0 && len(schema.PrefixItems) == 0 {
 			schema.PrefixItems = allOf.PrefixItems
@@ -280,7 +280,7 @@ func validateAllOfSchema( //nolint:gocognit,gocyclo,cyclop,funlen,maintidx
 			schema.UniqueItems = allOf.UniqueItems
 		}
 
-		oaschema.MergeOrderedMap(schema.Vocabulary, allOf.Vocabulary)
+		oaschema.MergeDefaultOrderedMap(schema.Vocabulary, allOf.Vocabulary)
 
 		if allOf.WriteOnly != nil && *allOf.WriteOnly {
 			schema.WriteOnly = allOf.WriteOnly

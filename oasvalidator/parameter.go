@@ -122,6 +122,17 @@ func ValidateParameterDefinition(
 		}
 	}
 
+	if param.Content != nil {
+		content, contentErrs := validateRequestContent(
+			param.Content,
+		)
+		if len(contentErrs) > 0 {
+			errs = append(errs, contentErrs...)
+		} else if content != nil {
+			result.Content = content
+		}
+	}
+
 	if len(errs) > 0 {
 		return nil, errs
 	}

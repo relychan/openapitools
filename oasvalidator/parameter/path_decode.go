@@ -48,6 +48,20 @@ func DecodePathValue(
 		return nil, []httperror.ValidationError{*err}
 	}
 
+	if definition != nil && definition.Content != nil {
+		rawValues, parseErr := parsePathArrayParam(definition.Name, value, style, explode)
+		if parseErr != nil {
+			return nil, []httperror.ValidationError{*parseErr}
+		}
+
+		result, errs := decodeParameterFromContent(definition, rawValues)
+		if len(errs) > 0 {
+			return nil, enrichHeaderErrors(errs, definition.Name)
+		}
+
+		return result, nil
+	}
+
 	if definition == nil || definition.Schema == nil {
 		rawResults, parseErr := parsePathArrayParam(definition.Name, value, style, explode)
 		if parseErr != nil {
@@ -57,20 +71,15 @@ func DecodePathValue(
 		return normalizeRawParamValue(rawResults), nil
 	}
 
-	schemaTypes, nullable := oaschema.GetSchemaTypes(definition.Schema)
+	schemaTypes, _ := oaschema.GetSchemaTypes(definition.Schema)
 
-	if value == "" {
-		if nullable {
-			return nil, nil
+	if slices.Contains(schemaTypes, oaschema.String) {
+		errs := oasvalidator.ValidateValue(definition.Schema, value)
+		if len(errs) > 0 {
+			return nil, enrichPathParamErrors(errs, definition.Name)
 		}
 
-		return nil, []httperror.ValidationError{
-			{
-				Code:      oasvalidator.ErrCodeInvalidURLParam,
-				Detail:    "URL parameter must not be empty",
-				Parameter: definition.Name,
-			},
-		}
+		return value, nil
 	}
 
 	if slices.Contains(schemaTypes, oaschema.Object) {
@@ -127,13 +136,13 @@ func decodePathArrayParam(
 	rawValues []string,
 ) (any, []httperror.ValidationError) {
 	results, errs := decodeArrayParam(rawValues, definition.Schema)
-	if len(errs) == 0 {
-		return results, nil
+	if len(errs) > 0 {
+		return nil, errs
 	}
 
-	errs = oasvalidator.ValidateValue(definition.Schema, results)
+	errs = oasvalidator.ValidateArray(definition.Schema, results, nil)
 	if len(errs) > 0 {
-		return nil, enrichPathParamErrors(errs, definition.Name)
+		return nil, errs
 	}
 
 	return results, nil

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package contenttype implement encoders and decoders for data by content types.
-package contenttype
+// Package contentdecoder implement encoders and decoders for data by content types.
+package contentdecoder
 
 import (
 	"encoding/base64"

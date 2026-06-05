@@ -100,6 +100,19 @@ func TestTreeNodes(t *testing.T) {
 				},
 			},
 		},
+		{
+			Path:    "/burgers/1,pizza,3,4,false/locate",
+			Pattern: "/burgers/{burgerIds*}/locate",
+			Method:  http.MethodGet,
+			Handlers: &highv3.PathItem{
+				Get: &highv3.Operation{},
+			},
+			Route: Route{
+				ParamValues: map[string]any{
+					"burgerIds": "1,pizza,3,4,false",
+				},
+			},
+		},
 	}
 
 	node := new(Node)
@@ -111,6 +124,9 @@ func TestTreeNodes(t *testing.T) {
 
 	routeAsText := `
 - / []
+  - /burgers []
+    - /{burgerIds} []
+      - /locate [GET]
   - /posts [GET]
     - /{id} []
       - / [POST]
@@ -129,8 +145,8 @@ func TestTreeNodes(t *testing.T) {
 			postNode, err := node.FindRoute(route.Path, route.Method)
 			assert.True(t, err == nil)
 			assert.True(t, postNode != nil)
-			assert.Equal(t, postNode.Pattern, route.Pattern)
-			assert.Equal(t, postNode.ParamValues, route.Route.ParamValues)
+			assert.Equal(t, route.Pattern, postNode.Pattern)
+			assert.Equal(t, route.Route.ParamValues, postNode.ParamValues)
 		}) {
 			break
 		}
