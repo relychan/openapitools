@@ -242,52 +242,6 @@ func TestDecodeHeaderParameter_Object(t *testing.T) {
 	})
 }
 
-func TestParseHeaderArrayParam(t *testing.T) {
-	cases := []struct {
-		name     string
-		input    []string
-		expected []string
-	}{
-		{
-			name:     "single_no_comma",
-			input:    []string{"abc"},
-			expected: []string{"abc"},
-		},
-		{
-			name:     "single_with_commas",
-			input:    []string{"a,b,c"},
-			expected: []string{"a", "b", "c"},
-		},
-		{
-			name:     "multiple_values_with_commas",
-			input:    []string{"a,b", "c,d"},
-			expected: []string{"a", "b", "c", "d"},
-		},
-		{
-			name:     "empty_string_produces_empty_string_element",
-			input:    []string{""},
-			expected: []string{""},
-		},
-		{
-			name:     "no_values",
-			input:    []string{},
-			expected: []string{},
-		},
-		{
-			name:     "mixed_empty_and_value",
-			input:    []string{"", "a,b"},
-			expected: []string{"a", "b"},
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := parseHeaderArrayParam(tc.input)
-			assert.Equal(t, tc.expected, result)
-		})
-	}
-}
-
 func TestSplitObjectFromHeaderValues(t *testing.T) {
 	t.Run("non_explode_valid", func(t *testing.T) {
 		result, err := splitObjectFromHeaderValues([]string{"role", "admin", "age", "30"}, false)

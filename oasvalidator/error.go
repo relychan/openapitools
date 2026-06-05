@@ -69,6 +69,10 @@ const (
 	ErrCodeInvalidQueryParam = "invalid_query_param"
 	// ErrCodeInvalidHeader represents a code for invalid header errors.
 	ErrCodeInvalidHeader = "invalid_header"
+	// ErrCodeCookieRequired represents a code for missing cookie error.
+	ErrCodeCookieRequired = "cookie_required"
+	// ErrCodeInvalidCookie represents a code for invalid cookie errors.
+	ErrCodeInvalidCookie = "invalid_cookie"
 	// ErrCodeValidationError represents a code for validation errors.
 	ErrCodeValidationError = "validation_error"
 	// ErrCodeGraphQLResponseEmpty represents a code for empty graphql response.

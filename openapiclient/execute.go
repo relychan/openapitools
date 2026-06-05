@@ -61,7 +61,7 @@ func (pc *ProxyClient) Execute(
 		return nil, nil, routeErr
 	}
 
-	validationErr := validateRequest(route, request)
+	validationErr := validateRequest(route, request, nil)
 	if validationErr != nil {
 		span.SetStatus(codes.Error, "Failed to validate request")
 		span.RecordError(validationErr)

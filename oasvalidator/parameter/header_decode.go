@@ -108,7 +108,7 @@ func decodeHeaderParameter(
 	}
 
 	if definition.Schema == nil {
-		rawResults := parseHeaderArrayParam(rawValues)
+		rawResults := splitArrayParams(rawValues)
 
 		return normalizeRawParamValue(rawResults), nil
 	}
@@ -145,7 +145,7 @@ func decodeHeaderParameter(
 	}
 
 	if slices.Contains(schemaTypes, oaschema.Array) {
-		result, errs := decodeHeaderArrayParam(definition, rawValues)
+		result, errs := splitAndDecodeArrayParam(definition, rawValues)
 		if len(errs) == 0 {
 			return result, nil
 		}
@@ -172,12 +172,12 @@ func decodeHeaderParameter(
 	return result, nil
 }
 
-// decodeHeaderArrayParam splits comma-joined header values and decodes the resulting array.
-func decodeHeaderArrayParam(
+// Splits comma-joined header values and decodes the resulting array.
+func splitAndDecodeArrayParam(
 	definition *oaschema.Parameter,
 	rawValues []string,
 ) (any, []httperror.ValidationError) {
-	rawParts := parseHeaderArrayParam(rawValues)
+	rawParts := splitArrayParams(rawValues)
 
 	results, errs := decodeArrayParam(rawParts, definition.Schema)
 	if len(errs) > 0 {
@@ -198,7 +198,7 @@ func decodeHeaderObjectParam(
 	definition *oaschema.Parameter,
 	rawValues []string,
 ) (any, []httperror.ValidationError) {
-	rawParts := parseHeaderArrayParam(rawValues)
+	rawParts := splitArrayParams(rawValues)
 
 	explode := definition.Explode != nil && *definition.Explode
 
@@ -217,44 +217,6 @@ func decodeHeaderObjectParam(
 	}
 
 	return decoder.Result, nil
-}
-
-// parseHeaderArrayParam splits comma-joined values in rawValues into individual items.
-// Returns rawValues unchanged when no commas are present, avoiding an allocation.
-func parseHeaderArrayParam(rawValues []string) []string {
-	valueCount := 0
-
-	for _, value := range rawValues {
-		valueCount++
-
-		for i := range value {
-			if value[i] == oaschema.Comma[0] {
-				valueCount++
-			}
-		}
-	}
-
-	if valueCount == len(rawValues) {
-		return rawValues
-	}
-
-	results := make([]string, 0, valueCount)
-
-	for _, value := range rawValues {
-		if value == "" {
-			continue
-		}
-
-		for item := range strings.SplitSeq(value, oaschema.Comma) {
-			results = append(results, item)
-		}
-	}
-
-	if len(results) == 0 {
-		results = []string{""}
-	}
-
-	return slices.Clip(results)
 }
 
 // Splits header values into a key→value map according to the serialization style.

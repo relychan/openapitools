@@ -76,6 +76,8 @@ type Request struct {
 	queryParams map[string]any
 	// Evaluated headers of the request.
 	headerParams map[string]any
+	// Evaluated cookies of the request.
+	cookieParams map[string]any
 	// URL fragment.
 	fragment string
 }
@@ -200,12 +202,18 @@ func (r *Request) SetHeaderParams(values map[string]any) {
 	r.headerParams = values
 }
 
+// SetCookieParams sets decoded cookie parameters for the request.
+func (r *Request) SetCookieParams(values map[string]any) {
+	r.cookieParams = values
+}
+
 // ToMap converts the struct to map.
 func (r *Request) ToMap() map[string]any {
 	result := map[string]any{
 		"param":   r.urlParams,
 		"query":   r.queryParams,
 		"headers": r.headerParams,
+		"cookies": r.cookieParams,
 	}
 
 	if len(r.headerParams) == 0 && len(r.header) > 0 {

@@ -15,6 +15,8 @@
 package openapiclient
 
 import (
+	"net/http"
+
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
@@ -58,12 +60,29 @@ func (pc *ProxyClient) newRequestFunc(
 	}
 }
 
-func validateRequest(route *internal.Route, request *proxyhandler.Request) *httperror.HTTPError {
+func validateRequest(
+	route *internal.Route,
+	request *proxyhandler.Request,
+	cookies []*http.Cookie,
+) *httperror.HTTPError {
 	errs := validateRequestParameters(route, request)
-	bodyErrs := validateRequestBody(route.Method.Operation.RequestBody, request.Body())
 
+	bodyErrs := validateRequestBody(route.Method.Operation.RequestBody, request.Body())
 	if len(bodyErrs) > 0 {
 		errs = append(errs, bodyErrs...)
+	}
+
+	if len(cookies) > 0 {
+		// Skip cookies if the request is not streaming.
+		cookieParams, cookieErrs := parameter.DecodeCookieParameters(
+			route.Method.Operation.Parameters,
+			cookies,
+		)
+		if len(cookieErrs) > 0 {
+			errs = append(errs, cookieErrs...)
+		} else {
+			request.SetCookieParams(cookieParams)
+		}
 	}
 
 	if len(errs) > 0 {
@@ -112,17 +131,14 @@ func validateRequestParameters(
 		request.SetQueryParams(queryParams)
 	}
 
-	headers := request.Header()
-	if len(headers) > 0 {
-		headerParams, errs := parameter.DecodeHeaderParameters(
-			route.Method.Operation.Parameters,
-			headers,
-		)
-		if len(errs) == 0 {
-			request.SetHeaderParams(headerParams)
-		} else {
-			validationErrs = append(validationErrs, errs...)
-		}
+	headerParams, errs := parameter.DecodeHeaderParameters(
+		route.Method.Operation.Parameters,
+		request.Header(),
+	)
+	if len(errs) == 0 {
+		request.SetHeaderParams(headerParams)
+	} else {
+		validationErrs = append(validationErrs, errs...)
 	}
 
 	if len(validationErrs) > 0 {

@@ -544,3 +544,41 @@ func parseDelimitedStyle(
 
 	return slices.Clip(results), true
 }
+
+// Splits comma-joined values in rawValues into individual items.
+// Returns rawValues unchanged when no commas are present, avoiding an allocation.
+func splitArrayParams(rawValues []string) []string {
+	valueCount := 0
+
+	for _, value := range rawValues {
+		valueCount++
+
+		for i := range value {
+			if value[i] == oaschema.Comma[0] {
+				valueCount++
+			}
+		}
+	}
+
+	if valueCount == len(rawValues) {
+		return rawValues
+	}
+
+	results := make([]string, 0, valueCount)
+
+	for _, value := range rawValues {
+		if value == "" {
+			continue
+		}
+
+		for item := range strings.SplitSeq(value, oaschema.Comma) {
+			results = append(results, item)
+		}
+	}
+
+	if len(results) == 0 {
+		results = []string{""}
+	}
+
+	return slices.Clip(results)
+}

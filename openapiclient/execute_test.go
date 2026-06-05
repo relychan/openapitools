@@ -877,9 +877,43 @@ paths:
 	client, err := NewProxyClient(context.TODO(), config)
 	require.NoError(t, err)
 
-	_, _, err = client.Execute(context.TODO(), http.MethodGet, "burgers/1,pizza,3,4,false/locate", nil, nil)
+	_, _, err = client.Execute(context.TODO(), http.MethodGet, "/burgers/1,pizza,3,4,false/locate", nil, nil)
 	herr, _ := errors.AsType[*httperror.HTTPError](err)
 
 	require.Len(t, herr.Errors, 1)
 	require.Equal(t, herr.Errors[0].Detail, "malformed number")
+	require.Equal(t, herr.Errors[0].Parameter, "burgerIds")
+}
+
+func TestExecute_HeaderParamMissing(t *testing.T) {
+	spec := `openapi: 3.1.0
+servers:
+  - url: http://localhost:8080
+paths:
+  /bish/bosh:
+    get:
+      parameters:
+        - name: bash
+          in: header
+          required: true
+          schema:
+            type: string`
+
+	rawSpec := new(yaml.Node)
+	err := yaml.Load([]byte(spec), rawSpec)
+	require.NoError(t, err)
+
+	config := &oaschema.OpenAPIResourceDefinition{
+		Spec: rawSpec,
+	}
+
+	client, err := NewProxyClient(context.TODO(), config)
+	require.NoError(t, err)
+
+	_, _, err = client.Execute(context.TODO(), http.MethodGet, "/bish/bosh", nil, nil)
+	herr, _ := errors.AsType[*httperror.HTTPError](err)
+
+	require.Len(t, herr.Errors, 1)
+	require.Equal(t, herr.Errors[0].Detail, "Header is required")
+	require.Equal(t, herr.Errors[0].Header, "Bash")
 }

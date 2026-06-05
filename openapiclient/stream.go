@@ -56,7 +56,7 @@ func (pc *ProxyClient) ServeHTTP(
 
 	req.SetBody(requestBody)
 
-	validationErr := validateRequest(route, req)
+	validationErr := validateRequest(route, req, request.Cookies())
 	if validationErr != nil {
 		span.SetStatus(codes.Error, "Failed to validate request")
 		span.RecordError(validationErr)
@@ -106,7 +106,7 @@ func (pc *ProxyClient) Stream(
 		return nil, notFoundErr
 	}
 
-	validationErr := validateRequest(route, request)
+	validationErr := validateRequest(route, request, nil)
 	if validationErr != nil {
 		span.SetStatus(codes.Error, "Failed to validate request")
 		span.RecordError(validationErr)
