@@ -93,7 +93,7 @@ func getQueryParameterRawValues(
 	if !present {
 		if definition.Required {
 			err := oasvalidator.ParameterRequiredError(definition.Name)
-			err.Code = oasvalidator.ErrCodeInvalidQueryParam
+			err.Location = oaschema.QueryKey
 
 			return nil, false, []httperror.ValidationError{*err}
 		}
@@ -106,13 +106,10 @@ func getQueryParameterRawValues(
 			return nil, true, nil
 		}
 
-		return nil, false, []httperror.ValidationError{
-			{
-				Code:   oasvalidator.ErrCodeInvalidQueryParam,
-				Detail: "Value must not be null",
-				Header: definition.Name,
-			},
-		}
+		err := oasvalidator.ParameterRequiredError(definition.Name)
+		err.Location = oaschema.QueryKey
+
+		return nil, false, []httperror.ValidationError{*err}
 	}
 
 	return rawValues, true, nil
@@ -251,20 +248,19 @@ func decodeQueryObjectNonExplodeParam(
 ) (any, []httperror.ValidationError) {
 	values, isValidObject := splitNonExplodeDelimitedStyle(rawValues, style, true)
 	if !isValidObject {
-		return nil, []httperror.ValidationError{
-			newInvalidQueryNonExplodedObjectError(definition.Name, style),
-		}
+		err := newInvalidQueryNonExplodedObjectError(definition.Name, style)
+
+		return nil, []httperror.ValidationError{*err}
 	}
 
 	rawObjectValue, ok := parseNonExplodeQueryObject(values)
 	if !ok {
-		return nil, []httperror.ValidationError{
-			{
-				Detail:    "malformed object syntax for query style: " + style.String(),
-				Code:      oasvalidator.ErrCodeInvalidQueryParam,
-				Parameter: definition.Name,
-			},
-		}
+		err := newInvalidQueryParamError(
+			"malformed object syntax for query style: " + style.String(),
+		)
+		err.Parameter = definition.Name
+
+		return nil, []httperror.ValidationError{*err}
 	}
 
 	decoder := newObjectParamDecoder(rawObjectValue)
@@ -367,18 +363,17 @@ func parseDeepObjectNodes(
 
 		parsedKeys, ok := parseDeepObjectKey(key)
 		if !ok {
-			errs = append(errs, httperror.ValidationError{
-				Code:      oasvalidator.ErrCodeInvalidQueryParam,
-				Detail:    "Invalid syntax from query key",
-				Parameter: key,
-			})
+			err := newInvalidQueryParamError("Invalid syntax from query key")
+			err.PrependPointer("/" + key)
+
+			errs = append(errs, *err)
 
 			continue
 		}
 
 		err := rawNodes.Insert(parsedKeys, values)
 		if err != nil {
-			err.Parameter = key
+			enrichQueryError(err, key)
 
 			errs = append(errs, *err)
 		}
@@ -394,13 +389,6 @@ func parseDeepObjectNodes(
 	}
 
 	return slices.Clip(rawNodes), nil
-}
-
-func newMixedArrayAndObjectError() *httperror.ValidationError {
-	return &httperror.ValidationError{
-		Code:   oasvalidator.ErrCodeInvalidQueryParam,
-		Detail: "Query parameters can not contain both array and object",
-	}
 }
 
 // decodePrimitiveQueryValuesFromSchemaType decodes the first non-empty string in values
@@ -452,39 +440,6 @@ func decodePrimitiveQueryValuesFromSchemaType(
 	return rawValues, "", nil
 }
 
-// newInvalidQueryNonExplodedObjectError builds a validation error with a style-specific
-// human-readable message describing the expected non-exploded object syntax.
-func newInvalidQueryNonExplodedObjectError(
-	name string,
-	style oaschema.ParameterEncodingStyle,
-) httperror.ValidationError {
-	detail := "Invalid syntax for the form style in parameter value. The object value must follow this format: queryKey=key1,value1,key2,value2"
-
-	switch style {
-	case oaschema.EncodingStyleSpaceDelimited:
-		detail = "Invalid syntax for non-exploded spaceDelimited style in parameter value. The object value must follow this format: queryKey=key1 value1 key2 value2"
-	case oaschema.EncodingStylePipeDelimited:
-		detail = "Invalid syntax for non-exploded pipeDelimited style in parameter value. The object value must follow this format: queryKey=key1|value1|key2|value2"
-	default:
-	}
-
-	return httperror.ValidationError{
-		Code:      oasvalidator.ErrCodeInvalidQueryParam,
-		Detail:    detail,
-		Parameter: name,
-	}
-}
-
-// enrichQueryErrors stamps each error with the query error code and the parameter name.
-func enrichQueryErrors(errs []httperror.ValidationError, name string) []httperror.ValidationError {
-	for i := range errs {
-		errs[i].Code = oasvalidator.ErrCodeInvalidQueryParam
-		errs[i].Parameter = name
-	}
-
-	return errs
-}
-
 func decodeQueryFromParameterContent(
 	definition *oaschema.Parameter,
 	values map[string][]string,
@@ -500,4 +455,49 @@ func decodeQueryFromParameterContent(
 	}
 
 	return result, true, nil
+}
+
+// newInvalidQueryNonExplodedObjectError builds a validation error with a style-specific
+// human-readable message describing the expected non-exploded object syntax.
+func newInvalidQueryNonExplodedObjectError(
+	name string,
+	style oaschema.ParameterEncodingStyle,
+) *httperror.ValidationError {
+	detail := "Invalid syntax for the form style in parameter value. The object value must follow this format: queryKey=key1,value1,key2,value2"
+
+	switch style {
+	case oaschema.EncodingStyleSpaceDelimited:
+		detail = "Invalid syntax for non-exploded spaceDelimited style in parameter value. The object value must follow this format: queryKey=key1 value1 key2 value2"
+	case oaschema.EncodingStylePipeDelimited:
+		detail = "Invalid syntax for non-exploded pipeDelimited style in parameter value. The object value must follow this format: queryKey=key1|value1|key2|value2"
+	default:
+	}
+
+	err := newInvalidQueryParamError(detail)
+	err.Parameter = name
+
+	return err
+}
+
+func newInvalidQueryParamError(detail string) *httperror.ValidationError {
+	return &httperror.ValidationError{
+		Code:     oasvalidator.ErrCodeInvalidQueryParam,
+		Detail:   detail,
+		Location: oaschema.QueryKey,
+	}
+}
+
+// enrichQueryErrors stamps each error with the query error code and the parameter name.
+func enrichQueryErrors(errs []httperror.ValidationError, name string) []httperror.ValidationError {
+	for i := range errs {
+		enrichQueryError(&errs[i], name)
+	}
+
+	return errs
+}
+
+func enrichQueryError(err *httperror.ValidationError, name string) {
+	err.Code = oasvalidator.ErrCodeInvalidQueryParam
+	err.Location = oaschema.QueryKey
+	err.Parameter = name
 }

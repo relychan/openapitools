@@ -217,7 +217,7 @@ func createMethod(
 ) (MethodHandler, error) {
 	op, errs := oasvalidator.ValidateOperation(document, operation, params)
 	if len(errs) > 0 {
-		err := httperror.NewValidationError(errs...)
+		err := httperror.NewHTTPValidationError(errs...)
 		err.Instance = pattern
 
 		return MethodHandler{}, err

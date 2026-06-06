@@ -33,6 +33,8 @@ var (
 )
 
 const (
+	// ErrCodeRequired represents a code for required field errors.
+	ErrCodeRequired = "required"
 	// ErrCodeRequestBodyError represents a code for invalid request body error.
 	ErrCodeRequestBodyError = "request_body_error"
 	// ErrCodeResponseDecodeBodyError represents a code for an decoding error from response body.
@@ -69,8 +71,6 @@ const (
 	ErrCodeInvalidQueryParam = "invalid_query_param"
 	// ErrCodeInvalidHeader represents a code for invalid header errors.
 	ErrCodeInvalidHeader = "invalid_header"
-	// ErrCodeCookieRequired represents a code for missing cookie error.
-	ErrCodeCookieRequired = "cookie_required"
 	// ErrCodeInvalidCookie represents a code for invalid cookie errors.
 	ErrCodeInvalidCookie = "invalid_cookie"
 	// ErrCodeValidationError represents a code for validation errors.
@@ -321,25 +321,25 @@ func ObjectMaxPropertiesValidationError(expected, actual int64) *httperror.Valid
 // ObjectRequiredPropertyError returns a validation error for a missing required property in object.
 func ObjectRequiredPropertyError(name string) *httperror.ValidationError {
 	return &httperror.ValidationError{
-		Code:    ErrCodeValidationError,
-		Pointer: "/" + name,
-		Detail:  "Required property '" + name + "' is missing in the object",
+		Code:      ErrCodeValidationError,
+		Parameter: name,
+		Detail:    "Required property '" + name + "' is missing in the object",
 	}
 }
 
 // ObjectDependentRequiredError returns a validation error for a missing dependent required property in object.
 func ObjectDependentRequiredError(name string, dependent string) *httperror.ValidationError {
 	return &httperror.ValidationError{
-		Code:    ErrCodeValidationError,
-		Pointer: "/" + dependent,
-		Detail:  "Property '" + dependent + "' is required if '" + name + "' exists in the object",
+		Code:      ErrCodeValidationError,
+		Parameter: dependent,
+		Detail:    "Property '" + dependent + "' is required if '" + name + "' exists in the object",
 	}
 }
 
 // ParameterRequiredError returns a validation error for a missing required parameter.
 func ParameterRequiredError(name string) *httperror.ValidationError {
 	return &httperror.ValidationError{
-		Code:      ErrCodeValidationError,
+		Code:      ErrCodeRequired,
 		Parameter: name,
 		Detail:    "Required parameter '" + name + "' is missing",
 	}

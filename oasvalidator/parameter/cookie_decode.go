@@ -67,7 +67,7 @@ func decodeCookieParameter(
 	cookies []*http.Cookie,
 ) (any, []httperror.ValidationError) {
 	if definition.Content != nil {
-		rawValues, err := findCookies(cookies, definition)
+		rawValues, err := findCookies(cookies, definition, true)
 		if err != nil {
 			return nil, []httperror.ValidationError{*err}
 		}
@@ -81,7 +81,7 @@ func decodeCookieParameter(
 	}
 
 	if definition.Schema == nil {
-		rawValues, err := findCookies(cookies, definition)
+		rawValues, err := findCookies(cookies, definition, true)
 		if err != nil {
 			return nil, []httperror.ValidationError{*err}
 		}
@@ -94,17 +94,14 @@ func decodeCookieParameter(
 	schemaTypes, nullable := oaschema.GetSchemaTypes(definition.Schema)
 
 	if len(cookies) == 0 {
-		if nullable {
+		if nullable || !definition.Required {
 			return nil, nil
 		}
 
-		return nil, []httperror.ValidationError{
-			{
-				Code:   oasvalidator.ErrCodeCookieRequired,
-				Detail: "Cookie must not be null",
-				Header: definition.Name,
-			},
-		}
+		err := oasvalidator.ParameterRequiredError(definition.Name)
+		err.Location = oaschema.CookieKey
+
+		return nil, []httperror.ValidationError{*err}
 	}
 
 	if slices.Contains(schemaTypes, oaschema.Object) {
@@ -114,7 +111,7 @@ func decodeCookieParameter(
 		}
 
 		if len(schemaTypes) == 1 {
-			return nil, enrichCookieErrors(errs, definition.Name)
+			return nil, errs
 		}
 
 		schemaTypes = slices.DeleteFunc(schemaTypes, func(t string) bool {
@@ -122,9 +119,13 @@ func decodeCookieParameter(
 		})
 	}
 
-	rawValues, err := findCookies(cookies, definition)
+	rawValues, err := findCookies(cookies, definition, nullable)
 	if err != nil {
 		return nil, []httperror.ValidationError{*err}
+	}
+
+	if len(rawValues) == 0 {
+		return nil, nil
 	}
 
 	if slices.Contains(schemaTypes, oaschema.Array) {
@@ -166,14 +167,14 @@ func decodeCookieObjectParameter(
 		decoder := newObjectParamDecoder(cookieMap)
 
 		decodeErrs := decoder.Decode(definition.Schema)
-		if len(decodeErrs) == 0 {
-			return decoder.Result, nil
+		if len(decodeErrs) > 0 {
+			return nil, enrichCookieErrors(decodeErrs, definition.Name)
 		}
 
-		return nil, decodeErrs
+		return decoder.Result, nil
 	}
 
-	rawValues, err := findCookies(cookies, definition)
+	rawValues, err := findCookies(cookies, definition, true)
 	if err != nil {
 		return nil, []httperror.ValidationError{*err}
 	}
@@ -183,8 +184,10 @@ func decodeCookieObjectParameter(
 	if !ok {
 		return nil, []httperror.ValidationError{
 			{
-				Code:   oasvalidator.ErrCodeInvalidCookie,
-				Detail: "Invalid syntax for non-exploded style in cookie value. The object value must follow this format: key1,value1,key2,value2",
+				Parameter: definition.Name,
+				Code:      oasvalidator.ErrCodeInvalidCookie,
+				Detail:    "Invalid syntax for non-exploded style in cookie value. The object value must follow this format: key1,value1,key2,value2",
+				Location:  oaschema.CookieKey,
 			},
 		}
 	}
@@ -196,7 +199,7 @@ func decodeCookieObjectParameter(
 		return decoder.Result, nil
 	}
 
-	return nil, errs
+	return nil, enrichCookieErrors(errs, definition.Name)
 }
 
 func createCookieMap(cookies []*http.Cookie) map[string][]string {
@@ -221,6 +224,7 @@ func createCookieMap(cookies []*http.Cookie) map[string][]string {
 func findCookies(
 	cookies []*http.Cookie,
 	definition *oaschema.Parameter,
+	nullable bool,
 ) ([]string, *httperror.ValidationError) {
 	var results []string
 
@@ -231,15 +235,14 @@ func findCookies(
 	}
 
 	if len(results) == 0 {
-		if !definition.Required {
+		if !definition.Required || nullable {
 			return nil, nil
 		}
 
-		return nil, &httperror.ValidationError{
-			Code:   oasvalidator.ErrCodeCookieRequired,
-			Detail: "Cookie is required",
-			Header: definition.Name,
-		}
+		err := oasvalidator.ParameterRequiredError(definition.Name)
+		err.Location = oaschema.CookieKey
+
+		return nil, err
 	}
 
 	return results, nil
@@ -250,6 +253,7 @@ func enrichCookieErrors(errs []httperror.ValidationError, name string) []httperr
 	for i := range errs {
 		errs[i].Code = oasvalidator.ErrCodeInvalidCookie
 		errs[i].Parameter = name
+		errs[i].Location = oaschema.CookieKey
 	}
 
 	return errs

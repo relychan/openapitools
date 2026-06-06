@@ -54,7 +54,7 @@ func (pn *ParameterNodes) Insert(keys ParamKeys, values []string) *httperror.Val
 		if vs.key.Equal(keys[0]) {
 			err := vs.InsertNode(keys[1:], values)
 			if err != nil {
-				err.Parameter = keys[0].String()
+				err.PrependPointer("/" + keys[0].String())
 
 				return err
 			}
@@ -71,7 +71,7 @@ func (pn *ParameterNodes) Insert(keys ParamKeys, values []string) *httperror.Val
 
 	err := node.InsertNode(keys[1:], values)
 	if err != nil {
-		err.Parameter = keys[0].String()
+		err.PrependPointer("/" + keys[0].String())
 
 		return err
 	}
@@ -230,13 +230,9 @@ func (pn *ParameterNode) Decode(schema *base.Schema) (any, []httperror.Validatio
 			return nil, nil
 		}
 
-		return nil, []httperror.ValidationError{
-			{
-				Code:      oasvalidator.ErrCodeInvalidQueryParam,
-				Parameter: pn.key.String(),
-				Detail:    "Parameter must not be null",
-			},
-		}
+		err := oasvalidator.ParameterRequiredError(pn.key.String())
+
+		return nil, []httperror.ValidationError{*err}
 	}
 
 	if slices.Contains(schemaTypes, oaschema.Object) {
@@ -770,5 +766,12 @@ func compareParameterNodes(a, b *ParameterNode) int {
 		return strings.Compare(string(sa), string(keyB))
 	default:
 		return 0
+	}
+}
+
+func newMixedArrayAndObjectError() *httperror.ValidationError {
+	return &httperror.ValidationError{
+		Code:   oasvalidator.ErrCodeInvalidQueryParam,
+		Detail: "Query parameters can not contain both array and object",
 	}
 }

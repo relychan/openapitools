@@ -914,6 +914,6 @@ paths:
 	herr, _ := errors.AsType[*httperror.HTTPError](err)
 
 	require.Len(t, herr.Errors, 1)
-	require.Equal(t, herr.Errors[0].Detail, "Header is required")
-	require.Equal(t, herr.Errors[0].Header, "Bash")
+	require.Equal(t, herr.Errors[0].Detail, "Required parameter 'Bash' is missing")
+	require.Equal(t, herr.Errors[0].Parameter, "Bash")
 }

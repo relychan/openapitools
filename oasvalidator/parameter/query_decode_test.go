@@ -18,9 +18,11 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -343,6 +345,66 @@ func TestDecodeQueryValuesFromParameters(t *testing.T) {
 			require.Equal(t, tc.expected, result, qValues)
 		})
 	}
+}
+
+func TestDecodeQueryParameters_ParamTypeObject(t *testing.T) {
+	spec := `openapi: 3.1.0
+paths:
+  /anything/queryParams/form/camelObj:
+    get:
+      operationId: formQueryParamsCamelObject
+      parameters:
+        - name: obj_param_exploded
+          in: query
+          explode: true
+          schema:
+            type: object
+            properties:
+              search_term:
+                type: string
+                example: foo
+              item_count:
+                type: string
+                example: "10"
+          required: true
+        - name: obj_param
+          in: query
+          explode: false
+          schema:
+            type: object
+            properties:
+              encoded_term:
+                type: string
+                example: bar
+              encoded_count:
+                type: integer
+      responses:
+        "200":
+          description: OK`
+
+	doc, _ := libopenapi.NewDocument([]byte(spec))
+	m, _ := doc.BuildV3Model()
+	pathItem, _ := m.Model.Paths.PathItems.Get("/anything/queryParams/form/camelObj")
+	params, errs := oasvalidator.ValidateParameterDefinitions(pathItem.Get.Parameters)
+	require.Len(t, errs, 0)
+
+	queryValues, err := url.ParseQuery("item_count=10&obj_param=encoded_count%2C11%2Cencoded_term%2Cbar&search_term=foo")
+	require.NoError(t, err)
+
+	result, errs := DecodeQueryFromParameters(params, queryValues)
+	require.Len(t, errs, 0)
+
+	expected := map[string]any{
+		"obj_param": map[string]any{
+			"encoded_count": int64(11),
+			"encoded_term":  "bar",
+		},
+		"obj_param_exploded": map[string]any{
+			"item_count":  "10",
+			"search_term": "foo",
+		},
+	}
+	require.Equal(t, expected, result)
 }
 
 // goos: darwin

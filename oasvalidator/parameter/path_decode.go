@@ -32,13 +32,10 @@ func DecodePathValue(
 	value string,
 ) (any, []httperror.ValidationError) {
 	if value == "" {
-		return nil, []httperror.ValidationError{
-			{
-				Code:      oasvalidator.ErrCodeInvalidURLParam,
-				Detail:    "URL parameter is required",
-				Parameter: definition.Name,
-			},
-		}
+		err := oasvalidator.ParameterRequiredError(definition.Name)
+		err.Location = oaschema.PathKey
+
+		return nil, []httperror.ValidationError{*err}
 	}
 
 	style, explode := definition.GetStyleAndExplode()
@@ -142,7 +139,7 @@ func decodePathArrayParam(
 
 	errs = oasvalidator.ValidateArray(definition.Schema, results, nil)
 	if len(errs) > 0 {
-		return nil, errs
+		return nil, enrichPathParamErrors(errs, definition.Name)
 	}
 
 	return results, nil
@@ -181,21 +178,19 @@ func trimPathValueByStyle(
 	switch style {
 	case oaschema.EncodingStyleLabel:
 		if rawValue[0] != oaschema.Dot[0] {
-			return "", &httperror.ValidationError{
-				Code:      oasvalidator.ErrCodeInvalidURLParam,
-				Detail:    "The label style of parameter value must start with a dot",
-				Parameter: name,
-			}
+			return "", newInvalidPathParamError(
+				name,
+				"The label style of parameter value must start with a dot",
+			)
 		}
 
 		return rawValue[1:], nil
 	case oaschema.EncodingStyleMatrix:
 		if rawValue[0] != oaschema.SemiColon[0] {
-			return "", &httperror.ValidationError{
-				Code:      oasvalidator.ErrCodeInvalidURLParam,
-				Detail:    "The matrix style of parameter value must start with a semicolon",
-				Parameter: name,
-			}
+			return "", newInvalidPathParamError(
+				name,
+				"The matrix style of parameter value must start with a semicolon",
+			)
 		}
 
 		return rawValue[1:], nil
@@ -238,11 +233,10 @@ func parsePathArrayParam(
 			for i, part := range parts {
 				value, found := strings.CutPrefix(strings.TrimSpace(part), prefix)
 				if !found {
-					return nil, &httperror.ValidationError{
-						Code:      oasvalidator.ErrCodeInvalidURLParam,
-						Detail:    "Invalid matrix style in parameter value. The array value must follow this format: ;key1=value1;key2=value2",
-						Parameter: name,
-					}
+					return nil, newInvalidPathParamError(
+						name,
+						"Invalid matrix style in parameter value. The array value must follow this format: ;key1=value1;key2=value2",
+					)
 				}
 
 				results[i] = value
@@ -255,11 +249,10 @@ func parsePathArrayParam(
 		// /users/;id=role,admin,firstName,Alex
 		value, found := strings.CutPrefix(rawValue, prefix)
 		if !found {
-			return nil, &httperror.ValidationError{
-				Code:      oasvalidator.ErrCodeInvalidURLParam,
-				Detail:    "Invalid matrix style in parameter value. The array value must follow this format: ;key1=value1,value2",
-				Parameter: name,
-			}
+			return nil, newInvalidPathParamError(
+				name,
+				"Invalid matrix style in parameter value. The array value must follow this format: ;key1=value1,value2",
+			)
 		}
 
 		return strings.Split(value, oaschema.Comma), nil
@@ -356,11 +349,10 @@ func newInvalidPathObjectError(
 	style oaschema.ParameterEncodingStyle,
 	explode bool,
 ) *httperror.ValidationError {
-	return &httperror.ValidationError{
-		Code:      oasvalidator.ErrCodeInvalidURLParam,
-		Detail:    newInvalidPathObjectErrorMessage(style, explode),
-		Parameter: name,
-	}
+	return newInvalidPathParamError(
+		name,
+		newInvalidPathObjectErrorMessage(style, explode),
+	)
 }
 
 // newInvalidPathObjectErrorMessage returns a style- and explode-specific human-readable message
@@ -388,6 +380,15 @@ func newInvalidPathObjectErrorMessage(style oaschema.ParameterEncodingStyle, exp
 	}
 }
 
+func newInvalidPathParamError(name string, detail string) *httperror.ValidationError {
+	return &httperror.ValidationError{
+		Code:      oasvalidator.ErrCodeInvalidURLParam,
+		Detail:    detail,
+		Parameter: name,
+		Location:  oaschema.PathKey,
+	}
+}
+
 // enrichPathParamErrors stamps each error with the URL param error code and the parameter name.
 func enrichPathParamErrors(
 	errs []httperror.ValidationError,
@@ -396,6 +397,7 @@ func enrichPathParamErrors(
 	for i := range errs {
 		errs[i].Code = oasvalidator.ErrCodeInvalidURLParam
 		errs[i].Parameter = name
+		errs[i].Location = oaschema.PathKey
 	}
 
 	return errs

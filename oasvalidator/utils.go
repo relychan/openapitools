@@ -54,6 +54,7 @@ func ValidateContentType(contentType string) (string, error) {
 
 		switch {
 		case httpheader.IsContentTypeJSON(parsed):
+			// JSON is the highest priority.
 			if parsed[:2] == "*/" {
 				return httpheader.ContentTypeJSON, nil
 			}
@@ -61,23 +62,22 @@ func ValidateContentType(contentType string) (string, error) {
 			return trimmed, nil
 		case httpheader.IsContentTypeXML(parsed):
 			if parsed[:2] == "*/" {
-				result = httpheader.ContentTypeXML
-			} else {
-				result = trimmed
+				trimmed = httpheader.ContentTypeXML
 			}
 		case httpheader.IsContentTypeText(parsed):
 			if parsed[len(parsed)-1] == '*' {
-				result = httpheader.ContentTypeTextPlain
-			} else {
-				result = trimmed
+				trimmed = httpheader.ContentTypeTextPlain
 			}
 		case httpheader.IsContentTypeMultipartForm(parsed):
 			if parsed[len(parsed)-1] == '*' {
-				result = httpheader.ContentTypeMultipartFormData
-			} else {
-				result = trimmed
+				trimmed = httpheader.ContentTypeMultipartFormData
 			}
 		default:
+			continue
+		}
+
+		if result == "" {
+			result = trimmed
 		}
 	}
 

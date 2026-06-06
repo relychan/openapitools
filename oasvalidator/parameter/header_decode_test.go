@@ -18,8 +18,10 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	"github.com/pb33f/libopenapi/orderedmap"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/stretchr/testify/assert"
@@ -37,8 +39,8 @@ func TestDecodeHeaderParameter(t *testing.T) {
 		}
 		_, errs := DecodeHeaderParameters(defs, http.Header{})
 		require.Len(t, errs, 1)
-		assert.Equal(t, oasvalidator.ErrCodeInvalidHeader, errs[0].Code)
-		assert.Equal(t, "X-Token", errs[0].Header)
+		assert.Equal(t, oasvalidator.ErrCodeRequired, errs[0].Code)
+		assert.Equal(t, "X-Token", errs[0].Parameter)
 	})
 
 	t.Run("missing_optional_header_returns_nil", func(t *testing.T) {
@@ -102,7 +104,7 @@ func TestDecodeHeaderParameter(t *testing.T) {
 		_, errs := decodeHeaderParameter(def, headers)
 		require.NotEmpty(t, errs)
 		assert.Equal(t, oasvalidator.ErrCodeInvalidHeader, errs[0].Code)
-		assert.Equal(t, "X-Count", errs[0].Header)
+		assert.Equal(t, "X-Count", errs[0].Parameter)
 	})
 
 	t.Run("boolean_schema_true", func(t *testing.T) {
@@ -165,7 +167,7 @@ func TestDecodeHeaderParameter_Array(t *testing.T) {
 		_, errs := decodeHeaderParameter(def, headers)
 		require.NotEmpty(t, errs)
 		assert.Equal(t, oasvalidator.ErrCodeInvalidHeader, errs[0].Code)
-		assert.Equal(t, "X-Ids", errs[0].Header)
+		assert.Equal(t, "X-Ids", errs[0].Parameter)
 	})
 }
 
@@ -223,7 +225,7 @@ func TestDecodeHeaderParameter_Object(t *testing.T) {
 		_, errs := decodeHeaderParameter(def, headers)
 		require.NotEmpty(t, errs)
 		assert.Equal(t, oasvalidator.ErrCodeInvalidHeader, errs[0].Code)
-		assert.Equal(t, "X-Color", errs[0].Header)
+		assert.Equal(t, "X-Color", errs[0].Parameter)
 	})
 
 	t.Run("explode_object_invalid_syntax_missing_equals", func(t *testing.T) {
@@ -238,7 +240,7 @@ func TestDecodeHeaderParameter_Object(t *testing.T) {
 		_, errs := decodeHeaderParameter(def, headers)
 		require.NotEmpty(t, errs)
 		assert.Equal(t, oasvalidator.ErrCodeInvalidHeader, errs[0].Code)
-		assert.Equal(t, "X-User", errs[0].Header)
+		assert.Equal(t, "X-User", errs[0].Parameter)
 	})
 }
 
@@ -255,7 +257,6 @@ func TestSplitObjectFromHeaderValues(t *testing.T) {
 	t.Run("non_explode_odd_parts_error", func(t *testing.T) {
 		_, err := splitObjectFromHeaderValues([]string{"role", "admin", "age"}, false)
 		require.NotNil(t, err)
-		assert.Equal(t, oasvalidator.ErrCodeInvalidHeader, err.Code)
 	})
 
 	t.Run("explode_valid", func(t *testing.T) {
@@ -270,7 +271,6 @@ func TestSplitObjectFromHeaderValues(t *testing.T) {
 	t.Run("explode_missing_equals_error", func(t *testing.T) {
 		_, err := splitObjectFromHeaderValues([]string{"roleadmin"}, true)
 		require.NotNil(t, err)
-		assert.Equal(t, oasvalidator.ErrCodeInvalidHeader, err.Code)
 	})
 
 	t.Run("explode_multiple_values_same_key", func(t *testing.T) {
@@ -282,7 +282,6 @@ func TestSplitObjectFromHeaderValues(t *testing.T) {
 	t.Run("non_explode_empty_key_error", func(t *testing.T) {
 		_, err := splitObjectFromHeaderValues([]string{"", "value"}, false)
 		require.NotNil(t, err)
-		assert.Equal(t, oasvalidator.ErrCodeInvalidHeader, err.Code)
 	})
 }
 
@@ -302,21 +301,75 @@ func TestDecodeHeaderParameter_MultiType(t *testing.T) {
 	})
 }
 
+func TestDecodeHeaderParameters_ParamTypeObject(t *testing.T) {
+	spec := `openapi: 3.1.0
+paths:
+  /vending/drinks:
+    get:
+      parameters:
+        - name: coffeeCups
+          in: header
+          required: true
+          schema:
+            type: object
+            properties:
+              milk:
+                type: number
+              sugar:
+                type: boolean`
+
+	doc, _ := libopenapi.NewDocument([]byte(spec))
+	m, _ := doc.BuildV3Model()
+	pathItem, _ := m.Model.Paths.PathItems.Get("/vending/drinks")
+	params, errs := oasvalidator.ValidateParameterDefinitions(pathItem.Get.Parameters)
+	require.Len(t, errs, 0)
+
+	input := http.Header{}
+	input.Set("coffeecups", "milk,123,sugar,true")
+
+	expected := map[string]any{
+		"coffeecups": map[string]any{
+			"milk":  float64(123),
+			"sugar": true,
+		},
+	}
+
+	result, errs := DecodeHeaderParameters(params, input)
+	require.Len(t, errs, 0)
+	require.Equal(t, expected, result)
+
+	invalidInput := http.Header{}
+	invalidInput.Set("coffeecups", "milk,true,sugar,true")
+
+	expectedErrs := []httperror.ValidationError{
+		{
+			Detail:    "malformed number",
+			Location:  oaschema.HeaderKey,
+			Parameter: "Coffeecups",
+			Code:      oasvalidator.ErrCodeInvalidHeader,
+			Pointer:   "/milk",
+		},
+	}
+
+	_, errs = DecodeHeaderParameters(params, invalidInput)
+	require.Equal(t, expectedErrs, errs)
+}
+
 // goos: darwin
 // goarch: arm64
 // pkg: github.com/relychan/openapitools/oasvalidator/parameter
 // cpu: Apple M3 Pro
-// BenchmarkDecodeHeaderParameter/MissingOptional-11         	50759810	        23.77 ns/op	       0 B/op	       0 allocs/op
-// BenchmarkDecodeHeaderParameter/NoSchema_Single-11         	26734170	        44.24 ns/op	      16 B/op	       1 allocs/op
-// BenchmarkDecodeHeaderParameter/NoSchema_CommaSeparated-11 	 9048547	       130.5 ns/op	     104 B/op	       2 allocs/op
-// BenchmarkDecodeHeaderParameter/String-11                  	 5783558	       210.7 ns/op	      65 B/op	       5 allocs/op
-// BenchmarkDecodeHeaderParameter/Integer-11                 	 5070550	       239.0 ns/op	      65 B/op	       5 allocs/op
-// BenchmarkDecodeHeaderParameter/Boolean-11                 	 5640459	       213.4 ns/op	      65 B/op	       5 allocs/op
-// BenchmarkDecodeHeaderParameter/Number-11                  	 4718089	       253.1 ns/op	      80 B/op	       6 allocs/op
-// BenchmarkDecodeHeaderParameter/Array_CommaSeparated-11    	  935188	        1284 ns/op	     568 B/op	      34 allocs/op
-// BenchmarkDecodeHeaderParameter/Array_MultipleHeaderValues-11  4354665	       275.8 ns/op	     232 B/op	       8 allocs/op
-// BenchmarkDecodeHeaderParameter/Object_NonExplode-11            995085	        1198 ns/op	    1115 B/op	      25 allocs/op
-// BenchmarkDecodeHeaderParameter/Object_Explode-11              1853228	       651.7 ns/op	     944 B/op	      13 allocs/op
+// BenchmarkDecodeHeaderParameter/MissingOptional-11         	141858685	       8.449 ns/op	       0 B/op	       0 allocs/op
+// BenchmarkDecodeHeaderParameter/NoSchema_Single-11         	36847256	       32.09 ns/op	      16 B/op	       1 allocs/op
+// BenchmarkDecodeHeaderParameter/NoSchema_CommaSeparated-11 	10145427	       118.0 ns/op	     104 B/op	       2 allocs/op
+// BenchmarkDecodeHeaderParameter/String-11                  	 7759722	       152.8 ns/op	      48 B/op	       3 allocs/op
+// BenchmarkDecodeHeaderParameter/Integer-11                 	 6806862	       175.0 ns/op	      48 B/op	       3 allocs/op
+// BenchmarkDecodeHeaderParameter/Boolean-11                 	 7901893	       151.2 ns/op	      48 B/op	       3 allocs/op
+// BenchmarkDecodeHeaderParameter/Number-11                  	 6076572	       196.9 ns/op	      56 B/op	       4 allocs/op
+// BenchmarkDecodeHeaderParameter/Array_CommaSeparated-11    	 1249310	       959.5 ns/op	     440 B/op	      19 allocs/op
+// BenchmarkDecodeHeaderParameter/Array_MultipleHeaderValues-11  4578265	       261.3 ns/op	     232 B/op	       8 allocs/op
+// BenchmarkDecodeHeaderParameter/Object_NonExplode-11           1000000	        1124 ns/op	    1040 B/op	      21 allocs/op
+// BenchmarkDecodeHeaderParameter/Object_Explode-11              1906917	       648.3 ns/op	     944 B/op	      13 allocs/op
 func BenchmarkDecodeHeaderParameter(b *testing.B) {
 	headers := http.Header{
 		"X-Token": {"abc"},

@@ -86,9 +86,10 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 			rawValue, err := param.Evaluate(rawRequestData)
 			if err != nil {
 				respErr := httperror.NewBadRequestError(httperror.ValidationError{
-					Code:   oasvalidator.ErrCodeRequestTransformError,
-					Detail: err.Error(),
-					Header: param.Name,
+					Code:      oasvalidator.ErrCodeRequestTransformError,
+					Detail:    err.Error(),
+					Parameter: param.Name,
+					Location:  oaschema.HeaderKey,
 				})
 				respErr.Detail = "failed to transform request header"
 

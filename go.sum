@@ -90,8 +90,8 @@ github.com/relychan/gohttpc v0.0.0-20260531030038-6fc91e67f25f h1:oH0P3J/h59xS7s
 github.com/relychan/gohttpc v0.0.0-20260531030038-6fc91e67f25f/go.mod h1:K5GcE7XLqVDRx+KwG9Je7Y5kaK6h+zLkUmwb4aQXD/Q=
 github.com/relychan/gotransform v0.0.0-20260404192235-bcef8d71746d h1:EG/ma3CZhiob4m7GRCN++78bBpaYbL2YdR/SqF/lH/E=
 github.com/relychan/gotransform v0.0.0-20260404192235-bcef8d71746d/go.mod h1:fPlveeSdDOYcXIILl+pIyTPx93MxCl/U/V3CQxsVUTw=
-github.com/relychan/goutils v0.0.0-20260605050055-e2c1246fd7f6 h1:3G25xtbmcHpmtnj4JON5pvB7rq/9lLOjMMc+6BxIN7w=
-github.com/relychan/goutils v0.0.0-20260605050055-e2c1246fd7f6/go.mod h1:4rQgpPl85UVNvtTv01ZWlJN5S0P1r+kM5hOl3oQvXXU=
+github.com/relychan/goutils v0.0.0-20260606074624-e7ca20d73713 h1:wh/js8qgtk0NhYo/GOZFH5X4PJp3wSZ5L/zWSJaAMz4=
+github.com/relychan/goutils v0.0.0-20260606074624-e7ca20d73713/go.mod h1:4rQgpPl85UVNvtTv01ZWlJN5S0P1r+kM5hOl3oQvXXU=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
 github.com/samber/lo v1.53.0 h1:t975lj2py4kJPQ6haz1QMgtId2gtmfktACxIXArw3HM=

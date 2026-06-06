@@ -78,7 +78,7 @@ func ValidateParameterDefinition(
 	location, err := oaschema.ParseParameterLocation(param.In)
 	if err != nil {
 		ve := httperror.ValidationError{
-			Code:      ErrCodeValidationError,
+			Code:      ErrCodeOpenAPISchemaError,
 			Detail:    err.Error(),
 			Parameter: param.Name,
 		}
@@ -98,12 +98,11 @@ func ValidateParameterDefinition(
 		style, err := oaschema.ParseParameterEncodingStyle(param.Style)
 		if err != nil {
 			ve := httperror.ValidationError{
-				Code:      ErrCodeValidationError,
+				Code:      ErrCodeOpenAPISchemaError,
 				Detail:    err.Error(),
 				Parameter: param.Name,
+				Location:  location.String(),
 			}
-
-			setParameterErrorLocation(result, &ve)
 
 			errs = append(errs, ve)
 		} else {
@@ -147,25 +146,7 @@ func ValidateParameterDefinition(
 // setParameterErrorsLocation stamps each error with the parameter location and error code.
 func setParameterErrorsLocation(param *oaschema.Parameter, errs []httperror.ValidationError) {
 	for i := range errs {
-		setParameterErrorLocation(param, &errs[i])
-	}
-}
-
-// setParameterErrorLocation stamps a single error with the parameter name and the error code
-// appropriate for the parameter's location (header, query, or path).
-func setParameterErrorLocation(param *oaschema.Parameter, err *httperror.ValidationError) {
-	switch param.In {
-	case oaschema.InHeader:
-		err.Header = param.Name
-		err.Code = ErrCodeInvalidHeader
-	case oaschema.InQuery:
-		err.Parameter = param.Name
-		err.Code = ErrCodeInvalidQueryParam
-	case oaschema.InPath:
-		err.Parameter = param.Name
-		err.Code = ErrCodeInvalidURLParam
-	default:
-		err.Parameter = param.Name
-		err.Code = ErrCodeValidationError
+		errs[i].Parameter = param.Name
+		errs[i].Location = param.In.String()
 	}
 }

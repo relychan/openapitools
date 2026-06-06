@@ -31,7 +31,7 @@ func TestDecodePathValue_EmptyValueReturnsError(t *testing.T) {
 	def := pathParam("id", oaschema.EncodingStyleSimple, false, intSchema())
 	_, errs := DecodePathValue(def, "")
 	require.Len(t, errs, 1)
-	assert.Equal(t, oasvalidator.ErrCodeInvalidURLParam, errs[0].Code)
+	assert.Equal(t, oasvalidator.ErrCodeRequired, errs[0].Code)
 	assert.Equal(t, "id", errs[0].Parameter)
 }
 

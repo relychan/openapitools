@@ -89,13 +89,10 @@ func decodeHeaderParameter(
 			return nil, nil
 		}
 
-		return nil, []httperror.ValidationError{
-			{
-				Code:   oasvalidator.ErrCodeInvalidHeader,
-				Detail: "Header is required",
-				Header: definition.Name,
-			},
-		}
+		err := oasvalidator.ParameterRequiredError(definition.Name)
+		err.Location = oaschema.HeaderKey
+
+		return nil, []httperror.ValidationError{*err}
 	}
 
 	if definition.Content != nil {
@@ -120,13 +117,10 @@ func decodeHeaderParameter(
 			return nil, nil
 		}
 
-		return nil, []httperror.ValidationError{
-			{
-				Code:   oasvalidator.ErrCodeInvalidHeader,
-				Detail: "Header must not be null",
-				Header: definition.Name,
-			},
-		}
+		err := oasvalidator.ParameterRequiredError(definition.Name)
+		err.Location = oaschema.HeaderKey
+
+		return nil, []httperror.ValidationError{*err}
 	}
 
 	if slices.Contains(schemaTypes, oaschema.Object) {
@@ -204,7 +198,7 @@ func decodeHeaderObjectParam(
 
 	rawObjectValues, err := splitObjectFromHeaderValues(rawParts, explode)
 	if err != nil {
-		err.Header = definition.Name
+		enrichHeaderError(err, definition.Name)
 
 		return nil, []httperror.ValidationError{*err}
 	}
@@ -235,7 +229,6 @@ func splitObjectFromHeaderValues(
 
 			if !setExplodeObjectProperties(values, rawValue, oaschema.Comma) {
 				return nil, &httperror.ValidationError{
-					Code:   oasvalidator.ErrCodeInvalidHeader,
 					Detail: "Invalid syntax for exploded simple style in parameter value. The object value must follow this format: key1=value1,key2=value2",
 				}
 			}
@@ -247,7 +240,6 @@ func splitObjectFromHeaderValues(
 	values, ok := parseNonExplodeObject(rawValues)
 	if !ok {
 		return nil, &httperror.ValidationError{
-			Code:   oasvalidator.ErrCodeInvalidHeader,
 			Detail: "Invalid syntax for non-exploded simple style in parameter value. The object value must follow this format: key1,value1,key2,value2",
 		}
 	}
@@ -258,9 +250,15 @@ func splitObjectFromHeaderValues(
 // enrichHeaderErrors stamps each error with the header error code and the header name.
 func enrichHeaderErrors(errs []httperror.ValidationError, name string) []httperror.ValidationError {
 	for i := range errs {
-		errs[i].Code = oasvalidator.ErrCodeInvalidHeader
-		errs[i].Header = name
+		enrichHeaderError(&errs[i], name)
 	}
 
 	return errs
+}
+
+// enrichHeaderErrors stamps each error with the header error code and the header name.
+func enrichHeaderError(err *httperror.ValidationError, name string) {
+	err.Code = oasvalidator.ErrCodeInvalidHeader
+	err.Parameter = name
+	err.Location = oaschema.HeaderKey
 }
