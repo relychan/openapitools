@@ -1,0 +1,313 @@
+// Copyright 2026 RelyChan Pte. Ltd
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package oaschema
+
+import (
+	"reflect"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/pb33f/libopenapi/datamodel/high/base"
+	"github.com/pb33f/libopenapi/orderedmap"
+)
+
+// NormalizeType normalize a schema type.
+// Returns the type name and whether if it is a primitive type.
+func NormalizeType(typeName string) (string, bool) {
+	lowerTypeName := strings.ToLower(typeName)
+
+	switch lowerTypeName {
+	case "bool", "boolean":
+		return Boolean, true
+	case "string", "uuid", "varchar":
+		return String, true
+	case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64":
+		return Integer, true
+	case "number", "decimal", "float", "float32", "float64", "double":
+		return Number, true
+	case "null":
+		return "", false
+	default:
+		// array, object and unknown type.
+		return lowerTypeName, false
+	}
+}
+
+// ExtractSchemaTypes returns available types of the schema, and check if it is nullable.
+func ExtractSchemaTypes(schema *base.Schema) ( //nolint:revive,nonamedreturns,cyclop
+	types []string,
+	allOf []*base.Schema,
+	oneOf []*base.Schema,
+	anyOf []*base.Schema,
+	isNullable bool,
+) {
+	if schema == nil {
+		return nil, nil, nil, nil, true
+	}
+
+	allOf = ExtractSchemaProxies(schema.AllOf)
+	oneOf = ExtractSchemaProxies(schema.OneOf)
+	anyOf = ExtractSchemaProxies(schema.AnyOf)
+
+	types = make(
+		[]string, 0,
+		max(1, len(schema.Type)+len(allOf)+len(oneOf)+len(anyOf)),
+	)
+
+	evalSchema := func(item *base.Schema) {
+		for _, schemaType := range item.Type {
+			normalizedType, _ := NormalizeType(schemaType)
+
+			if !slices.Contains(types, normalizedType) {
+				types = append(types, normalizedType)
+			}
+		}
+
+		isNullable = isNullable || (item.Nullable != nil && *item.Nullable)
+
+		if len(item.Type) > 0 {
+			return
+		}
+
+		if ((item.Properties != nil && item.Properties.Len() > 0) ||
+			(item.AdditionalProperties != nil &&
+				(item.AdditionalProperties.A != nil && item.AdditionalProperties.B)) ||
+			(item.PatternProperties != nil && item.PatternProperties.Len() > 0)) &&
+			!slices.Contains(types, Object) {
+			types = append(types, Object)
+
+			return
+		}
+
+		if item.Items != nil && (item.Items.B || item.Items.A != nil) &&
+			!slices.Contains(types, Array) {
+			types = append(types, Array)
+		}
+	}
+
+	evalUnionType := func(schemas []*base.Schema) {
+		for _, item := range schemas {
+			evalSchema(item)
+		}
+	}
+
+	evalSchema(schema)
+	evalUnionType(allOf)
+	evalUnionType(oneOf)
+	evalUnionType(anyOf)
+
+	if len(types) > 0 {
+		types = slices.Clip(types)
+	}
+
+	return types, allOf, oneOf, anyOf, isNullable
+}
+
+// GetSchemaTypes returns available types of the schema, and check if it is nullable.
+func GetSchemaTypes(schema *base.Schema) ([]string, bool) {
+	types, _, _, _, isNullable := ExtractSchemaTypes(schema) //nolint:dogsled
+
+	return types, isNullable
+}
+
+// DetectSchemaFromValue detects the OpenAPI schema type from a Go value.
+func DetectSchemaFromValue(value any) *base.Schema { //nolint:gocyclo,cyclop,funlen
+	switch val := value.(type) {
+	case bool:
+		return newBooleanSchema(false)
+	case *bool:
+		return newBooleanSchema(true)
+	case []byte:
+		return newStringSchema(false, Binary)
+	case string:
+		return newStringSchema(false, "")
+	case *string:
+		return newStringSchema(true, "")
+	case int, int8, int16, int32, uint, uint8, uint16:
+		return newIntegerSchema(false, Int32)
+	case *int, *int8, *int16, *int32, *uint, *uint8, *uint16:
+		return newIntegerSchema(true, Int32)
+	case int64, uint32, uint64:
+		return newIntegerSchema(false, Int64)
+	case *int64, *uint32, *uint64:
+		return newIntegerSchema(true, Int32)
+	case float32:
+		return newNumberSchema(false, Float)
+	case *float32:
+		return newNumberSchema(true, Float)
+	case float64:
+		return newNumberSchema(false, Double)
+	case *float64:
+		return newNumberSchema(true, Double)
+	case time.Time:
+		return newStringSchema(false, DateTime)
+	case *time.Time:
+		return newStringSchema(true, DateTime)
+	case []bool:
+		return newArraySchema(newBooleanSchema(false))
+	case []*bool:
+		return newArraySchema(newBooleanSchema(true))
+	case []string:
+		return newArraySchema(newStringSchema(false, ""))
+	case []*string:
+		return newArraySchema(newStringSchema(false, ""))
+	case []int, []int8, []int16, []int32, []uint, []uint16:
+		return newArraySchema(newIntegerSchema(false, Int32))
+	case []*int, []*int8, []*int16, []*int32, []*uint, []*uint8, []*uint16:
+		return newArraySchema(newIntegerSchema(true, Int32))
+	case []int64, []uint32, []uint64:
+		return newArraySchema(newIntegerSchema(false, Int64))
+	case []*int64, []*uint32, []*uint64:
+		return newArraySchema(newIntegerSchema(true, Int64))
+	case []float32:
+		return newArraySchema(newNumberSchema(false, Float))
+	case []*float32:
+		return newArraySchema(newNumberSchema(true, Float))
+	case []float64:
+		return newArraySchema(newNumberSchema(false, Double))
+	case []*float64:
+		return newArraySchema(newNumberSchema(true, Double))
+	case []time.Time:
+		return newArraySchema(newNumberSchema(false, DateTime))
+	case []*time.Time:
+		return newArraySchema(newNumberSchema(true, DateTime))
+	case []any:
+		var itemSchema *base.Schema
+
+		if len(val) > 0 {
+			itemSchema = DetectSchemaFromValue(val[0])
+		}
+
+		return newArraySchema(itemSchema)
+	case map[string]any:
+		object := &base.Schema{
+			Type: []string{Object},
+		}
+
+		if len(val) == 0 {
+			return object
+		}
+
+		object.Properties = orderedmap.New[string, *base.SchemaProxy]()
+
+		for key, prop := range val {
+			propSchema := DetectSchemaFromValue(prop)
+
+			object.Properties.Set(key, base.CreateSchemaProxy(propSchema))
+		}
+
+		return object
+	default:
+		return detectSchemaFromReflection(reflect.TypeOf(value))
+	}
+}
+
+func detectSchemaFromReflection(reflectType reflect.Type) *base.Schema {
+	switch reflectType.Kind() {
+	case reflect.Pointer:
+		return detectSchemaFromReflection(reflectType.Elem())
+	case reflect.Bool:
+		return newBooleanSchema(true)
+	case reflect.String:
+		return newStringSchema(true, "")
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Uint8, reflect.Uint16:
+		return newIntegerSchema(true, Int32)
+	case reflect.Int64, reflect.Uint32, reflect.Uint64:
+		return newIntegerSchema(true, Int64)
+	case reflect.Float32:
+		return newNumberSchema(true, Float)
+	case reflect.Float64:
+		return newNumberSchema(true, Double)
+	case reflect.Array, reflect.Slice:
+		itemSchema := detectSchemaFromReflection(reflectType.Elem())
+
+		return newArraySchema(itemSchema)
+	case reflect.Map:
+		return &base.Schema{
+			Type: []string{Object},
+		}
+	default:
+		return nil
+	}
+}
+
+func newBooleanSchema(nullable bool) *base.Schema {
+	result := &base.Schema{
+		Type: []string{Boolean},
+	}
+
+	if nullable {
+		result.Nullable = &nullable
+	}
+
+	return result
+}
+
+func newArraySchema(itemSchema *base.Schema) *base.Schema {
+	result := &base.Schema{
+		Type: []string{Array},
+	}
+
+	if itemSchema != nil {
+		items := base.CreateSchemaProxy(itemSchema)
+
+		result.Items = &base.DynamicValue[*base.SchemaProxy, bool]{
+			N: 0,
+			A: items,
+		}
+	}
+
+	return result
+}
+
+func newStringSchema(nullable bool, format string) *base.Schema {
+	result := &base.Schema{
+		Type:   []string{String},
+		Format: format,
+	}
+
+	if nullable {
+		result.Nullable = &nullable
+	}
+
+	return result
+}
+
+func newIntegerSchema(nullable bool, format string) *base.Schema {
+	result := &base.Schema{
+		Type:   []string{Integer},
+		Format: format,
+	}
+
+	if nullable {
+		result.Nullable = &nullable
+	}
+
+	return result
+}
+
+func newNumberSchema(nullable bool, format string) *base.Schema {
+	result := &base.Schema{
+		Type:   []string{Number},
+		Format: format,
+	}
+
+	if nullable {
+		result.Nullable = &nullable
+	}
+
+	return result
+}

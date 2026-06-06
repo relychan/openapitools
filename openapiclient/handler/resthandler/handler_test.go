@@ -21,7 +21,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,7 +90,7 @@ func TestRESTHandler_Properties(t *testing.T) {
 // TestNewRESTHandler tests the NewRESTHandler function
 func TestNewRESTHandler(t *testing.T) {
 	t.Run("nil_proxy_action", func(t *testing.T) {
-		operation := &highv3.Operation{}
+		operation := &oaschema.Operation{}
 		options := &proxyhandler.NewProxyHandlerOptions{
 			Method: "GET",
 		}
@@ -102,7 +102,7 @@ func TestNewRESTHandler(t *testing.T) {
 	})
 
 	t.Run("with_custom_request_path", func(t *testing.T) {
-		operation := &highv3.Operation{}
+		operation := &oaschema.Operation{}
 		options := &proxyhandler.NewProxyHandlerOptions{
 			Method: "POST",
 		}
@@ -122,7 +122,7 @@ request:
 	})
 
 	t.Run("invalid_response_config", func(t *testing.T) {
-		operation := &highv3.Operation{}
+		operation := &oaschema.Operation{}
 		options := &proxyhandler.NewProxyHandlerOptions{
 			Method: "GET",
 		}

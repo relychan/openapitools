@@ -19,7 +19,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -124,8 +124,8 @@ func TestNewInvalidOperationMetadataError(t *testing.T) {
 			assert.True(t, err != nil)
 
 			// Check if it's an RFC9457Error
-			rfc9457Err, ok := err.(goutils.RFC9457Error)
-			assert.True(t, ok, "error should be of type RFC9457Error")
+			rfc9457Err, ok := err.(httperror.HTTPError)
+			assert.True(t, ok, "error should be of type HTTPError")
 
 			// Verify error properties
 			assert.Equal(t, tc.expectedStatus, rfc9457Err.Status)

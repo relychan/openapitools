@@ -16,10 +16,10 @@ package graphqlhandler
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/parser"
 )
@@ -65,28 +65,40 @@ func ValidateGraphQLString(query string) (*GraphQLHandler, error) {
 	}
 }
 
-// convertVariableTypeFromString coerces a string value to the Go type that matches the
+// convertVariableTypeFromParam coerces a parameter value to the Go type that matches the
 // declared GraphQL scalar (bool, int*, uint*, float*). Returns the original string for
 // unknown or nil types.
-func convertVariableTypeFromString(varDef *ast.VariableDefinition, value string) (any, error) {
+func convertVariableTypeFromParam(varDef *ast.VariableDefinition, value any) (any, error) {
 	if varDef.Type == nil {
 		// unknown type. Returns the original value.
 		return value, nil
 	}
 
-	switch strings.ToLower(varDef.Type.NamedType) {
-	case "bool", "boolean":
-		return strconv.ParseBool(value)
-	case "int", "int8", "int16", "int32", "int64":
-		return strconv.ParseInt(value, 10, 64)
-	case "uint", "uint8", "uint16", "uint32", "uint64":
-		return strconv.ParseUint(value, 10, 64)
-	case "number", "decimal", "float", "float32", "float64", "double":
-		return strconv.ParseFloat(value, 64)
-	default:
-		// unknown type. Returns the original value.
-		return value, nil
+	// Query and Header parameters can be an array of strings.
+	if strValues, ok := value.([]string); ok {
+		switch len(strValues) {
+		case 0:
+			return nil, nil
+		case 1:
+			return convertVariableTypeFromUnknownValue(varDef, strValues[0])
+		default:
+			return convertVariableTypeFromUnknownValue(varDef, value)
+		}
 	}
+
+	if anyValues, ok := value.([]any); ok {
+		switch len(anyValues) {
+		case 0:
+			return nil, nil
+		case 1:
+			if strValue, ok := anyValues[0].(string); ok {
+				return convertVariableTypeFromUnknownValue(varDef, strValue)
+			}
+		default:
+		}
+	}
+
+	return convertVariableTypeFromUnknownValue(varDef, value)
 }
 
 // convertVariableTypeFromUnknownValue coerces an arbitrary value to the declared GraphQL scalar type.
@@ -96,18 +108,6 @@ func convertVariableTypeFromUnknownValue(varDef *ast.VariableDefinition, value a
 	if varDef.Type == nil || value == nil {
 		// unknown type. Returns the original value.
 		return value, nil
-	}
-
-	if str, ok := value.(string); ok {
-		return convertVariableTypeFromString(varDef, str)
-	}
-
-	if strPtr, ok := value.(*string); ok {
-		if strPtr == nil {
-			return nil, nil
-		}
-
-		return convertVariableTypeFromString(varDef, *strPtr)
 	}
 
 	switch strings.ToLower(varDef.Type.NamedType) {
@@ -126,7 +126,7 @@ func convertVariableTypeFromUnknownValue(varDef *ast.VariableDefinition, value a
 }
 
 func newGraphQLResponseEncodeError(code string, err error) error {
-	respErr := goutils.NewServerError(goutils.ErrorDetail{
+	respErr := httperror.NewServerError(httperror.ValidationError{
 		Detail: err.Error(),
 		Code:   code,
 	})

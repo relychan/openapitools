@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/relychan/gohttpc"
@@ -17,14 +20,16 @@ import (
 // goarch: arm64
 // pkg: github.com/relychan/openapitools/tests/benchmarks
 // cpu: Apple M3 Pro
-// BenchmarkProxyClient/http_client_get-11         	   28222	     39528 ns/op	    8316 B/op	     108 allocs/op
-// BenchmarkProxyClient/proxy_rest_get-11          	   30286	     39540 ns/op	    9984 B/op	     136 allocs/op
-// BenchmarkProxyClient/http_client_graphql-11     	    4489	    266435 ns/op	   24366 B/op	     219 allocs/op
-// BenchmarkProxyClient/proxy_client_graphql_get-11    26367	     45222 ns/op	   14881 B/op	     194 allocs/op
-// BenchmarkProxyClient/proxy_client_graphql_post-11   25732	     46617 ns/op	   15218 B/op	     198 allocs/op
+// BenchmarkProxyClient/http_client_get-11         	   27229	     46687 ns/op	    9899 B/op	     124 allocs/op
+// BenchmarkProxyClient/proxy_rest_get-11          	   25870	     46087 ns/op	   12178 B/op	     153 allocs/op
+// BenchmarkProxyClient/http_client_graphql-11     	   23952	     50106 ns/op	   12244 B/op	     157 allocs/op
+// BenchmarkProxyClient/proxy_client_graphql_get-11    22506	     53113 ns/op	   16910 B/op	     210 allocs/op
+// BenchmarkProxyClient/proxy_client_graphql_post-11   21350	     55748 ns/op	   17721 B/op	     220 allocs/op
 func BenchmarkProxyClient(b *testing.B) {
-	// Start server in a different process
-	// cd ./tests/benchmarks/server && go run .
+	server := startMockServer()
+	defer server.Close()
+
+	b.Setenv("SERVER_URL", server.URL)
 
 	oasDef, err := goutils.ReadJSONOrYAMLFile[oaschema.OpenAPIResourceDefinition](context.Background(), "./openapi.yaml")
 	if err != nil {
@@ -39,12 +44,14 @@ func BenchmarkProxyClient(b *testing.B) {
 	b.Run("http_client_get", func(b *testing.B) {
 		c := gohttpc.NewClient()
 
+		b.ResetTimer()
+
 		for b.Loop() {
-			res, err := c.R(http.MethodGet, "http://localhost:8080/mock").Execute(context.TODO())
+			res, err := c.R(http.MethodGet, server.URL+"/mock").Execute(context.TODO())
 			if err != nil {
 				panic(err)
 			}
-			_ = res.Body.Close()
+			goutils.CloseResponse(res)
 		}
 	})
 
@@ -66,8 +73,10 @@ func BenchmarkProxyClient(b *testing.B) {
 			panic(err)
 		}
 
+		b.ResetTimer()
+
 		for b.Loop() {
-			request := c.R(http.MethodPost, "http://localhost:8080/graphql")
+			request := c.R(http.MethodPost, server.URL+"/graphql")
 
 			request.SetBody(bytes.NewBuffer(bodyBytes))
 
@@ -75,7 +84,7 @@ func BenchmarkProxyClient(b *testing.B) {
 			if err != nil {
 				panic(err)
 			}
-			_ = res.Body.Close()
+			goutils.CloseResponse(res)
 		}
 	})
 
@@ -96,4 +105,42 @@ func BenchmarkProxyClient(b *testing.B) {
 			}
 		}
 	})
+}
+
+func startMockServer() *httptest.Server {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/mock", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			w.WriteHeader(http.StatusOK)
+		case http.MethodPost:
+			w.WriteHeader(http.StatusOK)
+
+			_, err := io.Copy(w, r.Body)
+			if err != nil {
+				slog.Error(err.Error())
+			}
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost, http.MethodGet:
+			body := io.NopCloser(bytes.NewBufferString(`{"data":{"users":[{"id":1}]}}`))
+
+			w.WriteHeader(http.StatusOK)
+
+			_, err := io.Copy(w, body)
+			if err != nil {
+				slog.Error(err.Error())
+			}
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
+
+	return httptest.NewServer(mux)
 }

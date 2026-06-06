@@ -23,11 +23,13 @@ import (
 
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
+	"github.com/relychan/openapitools/oasvalidator/contentencoder"
+	"github.com/relychan/openapitools/oasvalidator/parameter"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
 )
 
 func (re *RESTfulHandler) prepareRequest(
@@ -35,7 +37,7 @@ func (re *RESTfulHandler) prepareRequest(
 	options *proxyhandler.ProxyHandleOptions,
 ) (*gohttpc.RequestWithClient, error) {
 	if re.customRequest == nil || re.customRequest.IsZero() {
-		req := options.NewRequest(request.Method(), request.GetURL().RequestURI())
+		req := options.NewRequest(request.Method(), request.URL())
 
 		// Proxies the raw request to the remote service if the body is a reader.
 		reader, ok := request.Body().(io.Reader)
@@ -53,8 +55,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	request *proxyhandler.Request,
 	options *proxyhandler.ProxyHandleOptions,
 ) (*gohttpc.RequestWithClient, error) {
-	requestURL := request.GetURL()
-	requestPath := requestURL.RequestURI()
+	requestPath := request.URL()
 	method := request.Method()
 
 	if re.customRequest.URL != "" {
@@ -65,16 +66,12 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 		method = re.customRequest.Method
 	}
 
-	requestData := proxyhandler.NewRequestTemplateData(
-		request,
-		options.ParamValues,
-	)
-	rawRequestData := requestData.ToMap()
+	rawRequestData := request.ToMap()
 	hasQueryParam := false
 
 	resolvedRequestPath, queryValues, err := re.evaluateRequestPath(
 		requestPath,
-		requestData,
+		request,
 		rawRequestData,
 	)
 	if err != nil {
@@ -88,10 +85,11 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 		case oaschema.InHeader:
 			rawValue, err := param.Evaluate(rawRequestData)
 			if err != nil {
-				respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
-					Code:   oaschema.ErrCodeRequestTransformError,
-					Detail: err.Error(),
-					Header: param.Name,
+				respErr := httperror.NewBadRequestError(httperror.ValidationError{
+					Code:      oasvalidator.ErrCodeRequestTransformError,
+					Detail:    err.Error(),
+					Parameter: param.Name,
+					Location:  oaschema.HeaderKey,
 				})
 				respErr.Detail = "failed to transform request header"
 
@@ -99,7 +97,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 			}
 
 			if rawValue != nil {
-				value := parameter.EncodeHeader(param.BaseParameter, rawValue)
+				value := parameter.EncodeHeader(&param.Parameter, rawValue)
 				req.Header().Set(param.Name, value)
 			}
 		case oaschema.InQuery:
@@ -107,8 +105,8 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 
 			value, err := param.Evaluate(rawRequestData)
 			if err != nil {
-				respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
-					Code:      oaschema.ErrCodeRequestTransformError,
+				respErr := httperror.NewBadRequestError(httperror.ValidationError{
+					Code:      oasvalidator.ErrCodeRequestTransformError,
 					Detail:    err.Error(),
 					Parameter: param.Name,
 				})
@@ -117,17 +115,19 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 				return nil, respErr
 			}
 
-			parameter.SetQueryParam(queryValues, param.BaseParameter, value)
+			parameter.SetQueryParam(queryValues, &param.Parameter, value)
 		default:
 		}
 	}
 
 	// Forward all query params if forwardAllQueryParams is true
 	// or null and there is no query param in the parameters list.
-	if requestURL.RawQuery != "" &&
+	rawQueryParams := request.Query()
+
+	if len(rawQueryParams) > 0 &&
 		(!hasQueryParam && re.customRequest.ForwardAllQueryParams == nil) ||
 		(re.customRequest.ForwardAllQueryParams != nil && *re.customRequest.ForwardAllQueryParams) {
-		for key, values := range requestData.QueryParams {
+		for key, values := range rawQueryParams {
 			escapedKey := url.QueryEscape(key)
 			if !queryValues.Has(key) && !queryValues.Has(escapedKey) {
 				for _, value := range values {
@@ -141,8 +141,8 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	if len(queryValues) > 0 {
 		requestURL, err := goutils.ParsePathOrHTTPURL(resolvedRequestPath)
 		if err != nil {
-			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
-				Code:   oaschema.ErrCodeInvalidRequestURL,
+			respErr := httperror.NewBadRequestError(httperror.ValidationError{
+				Code:   oasvalidator.ErrCodeInvalidRequestURL,
 				Detail: err.Error(),
 			})
 			respErr.Detail = "failed to parse request URL"
@@ -159,8 +159,8 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	if re.customRequest.Body != nil {
 		newBody, err = re.customRequest.Body.Transform(rawRequestData)
 		if err != nil {
-			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
-				Code:   oaschema.ErrCodeRequestTransformError,
+			respErr := httperror.NewBadRequestError(httperror.ValidationError{
+				Code:   oasvalidator.ErrCodeRequestTransformError,
 				Detail: err.Error(),
 			})
 			respErr.Detail = "failed to transform request body"
@@ -170,23 +170,23 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	}
 
 	contentType := re.getDestinedContentType(request)
-	req.Header().Set(httpheader.ContentType, contentType)
+	req.Header()[httpheader.ContentType] = []string{contentType}
 
 	reader, ok := newBody.(io.Reader)
 	if ok && reader != nil {
 		req.SetBody(reader)
 	} else {
-		newBodyBytes, err := contenttype.Encode(contentType, newBody)
+		newBodyBytes, err := contentencoder.Encode(contentType, newBody)
 		if err != nil {
-			errDetail, ok := errors.AsType[*goutils.ErrorDetail](err)
+			errDetail, ok := errors.AsType[*httperror.ValidationError](err)
 			if !ok {
-				errDetail = &goutils.ErrorDetail{
+				errDetail = &httperror.ValidationError{
 					Detail: err.Error(),
-					Code:   oaschema.ErrCodeRequestTransformError,
+					Code:   oasvalidator.ErrCodeRequestTransformError,
 				}
 			}
 
-			respErr := goutils.NewBadRequestError(*errDetail)
+			respErr := httperror.NewBadRequestError(*errDetail)
 			respErr.Detail = "failed to encode transformed request body"
 
 			return nil, respErr
@@ -204,7 +204,7 @@ func (re *RESTfulHandler) getDestinedContentType(request *proxyhandler.Request) 
 		return re.requestContentType
 	}
 
-	contentType := request.Header().Get(httpheader.ContentType)
+	contentType := httpheader.GetHeaderValue(request.Header(), httpheader.ContentType)
 	if contentType != "" {
 		return contentType
 	}
@@ -214,14 +214,14 @@ func (re *RESTfulHandler) getDestinedContentType(request *proxyhandler.Request) 
 
 func (re *RESTfulHandler) evaluateRequestPath(
 	requestPath string,
-	requestData *proxyhandler.RequestTemplateData,
+	request *proxyhandler.Request,
 	rawRequestData map[string]any,
 ) (string, url.Values, error) {
 	if requestPath == "" {
 		return "", url.Values{}, nil
 	}
 
-	newRequestPath, err := parameter.ReplaceURLTemplate(
+	newRequestPath, err := oasvalidator.ReplaceURLTemplate(
 		requestPath,
 		func(key string) (string, error) {
 			for _, param := range re.customRequest.Parameters {
@@ -231,11 +231,11 @@ func (re *RESTfulHandler) evaluateRequestPath(
 
 				value, err := param.Evaluate(rawRequestData)
 				if err != nil {
-					respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+					respErr := httperror.NewBadRequestError(httperror.ValidationError{
 						Detail:    err.Error(),
 						Pointer:   "/" + param.Name,
 						Parameter: key,
-						Code:      oaschema.ErrCodeInvalidRequestURL,
+						Code:      oasvalidator.ErrCodeInvalidRequestURL,
 					})
 					respErr.Detail = "failed to evaluate variable"
 
@@ -246,15 +246,15 @@ func (re *RESTfulHandler) evaluateRequestPath(
 			}
 
 			// fallback to get the parameter from the original request path.
-			value, ok := requestData.Params[key]
+			value, ok := request.URLParams()[key]
 			if ok {
 				return goutils.ToString(value), nil
 			}
 
-			respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+			respErr := httperror.NewBadRequestError(httperror.ValidationError{
 				Detail:    "the parameter can not be resolved",
 				Parameter: key,
-				Code:      oaschema.ErrCodeInvalidRequestURL,
+				Code:      oasvalidator.ErrCodeInvalidURLParam,
 			})
 			respErr.Detail = "failed to evaluate request path"
 
@@ -279,9 +279,9 @@ func extractQueryValuesFromPath(
 
 	q, err := url.ParseQuery(query)
 	if err != nil {
-		respErr := goutils.NewBadRequestError(goutils.ErrorDetail{
+		respErr := httperror.NewBadRequestError(httperror.ValidationError{
 			Detail: err.Error(),
-			Code:   oaschema.ErrCodeInvalidRequestURL,
+			Code:   oasvalidator.ErrCodeInvalidRequestURL,
 		})
 		respErr.Detail = "invalid query params"
 

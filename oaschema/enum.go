@@ -21,23 +21,19 @@ import (
 )
 
 const (
-	// XRelyServerWeight is the extension name enum for the weight of server if the load balancer is configured.
-	XRelyServerWeight = "x-rely-server-weight"
-	// XRelyServerHeaders is the extension name enum for custom headers for the server.
-	XRelyServerHeaders = "x-rely-server-headers"
-	// XRelyServerTLS is the extension name enum for a server TLS config.
-	XRelyServerTLS = "x-rely-server-tls"
-	// XRelyProxyAction is the extension name enum for a proxy action.
-	XRelyProxyAction = "x-rely-proxy-action"
-	// XRelySecurityCredentials is the extension name enum for security credentials.
-	XRelySecurityCredentials = "x-rely-security-credentials"
-	// XRelyOAuth2TokenURLEnv is the extension name enum of a custom environment variable for OAuth2 token URL.
-	XRelyOAuth2TokenURLEnv = "x-rely-oauth2-token-url-env" //nolint:gosec
-	// XRelyOAuth2RefreshURLEnv is the extension name enum of a custom environment variable for OAuth2 refresh URL.
-	XRelyOAuth2RefreshURLEnv = "x-rely-oauth2-refresh-url-env"
+	// CookieKey represents the constant string of a cookie.
+	CookieKey = "cookie"
+	// QueryKey represents the constant string of a query.
+	QueryKey = "query"
+	// HeaderKey represents the constant string of a header.
+	HeaderKey = "header"
+	// PathKey represents the constant string of a path.
+	PathKey = "path"
+	// BodyKey represents the constant string of a body.
+	BodyKey = "body"
+	// FormDataKey represents the constant string of a form data.
+	FormDataKey = "formData"
 )
-
-const cookieKey = "cookie"
 
 // SecuritySchemeType represents the authentication scheme enum.
 type SecuritySchemeType uint8
@@ -55,7 +51,7 @@ const (
 var enumSecuritySchemes = []string{
 	"apiKey",
 	"basic",
-	cookieKey,
+	CookieKey,
 	"http",
 	"oauth2",
 	"openIdConnect",
@@ -117,7 +113,7 @@ func ParseSecuritySchemeType(value string) (SecuritySchemeType, error) {
 		return APIKeyScheme, nil
 	case "basic":
 		return BasicAuthScheme, nil
-	case cookieKey:
+	case CookieKey:
 		return CookieAuthScheme, nil
 	case "http":
 		return HTTPAuthScheme, nil
@@ -157,12 +153,12 @@ const (
 )
 
 var enumValueParameterLocations = []string{
-	"query",
-	"header",
-	"path",
-	cookieKey,
-	"body",
-	"formData",
+	QueryKey,
+	HeaderKey,
+	PathKey,
+	CookieKey,
+	BodyKey,
+	FormDataKey,
 }
 
 // IsValid checks if the style enum is valid.
@@ -218,17 +214,17 @@ func (j *ParameterLocation) UnmarshalJSON(input []byte) error {
 // ParseParameterLocation parses ParameterLocation from string.
 func ParseParameterLocation(input string) (ParameterLocation, error) {
 	switch input {
-	case "header":
+	case HeaderKey:
 		return InHeader, nil
-	case "query":
+	case QueryKey:
 		return InQuery, nil
-	case "body":
+	case BodyKey:
 		return InBody, nil
-	case "path":
+	case PathKey:
 		return InPath, nil
-	case cookieKey:
+	case CookieKey:
 		return InCookie, nil
-	case "formData":
+	case FormDataKey:
 		return InFormData, nil
 	default:
 		return 255, fmt.Errorf(
@@ -277,7 +273,7 @@ var enumValueEncodingStyles = []string{
 	"spaceDelimited",
 	"pipeDelimited",
 	"deepObject",
-	cookieKey,
+	CookieKey,
 }
 
 // IsValid checks if the style enum is valid.
@@ -347,7 +343,7 @@ func ParseParameterEncodingStyle(input string) (ParameterEncodingStyle, error) {
 		return EncodingStylePipeDelimited, nil
 	case "deepObject":
 		return EncodingStyleDeepObject, nil
-	case cookieKey:
+	case CookieKey:
 		return EncodingStyleCookie, nil
 	default:
 		return 255, fmt.Errorf(

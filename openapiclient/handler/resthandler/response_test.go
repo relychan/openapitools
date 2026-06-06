@@ -24,6 +24,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
@@ -42,9 +43,9 @@ func marshalRESTBody(v any) io.ReadCloser {
 	return io.NopCloser(bytes.NewReader(b))
 }
 
-// ---- resolveRawResponse ----
+// ---- writeRawResponse ----
 
-func TestResolveRawResponse_NilBody(t *testing.T) {
+func TestWriteRawResponse_NilBody(t *testing.T) {
 	handler := &RESTfulHandler{}
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
@@ -52,12 +53,14 @@ func TestResolveRawResponse_NilBody(t *testing.T) {
 		Header:     http.Header{},
 	}
 
-	body, err := handler.resolveRawResponse(context.Background(), resp, nil)
+	w := httptest.NewRecorder()
+
+	err := handler.writeRawResponse(context.Background(), resp, w, &proxyhandler.ProxyHandleOptions{})
 	require.NoError(t, err)
-	assert.Nil(t, body)
+	assert.Equal(t, resp.StatusCode, w.Code)
 }
 
-func TestResolveRawResponse_BufferedJSONResponse(t *testing.T) {
+func TestWriteRawResponse_BufferedJSONResponse(t *testing.T) {
 	handler := &RESTfulHandler{}
 	payload := map[string]any{"id": "1", "name": "Alice"}
 	resp := &http.Response{
@@ -66,17 +69,20 @@ func TestResolveRawResponse_BufferedJSONResponse(t *testing.T) {
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 	}
 
-	body, err := handler.resolveRawResponse(context.Background(), resp, nil)
-	require.NoError(t, err)
-	require.NotNil(t, body)
+	w := httptest.NewRecorder()
 
-	bodyMap, ok := body.(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "1", bodyMap["id"])
-	assert.Equal(t, "Alice", bodyMap["name"])
+	err := handler.writeRawResponse(context.Background(), resp, w, &proxyhandler.ProxyHandleOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, resp.StatusCode, w.Code)
+
+	var result map[string]any
+
+	err = json.Unmarshal(w.Body.Bytes(), &result)
+	require.NoError(t, err)
+	assert.Equal(t, payload, result)
 }
 
-func TestResolveRawResponse_StreamingResponse(t *testing.T) {
+func TestWriteRawResponse_StreamingResponse(t *testing.T) {
 	handler := &RESTfulHandler{}
 	payload := map[string]any{"streamed": true}
 	resp := &http.Response{
@@ -86,16 +92,17 @@ func TestResolveRawResponse_StreamingResponse(t *testing.T) {
 	}
 
 	recorder := httptest.NewRecorder()
-	body, err := handler.resolveRawResponse(context.Background(), resp, recorder)
+	err := handler.writeRawResponse(context.Background(), resp, recorder, &proxyhandler.ProxyHandleOptions{})
 	require.NoError(t, err)
-	assert.Nil(t, body) // streaming — body is written to writer, not returned
+	assert.Equal(t, resp.StatusCode, recorder.Code)
 
 	var written map[string]any
 	err = json.Unmarshal(recorder.Body.Bytes(), &written)
 	require.NoError(t, err)
+	assert.Equal(t, payload, written)
 }
 
-func TestResolveRawResponse_StreamingWritesStatusCode(t *testing.T) {
+func TestWriteRawResponse_StreamingWritesStatusCode(t *testing.T) {
 	handler := &RESTfulHandler{}
 	resp := &http.Response{
 		StatusCode: http.StatusCreated,
@@ -104,7 +111,7 @@ func TestResolveRawResponse_StreamingWritesStatusCode(t *testing.T) {
 	}
 
 	recorder := httptest.NewRecorder()
-	_, err := handler.resolveRawResponse(context.Background(), resp, recorder)
+	err := handler.writeRawResponse(context.Background(), resp, recorder, &proxyhandler.ProxyHandleOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusCreated, recorder.Code)
 }

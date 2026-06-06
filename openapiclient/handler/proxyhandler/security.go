@@ -25,7 +25,7 @@ import (
 	"github.com/relychan/gohttpc/authc/basicauth"
 	"github.com/relychan/gohttpc/authc/httpauth"
 	"github.com/relychan/gohttpc/authc/oauth2scheme"
-	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 	"go.yaml.in/yaml/v4"
@@ -61,7 +61,7 @@ func NewOpenAPIv3Authenticator(
 
 		authScheme, err := result.createAuthenticatorFromSecurityScheme(key, security, getEnv)
 		if err != nil {
-			return nil, goutils.RFC9457Error{
+			return nil, httperror.HTTPError{
 				Type:     "about:blank",
 				Title:    "Invalid Security Scheme",
 				Detail:   "Failed to create an authenticator from security scheme: " + err.Error(),

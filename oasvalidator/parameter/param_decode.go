@@ -1,0 +1,322 @@
+// Copyright 2026 RelyChan Pte. Ltd
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package parameter
+
+import (
+	"slices"
+	"strconv"
+
+	"github.com/pb33f/libopenapi/datamodel/high/base"
+	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
+	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
+	"github.com/relychan/openapitools/oasvalidator/contentdecoder"
+)
+
+// paramDecoder holds the resolved configuration and raw string values for a single parameter.
+type paramDecoder struct {
+	RawValues []string
+	Schema    *base.Schema
+}
+
+// Decode evaluates and decodes URL parameters.
+func (pd *paramDecoder) Decode( //nolint:cyclop
+	types []string,
+) (any, []httperror.ValidationError) {
+	if pd.Schema == nil {
+		return normalizeRawParamValue(pd.RawValues), nil
+	}
+
+	ts, allOf, oneOf, anyOf, isNullable := oaschema.ExtractSchemaTypes(pd.Schema)
+	if len(ts) == 0 {
+		if len(pd.RawValues) > 0 || isNullable {
+			result := normalizeRawParamValue(pd.RawValues)
+
+			errs := oasvalidator.ValidateValue(pd.Schema, result)
+			if len(errs) > 0 {
+				return nil, errs
+			}
+
+			return result, nil
+		}
+
+		return nil, []httperror.ValidationError{
+			{
+				Detail: "Field is required",
+			},
+		}
+	}
+
+	if len(types) == 0 {
+		types = ts
+	}
+
+	result, resultType, errs := pd.decodeFromSchemaTypes(types)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	errs = oasvalidator.ValidateValue(pd.Schema, result)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	for _, ao := range allOf {
+		errs := oasvalidator.ValidateValue(ao, result)
+		if len(errs) > 0 {
+			return nil, errs
+		}
+	}
+
+	if len(anyOf) > 0 {
+		var (
+			anyOfErrs      []httperror.ValidationError
+			isAnyOfSuccess bool
+		)
+
+		for _, ao := range anyOf {
+			errs := oasvalidator.ValidateValue(ao, result)
+			if len(errs) > 0 {
+				anyOfErrs = append(anyOfErrs, errs...)
+
+				continue
+			}
+
+			isAnyOfSuccess = true
+		}
+
+		if !isAnyOfSuccess {
+			return nil, anyOfErrs
+		}
+	}
+
+	if len(oneOf) > 0 {
+		var (
+			oneOfErrs      []httperror.ValidationError
+			isOneOfSuccess bool
+		)
+
+		for _, oo := range oneOf {
+			if len(oo.Type) > 0 && slices.Contains(oo.Type, resultType) {
+				continue
+			}
+
+			errs := oasvalidator.ValidateValue(oo, result)
+			if len(errs) > 0 {
+				oneOfErrs = append(oneOfErrs, errs...)
+
+				continue
+			}
+
+			isOneOfSuccess = true
+
+			break
+		}
+
+		if !isOneOfSuccess {
+			return nil, oneOfErrs
+		}
+	}
+
+	return result, nil
+}
+
+// decodeFromSchemaTypes decodes the raw values by trying each type declared in the schema.
+// String is given priority: if the schema allows string the raw value is returned as-is
+// to avoid lossy parsing (e.g. a numeric string "007" would become 7).
+func (pd *paramDecoder) decodeFromSchemaTypes(
+	types []string,
+) (any, string, []httperror.ValidationError) {
+	var (
+		finalErrors []httperror.ValidationError
+		hasObject   bool
+	)
+
+	for _, typeName := range types {
+		if typeName == oaschema.Object {
+			hasObject = true
+
+			continue
+		}
+
+		result, primitiveType, errs := pd.decodeFromSchemaType(typeName)
+		if len(errs) == 0 {
+			return result, primitiveType, nil
+		}
+
+		finalErrors = errs
+	}
+
+	if len(finalErrors) > 0 {
+		return nil, "", finalErrors
+	}
+
+	if hasObject {
+		return nil, "", []httperror.ValidationError{
+			{
+				Detail: "Unsupported object type or nested fields in parameter",
+			},
+		}
+	}
+
+	return nil, "", finalErrors
+}
+
+// DecodeFromSchemaType decodes a path parameter value from a type of the schema.
+// Returns the decoded value, a matched type and an error.
+func (pd *paramDecoder) decodeFromSchemaType(
+	typeName string,
+) (any, string, []httperror.ValidationError) {
+	switch typeName {
+	case oaschema.Array:
+		result, err := decodeArrayParam(pd.RawValues, pd.Schema)
+
+		return result, typeName, err
+	default:
+		result, decodedTypeName, errs := decodePrimitiveQueryValuesFromSchemaType(
+			typeName,
+			pd.RawValues,
+		)
+
+		if len(errs) > 0 {
+			return nil, "", errs
+		}
+
+		if decodedTypeName == "" {
+			return nil, "", []httperror.ValidationError{
+				{
+					Detail: "Unsupported type: " + typeName,
+				},
+			}
+		}
+
+		return result, decodedTypeName, nil
+	}
+}
+
+// decodeArrayParam decodes raw string values into a typed []any guided by the array schema.
+// Falls back to []any of raw strings when schema items are absent or untyped.
+func decodeArrayParam(
+	rawValues []string,
+	schema *base.Schema,
+) ([]any, []httperror.ValidationError) {
+	if len(rawValues) == 0 || schema.Items == nil || schema.Items.A == nil {
+		return goutils.ToAnySlice(rawValues), nil
+	}
+
+	itemSchema := schema.Items.A.Schema()
+	if oaschema.IsSchemaTypeEmpty(itemSchema) {
+		return goutils.ToAnySlice(rawValues), nil
+	}
+
+	return decodeArrayParamWithItemSchema(rawValues, itemSchema)
+}
+
+// decodeArrayParamWithItemSchema decodes each raw value against itemSchema, accumulating
+// pointer-annotated errors so the caller can locate the failing array element.
+func decodeArrayParamWithItemSchema(
+	rawValues []string,
+	itemSchema *base.Schema,
+) ([]any, []httperror.ValidationError) {
+	results := make([]any, 0, len(rawValues))
+
+	for i, value := range rawValues {
+		decoder := paramDecoder{
+			RawValues: []string{value},
+			Schema:    itemSchema,
+		}
+
+		itemValue, errs := decoder.Decode(nil)
+		if len(errs) > 0 {
+			for j, e := range errs {
+				e.PrependPointer("/" + strconv.Itoa(i))
+				errs[j] = e
+			}
+
+			return nil, errs
+		}
+
+		results = append(results, itemValue)
+	}
+
+	return results, nil
+}
+
+func decodeParameterFromContent(
+	definition *oaschema.Parameter,
+	rawValues []string,
+) (any, []httperror.ValidationError) {
+	decodedValues := make([]any, 0, len(rawValues))
+
+	for _, rawValue := range rawValues {
+		if rawValue == "" {
+			continue
+		}
+
+		decodedValue, err := contentdecoder.Unmarshal(
+			definition.Content.ContentType,
+			[]byte(rawValue),
+		)
+		if err != nil {
+			return nil, []httperror.ValidationError{
+				{
+					Detail: err.Error(),
+				},
+			}
+		}
+
+		decodedValues = append(decodedValues, decodedValue)
+	}
+
+	if definition.Content.Schema == nil {
+		return normalizeRawParamValue(decodedValues), nil
+	}
+
+	schemaTypes, nullable := oaschema.GetSchemaTypes(definition.Content.Schema)
+	if len(decodedValues) == 0 {
+		if nullable {
+			return nil, nil
+		}
+
+		return nil, []httperror.ValidationError{
+			{
+				Detail: "Field is required",
+			},
+		}
+	}
+
+	if !slices.Contains(schemaTypes, oaschema.Array) {
+		if len(decodedValues) > 1 {
+			return nil, []httperror.ValidationError{
+				*oasvalidator.InvalidTypeError(schemaTypes, oaschema.Array),
+			}
+		}
+
+		errs := oasvalidator.ValidateValue(definition.Content.Schema, decodedValues[0])
+		if len(errs) > 0 {
+			return nil, errs
+		}
+
+		return decodedValues[0], nil
+	}
+
+	errs := oasvalidator.ValidateValue(definition.Content.Schema, decodedValues)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	return decodedValues, nil
+}

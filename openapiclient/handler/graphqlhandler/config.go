@@ -23,6 +23,7 @@ import (
 	"github.com/relychan/gotransform"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 )
 
@@ -129,7 +130,7 @@ func newProxyCustomGraphQLResponse(
 		for _, key := range keys {
 			status, err := strconv.Atoi(key)
 			if err != nil {
-				return nil, &goutils.ErrorDetail{
+				return nil, &httperror.ValidationError{
 					Detail:  err.Error(),
 					Pointer: "/response/httpErrors/" + key,
 				}
@@ -137,7 +138,7 @@ func newProxyCustomGraphQLResponse(
 
 			exprs := config.HTTPErrors[key]
 			if len(exprs) == 0 {
-				return nil, &goutils.ErrorDetail{
+				return nil, &httperror.ValidationError{
 					Detail:  "http error mapping must contain at least one expression",
 					Pointer: "/response/httpErrors/" + key,
 				}
@@ -151,7 +152,7 @@ func newProxyCustomGraphQLResponse(
 			for j, expr := range exprs {
 				expression, err := jmespath.Compile(expr)
 				if err != nil {
-					return nil, &goutils.ErrorDetail{
+					return nil, &httperror.ValidationError{
 						Detail:  err.Error(),
 						Pointer: "/response/httpErrors/" + key + "/" + strconv.Itoa(j),
 					}

@@ -18,7 +18,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 )
 
 var (
@@ -34,8 +34,23 @@ var (
 	ErrReplaceMissingChildNode          = errors.New("replacing missing child node")
 )
 
+// Route holds parameter values from the request path.
+type Route struct {
+	Pattern     string
+	Method      *MethodHandler
+	ParamValues map[string]any
+}
+
+// IsRequestBodyRequired checks if the request body of this route is required.
+func (r Route) IsRequestBodyRequired() bool {
+	return r.Method != nil &&
+		r.Method.Operation != nil &&
+		r.Method.Operation.RequestBody != nil &&
+		r.Method.Operation.RequestBody.Required
+}
+
 func newInvalidOperationMetadataError(method string, pattern string, err error) error {
-	return goutils.RFC9457Error{
+	return httperror.HTTPError{
 		Type:     "about:blank",
 		Title:    "Invalid Operation Metadata",
 		Detail:   err.Error(),

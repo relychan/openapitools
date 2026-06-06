@@ -17,7 +17,6 @@ package handler
 import (
 	"testing"
 
-	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/graphqlhandler"
@@ -30,7 +29,7 @@ import (
 func TestNewProxyHandler(t *testing.T) {
 	testCases := []struct {
 		name          string
-		operation     *highv3.Operation
+		operation     *oaschema.Operation
 		options       *proxyhandler.NewProxyHandlerOptions
 		expectedType  proxyhandler.ProxyActionType
 		expectError   bool
@@ -38,8 +37,8 @@ func TestNewProxyHandler(t *testing.T) {
 	}{
 		{
 			name: "REST handler without proxy action",
-			operation: &highv3.Operation{
-				OperationId: "testOperation",
+			operation: &oaschema.Operation{
+				OperationID: "testOperation",
 			},
 			options: &proxyhandler.NewProxyHandlerOptions{
 				Method: "GET",
@@ -134,7 +133,7 @@ func TestRegisterProxyHandler(t *testing.T) {
 
 	customType := proxyhandler.ProxyActionType("custom")
 	customConstructor := func(
-		operation *highv3.Operation,
+		operation *oaschema.Operation,
 		proxyAction *yaml.Node,
 		options *proxyhandler.NewProxyHandlerOptions,
 	) (proxyhandler.ProxyHandler, error) {
@@ -148,7 +147,7 @@ func TestRegisterProxyHandler(t *testing.T) {
 }
 
 // Helper function to create an operation with a proxy action extension
-func createOperationWithProxyAction(t *testing.T, action any) *highv3.Operation {
+func createOperationWithProxyAction(t *testing.T, action any) *oaschema.Operation {
 	t.Helper()
 
 	extensions := orderedmap.New[string, *yaml.Node]()
@@ -162,8 +161,8 @@ func createOperationWithProxyAction(t *testing.T, action any) *highv3.Operation 
 
 	extensions.Set(oaschema.XRelyProxyAction, &actionNode)
 
-	return &highv3.Operation{
-		OperationId: "testOperation",
+	return &oaschema.Operation{
+		OperationID: "testOperation",
 		Extensions:  extensions,
 	}
 }

@@ -16,10 +16,12 @@ package proxyhandler
 
 import (
 	"errors"
+	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/hasura/goenvconf"
+	"github.com/relychan/openapitools/oasvalidator/parameter"
 )
 
 var (
@@ -56,55 +58,170 @@ type OAuth2Credentials struct {
 	EndpointParams map[string]goenvconf.EnvString `json:"endpointParams,omitempty" yaml:"endpointParams,omitempty"`
 }
 
-// RequestTemplateData represents the request data for template transformation.
-type RequestTemplateData struct {
-	Params      map[string]string
-	QueryParams url.Values
-	Headers     map[string]string
-	Body        any
+// Request represents an HTTP request to be proxying.
+type Request struct {
+	// Method specifies the HTTP method (GET, POST, PUT, etc.).
+	method string
+	// URL path of the request.
+	path string
+	// Header contains the request header fields.
+	header http.Header
+	// The body of the request.
+	body any
+	// Query parameters of the request.
+	query url.Values
+	// Parameter values of the request.
+	urlParams map[string]any
+	// Evaluated query parameters of the request.
+	queryParams map[string]any
+	// Evaluated headers of the request.
+	headerParams map[string]any
+	// Evaluated cookies of the request.
+	cookieParams map[string]any
+	// URL fragment.
+	fragment string
 }
 
-// NewRequestTemplateData creates a new [RequestTemplateData] from the HTTP request to a map for request transformation.
-func NewRequestTemplateData(
-	request *Request,
-	paramValues map[string]string,
-) *RequestTemplateData {
-	requestHeaders := map[string]string{}
+// NewRequest creates a new [Request] instance.
+func NewRequest(method string, uri *url.URL, headers http.Header, body any) *Request {
+	result := &Request{
+		method: method,
+		header: headers,
+		body:   body,
+	}
 
-	for key, header := range request.header {
-		if len(header) == 0 {
-			continue
+	if uri != nil {
+		uriPath := uri.Path
+
+		if len(uriPath) == 0 {
+			uriPath = "/"
+		} else if uriPath[0] != '/' {
+			uriPath = "/" + uriPath
 		}
 
-		requestHeaders[strings.ToLower(key)] = header[0]
+		result.path = uriPath
+		result.fragment = uri.RawFragment
+		result.query = uri.Query()
 	}
 
-	requestData := &RequestTemplateData{
-		Params:  paramValues,
-		Headers: requestHeaders,
-		Body:    request.Body,
+	return result
+}
+
+// Method returns the method of the request.
+func (r *Request) Method() string {
+	return r.method
+}
+
+// SetMethod sets a new method to the request.
+func (r *Request) SetMethod(method string) {
+	r.method = method
+}
+
+// URL returns the URL string of the request.
+func (r *Request) URL() string {
+	result := r.path
+
+	if len(r.query) == 0 && r.fragment == "" {
+		return r.path
 	}
 
-	rawQuery := strings.TrimSpace(request.url.RawQuery)
-	if rawQuery == "" {
-		requestData.QueryParams = url.Values{}
-	} else {
-		requestData.QueryParams, _ = url.ParseQuery(rawQuery)
+	var sb strings.Builder
+
+	sb.WriteString(result)
+
+	if len(r.query) > 0 {
+		sb.WriteByte('?')
+		sb.WriteString(r.query.Encode())
 	}
 
-	return requestData
+	if r.fragment != "" {
+		sb.WriteByte('#')
+		sb.WriteString(r.fragment)
+	}
+
+	return sb.String()
+}
+
+// Path returns the request path of the request.
+func (r *Request) Path() string {
+	return r.path
+}
+
+// SetPath sets the URL path to the request.
+func (r *Request) SetPath(value string) {
+	r.path = value
+}
+
+// Header returns the headers of the request.
+func (r *Request) Header() http.Header {
+	return r.header
+}
+
+// Body returns the body of the request.
+func (r *Request) Body() any {
+	return r.body
+}
+
+// SetBody sets the body of the request.
+func (r *Request) SetBody(value any) {
+	r.body = value
+}
+
+// URLParams returns parameter values of the request URL.
+func (r *Request) URLParams() map[string]any {
+	return r.urlParams
+}
+
+// SetURLParams sets the URL parameters of the request.
+func (r *Request) SetURLParams(value map[string]any) {
+	r.urlParams = value
+}
+
+// Query returns query parameter values of the request URL.
+func (r *Request) Query() url.Values {
+	return r.query
+}
+
+// SetQuery sets query parameters for the request.
+func (r *Request) SetQuery(values url.Values) {
+	r.query = values
+}
+
+// QueryParams returns query parameter values of the request URL.
+func (r *Request) QueryParams() map[string]any {
+	return r.queryParams
+}
+
+// SetQueryParams sets query parameters for the request.
+func (r *Request) SetQueryParams(values map[string]any) {
+	r.queryParams = values
+}
+
+// SetHeaderParams sets decoded header parameters for the request.
+func (r *Request) SetHeaderParams(values map[string]any) {
+	r.headerParams = values
+}
+
+// SetCookieParams sets decoded cookie parameters for the request.
+func (r *Request) SetCookieParams(values map[string]any) {
+	r.cookieParams = values
 }
 
 // ToMap converts the struct to map.
-func (rtd RequestTemplateData) ToMap() map[string]any {
+func (r *Request) ToMap() map[string]any {
 	result := map[string]any{
-		"param":   rtd.Params,
-		"query":   rtd.QueryParams,
-		"headers": rtd.Headers,
+		"param":   r.urlParams,
+		"query":   r.queryParams,
+		"headers": r.headerParams,
+		"cookies": r.cookieParams,
 	}
 
-	if rtd.Body != nil {
-		result["body"] = rtd.Body
+	if len(r.headerParams) == 0 && len(r.header) > 0 {
+		result["headers"] = parameter.NormalizeHeaders(r.header)
+	}
+
+	if r.body != nil {
+		result["body"] = r.body
 	}
 
 	return result

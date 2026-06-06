@@ -15,10 +15,10 @@
 package oaschema
 
 import (
-	"mime"
 	"slices"
 	"strings"
 
+	"github.com/pb33f/libopenapi/datamodel/high/base"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/relychan/goutils/httpheader"
@@ -54,24 +54,6 @@ func ExtractCommonParametersOfOperation(
 	return pathParams
 }
 
-// MergeParameters merge parameter slices by unique name and location.
-func MergeParameters(dest []*highv3.Parameter, src []*highv3.Parameter) []*highv3.Parameter {
-L:
-	for _, srcParam := range src {
-		for j, destParam := range dest {
-			if destParam.Name == srcParam.Name && destParam.In == srcParam.In {
-				dest[j] = srcParam
-
-				continue L
-			}
-		}
-
-		dest = append(dest, srcParam)
-	}
-
-	return dest
-}
-
 // GetDefaultContentType gets the default content type from the content map.
 func GetDefaultContentType(contents *orderedmap.Map[string, *highv3.MediaType]) string {
 	if contents == nil || contents.Len() == 0 {
@@ -98,15 +80,15 @@ func GetDefaultContentType(contents *orderedmap.Map[string, *highv3.MediaType]) 
 	return contentType
 }
 
-// GetResponseContentTypeFromOperation gets the successful content type of the operation.
-func GetResponseContentTypeFromOperation(operation *highv3.Operation) string {
-	if operation.Responses == nil {
+// GetResponseContentType gets the successful content type of the operation.
+func GetResponseContentType(responses *highv3.Responses) string {
+	if responses == nil {
 		return ""
 	}
 
 	var successResponse *highv3.Response
 
-	for iter := operation.Responses.Codes.First(); iter != nil; iter = iter.Next() {
+	for iter := responses.Codes.First(); iter != nil; iter = iter.Next() {
 		status := iter.Key()
 
 		if status == "200" || status == "201" || status == "204" {
@@ -120,42 +102,120 @@ func GetResponseContentTypeFromOperation(operation *highv3.Operation) string {
 		return GetDefaultContentType(successResponse.Content)
 	}
 
-	if operation.Responses.Default != nil {
-		return GetDefaultContentType(operation.Responses.Default.Content)
+	if responses.Default != nil {
+		return GetDefaultContentType(responses.Default.Content)
 	}
 
 	return ""
 }
 
-// ValidateContentType validates the content type and prefer the application/json content type
-// if the content type string has many content types.
-func ValidateContentType(contentType string) (string, error) {
-	if contentType == "" {
-		return contentType, nil
+// MergeDefaultOrderedMap assigns properties of the source order map to another.
+// Existing properties will not be assigned.
+func MergeDefaultOrderedMap[K comparable, V any](
+	dest, src *orderedmap.Map[K, V],
+) *orderedmap.Map[K, V] {
+	if src == nil || src.Len() == 0 {
+		return dest
 	}
 
-	var result string
+	if dest == nil {
+		return src
+	}
 
-	for item := range strings.SplitSeq(contentType, ",") {
-		trimmed := strings.TrimSpace(item)
+	for iter := src.First(); iter != nil; iter = iter.Next() {
+		key := iter.Key()
 
-		parsed, _, err := mime.ParseMediaType(trimmed)
-		if err != nil {
+		_, present := dest.Get(key)
+		if !present {
+			dest.Set(key, iter.Value())
+		}
+	}
+
+	return dest
+}
+
+// IsSchemaTypeEmpty checks if the schema type is empty.
+func IsSchemaTypeEmpty(schema *base.Schema) bool {
+	return schema == nil || (len(schema.Type) == 0 &&
+		len(schema.AllOf) == 0 &&
+		len(schema.AnyOf) == 0 &&
+		len(schema.OneOf) == 0 &&
+		schema.Properties == nil &&
+		schema.AdditionalProperties == nil &&
+		schema.PatternProperties == nil &&
+		schema.Items == nil)
+}
+
+// IsSchemaObjectEmpty checks if the schema object is empty.
+func IsSchemaObjectEmpty(schema *base.Schema) bool {
+	return schema == nil || (len(schema.AllOf) == 0 &&
+		len(schema.AnyOf) == 0 &&
+		len(schema.OneOf) == 0 &&
+		schema.Properties == nil &&
+		schema.AdditionalProperties == nil &&
+		schema.PatternProperties == nil)
+}
+
+// ExtractSchemaProxies returns schema references of schema proxies.
+func ExtractSchemaProxies(proxies []*base.SchemaProxy) []*base.Schema {
+	results := make([]*base.Schema, 0, len(proxies))
+
+	for _, item := range proxies {
+		if item == nil {
 			continue
 		}
 
-		if parsed == httpheader.ContentTypeJSON {
-			return trimmed, nil
+		itemSchema := item.Schema()
+		if itemSchema == nil {
+			continue
 		}
 
-		if result == "" {
-			result = trimmed
+		results = append(results, itemSchema)
+	}
+
+	return slices.Clip(results)
+}
+
+// GetUnionSchemaTypes returns unique types of union schemas.
+func GetUnionSchemaTypes(schemas []*base.Schema) ([]string, bool) {
+	if len(schemas) == 0 {
+		return nil, false
+	}
+
+	var (
+		results  = make([]string, 0, 2)
+		nullable bool
+	)
+
+	for _, item := range schemas {
+		if item == nil {
+			continue
+		}
+
+		nullable = nullable || (item.Nullable != nil && *item.Nullable)
+
+		if len(item.Type) == 0 {
+			continue
+		}
+
+		for _, t := range item.Type {
+			if t == "" {
+				continue
+			}
+
+			if t == "null" {
+				nullable = true
+
+				continue
+			}
+
+			nt, _ := NormalizeType(t)
+
+			if !slices.Contains(results, nt) {
+				results = append(results, nt)
+			}
 		}
 	}
 
-	if result != "" {
-		return result, nil
-	}
-
-	return "", ErrInvalidContentType
+	return slices.Clip(results), nullable
 }

@@ -23,9 +23,10 @@ import (
 
 	"github.com/hasura/gotel"
 	"github.com/hasura/gotel/otelutils"
-	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/gohttpc"
+	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator/contentencoder"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
@@ -37,23 +38,21 @@ var tracer = gotel.NewTracer("openapitools/resthandler")
 
 // RESTfulHandler implements the ProxyHandler interface for RESTful proxy.
 type RESTfulHandler struct {
-	operation           *highv3.Operation
 	requestContentType  string
 	responseContentType string
 	customRequest       *customRESTRequest
 	customResponse      *customRESTResponse
-	parameters          []*highv3.Parameter
+	parameters          []*oaschema.Parameter
 }
 
 // NewRESTfulHandler creates a RESTHandler from operation.
 func NewRESTfulHandler(
-	operation *highv3.Operation,
+	operation *oaschema.Operation,
 	rawProxyAction *yaml.Node,
 	options *proxyhandler.NewProxyHandlerOptions,
 ) (proxyhandler.ProxyHandler, error) {
 	handler := &RESTfulHandler{
-		operation:  operation,
-		parameters: oaschema.MergeParameters(options.Parameters, operation.Parameters),
+		parameters: operation.Parameters,
 	}
 
 	if rawProxyAction == nil {
@@ -152,7 +151,7 @@ func (re *RESTfulHandler) handleRequest(
 			Key:   semconv.HTTPRequestMethodKey,
 			Value: attribute.StringValue(request.Method()),
 		},
-		semconv.URLPath(request.GetURL().Path),
+		semconv.URLPath(request.Path()),
 		attribute.String("proxy.type", string(re.Type())),
 	)
 
@@ -186,10 +185,37 @@ func (re *RESTfulHandler) handleRequest(
 		return resp, nil, err
 	}
 
+	// Decode and return/stream the response directly if there is no custom response config.
 	if re.customResponse == nil || re.customResponse.IsZero() ||
 		(resp.StatusCode < 200 || resp.StatusCode >= 300) {
-		respBody, err := re.resolveRawResponse(ctx, resp, writer)
+		var (
+			respBody  any
+			respError error
+		)
 
+		if writer == nil {
+			respBody, respError = re.decodeRawResponse(ctx, resp)
+		} else {
+			respError = re.writeRawResponse(ctx, resp, writer, options)
+		}
+
+		re.printRequestLog(
+			ctx,
+			span,
+			logger,
+			request,
+			req,
+			resp,
+			respError,
+		)
+
+		return resp, respBody, respError
+	}
+
+	contentTypeFrom := httpheader.GetHeaderValue(resp.Header, httpheader.ContentType)
+
+	transformedBody, err := re.transformResponse(ctx, logger, resp, contentTypeFrom)
+	if err != nil || writer == nil {
 		re.printRequestLog(
 			ctx,
 			span,
@@ -200,10 +226,21 @@ func (re *RESTfulHandler) handleRequest(
 			err,
 		)
 
-		return resp, respBody, err
+		return resp, transformedBody, err
 	}
 
-	transformedBody, err := re.transformResponse(ctx, logger, resp, writer)
+	// encode the body back to the response stream.
+	contentTypeTo := re.responseContentType
+	if contentTypeTo == "" {
+		contentTypeTo = contentTypeFrom
+	}
+
+	options.ForwardResponseHeaders(writer, resp)
+	writer.Header()[httpheader.ContentType] = []string{contentTypeTo}
+	writer.WriteHeader(resp.StatusCode)
+
+	_, err = contentencoder.Write(writer, contentTypeTo, transformedBody)
+
 	re.printRequestLog(
 		ctx,
 		span,
@@ -242,11 +279,11 @@ func (*RESTfulHandler) printRequestLog(
 		)
 	}
 
-	requestHeaders := otelutils.ExtractTelemetryHeaders(originalRequest.Header())
+	requestHeaders := otelutils.ExtractTelemetryHeaders(originalRequest.Header(), nil)
 	otelutils.SetSpanHeaderMatrixAttributes(span, "http.request.header", requestHeaders)
 
 	requestAttrs = append(requestAttrs,
-		slog.String("original_path", originalRequest.GetURL().Path),
+		slog.String("original_path", originalRequest.Path()),
 		slog.String("original_method", originalRequest.Method()),
 		otelutils.NewHeaderMatrixLogGroupAttrs(
 			"headers",
@@ -263,7 +300,7 @@ func (*RESTfulHandler) printRequestLog(
 	)
 
 	if response != nil {
-		respHeaders := otelutils.ExtractTelemetryHeaders(response.Header)
+		respHeaders := otelutils.ExtractTelemetryHeaders(response.Header, nil)
 
 		attrs = append(attrs, slog.GroupAttrs(
 			"response",

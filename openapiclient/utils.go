@@ -16,7 +16,6 @@ package openapiclient
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -25,48 +24,12 @@ import (
 
 	"github.com/hasura/goenvconf"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
-	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
-	"github.com/relychan/openapitools/oaschema"
-	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
+	"github.com/relychan/openapitools/oasvalidator"
+	"github.com/relychan/openapitools/oasvalidator/contentdecoder"
+	"github.com/relychan/openapitools/openapiclient/internal"
 )
-
-// newRequest creates a new proxy request from an HTTP request.
-func newRequest(writer http.ResponseWriter, request *http.Request) (*proxyhandler.Request, error) {
-	req := proxyhandler.NewRequest(request.Method, request.URL, request.Header, nil)
-
-	if request.Body == nil || request.Body == http.NoBody {
-		return req, nil
-	}
-
-	contentType := request.Header.Get(httpheader.ContentType)
-
-	decodedBody, err := contenttype.Decode(contentType, request.Body)
-	if err == nil {
-		req.SetBody(decodedBody)
-
-		return req, nil
-	}
-
-	errorDetail, ok := errors.AsType[*goutils.ErrorDetail](err)
-	if !ok {
-		errorDetail = &goutils.ErrorDetail{
-			Detail: err.Error(),
-			Code:   oaschema.ErrCodeRequestDecodeBodyError,
-		}
-	}
-
-	respErr := goutils.NewBadRequestError(*errorDetail)
-	respErr.Detail = "failed to decode request"
-
-	if writer != nil {
-		writeErrorResponse(writer, respErr.Status, respErr)
-	}
-
-	return nil, respErr
-}
 
 func writeErrorResponse(writer http.ResponseWriter, status int, err error) {
 	tracingWriter, ok := writer.(tracingResponseWriter)
@@ -75,7 +38,7 @@ func writeErrorResponse(writer http.ResponseWriter, status int, err error) {
 		return
 	}
 
-	writer.Header().Set(httpheader.ContentType, httpheader.ContentTypeJSON)
+	writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
 	writer.WriteHeader(status)
 
 	writeErr := json.NewEncoder(writer).Encode(err)
@@ -99,7 +62,7 @@ func writeErrorResponse(writer http.ResponseWriter, status int, err error) {
 func parseServerURL(server *highv3.Server, getEnv goenvconf.GetEnvFunc) (string, error) {
 	rawServerURL := strings.TrimSpace(server.URL)
 
-	return parameter.ReplaceURLTemplate(rawServerURL, func(s string) (string, error) {
+	return oasvalidator.ReplaceURLTemplate(rawServerURL, func(s string) (string, error) {
 		var variable *highv3.ServerVariable
 
 		envVar := goenvconf.NewEnvStringVariable(s)
@@ -127,4 +90,70 @@ func parseServerURL(server *highv3.Server, getEnv goenvconf.GetEnvFunc) (string,
 
 		return part, nil
 	})
+}
+
+func parseHTTPRequestBody(
+	route *internal.Route,
+	writer http.ResponseWriter,
+	request *http.Request,
+) (any, *httperror.HTTPError) {
+	if request.Body == nil || request.Body == http.NoBody {
+		if !route.IsRequestBodyRequired() {
+			return nil, nil
+		}
+
+		err := httperror.NewBadRequestError()
+		err.Detail = "request body is required"
+
+		writeErrorResponse(writer, err.Status, err)
+
+		return nil, err
+	}
+
+	originalContentType := httpheader.GetHeaderValue(request.Header, httpheader.ContentType)
+	if canHTTPMethodHaveBody(request.Method) && !httpheader.IsContentTypeJSON(originalContentType) {
+		err := newUnsupportedContentTypeError(request.URL.Path, originalContentType)
+
+		writeErrorResponse(writer, err.Status, err)
+
+		return nil, err
+	}
+
+	decodedBody, err := contentdecoder.DecodeJSON(request.Body)
+	if err != nil {
+		respErr := httperror.NewBadRequestError(httperror.ValidationError{
+			Detail: err.Error(),
+			Code:   oasvalidator.ErrCodeRequestBodyError,
+		})
+		respErr.Detail = "failed to decode request"
+
+		writeErrorResponse(writer, respErr.Status, respErr)
+
+		return nil, respErr
+	}
+
+	return decodedBody, nil
+}
+
+func newUnsupportedContentTypeError(
+	urlPath string,
+	contentType string,
+) *httperror.HTTPError {
+	statusCode := http.StatusUnsupportedMediaType
+	err := httperror.NewHTTPError(
+		statusCode,
+		"Unsupported Content-Type "+contentType+". Expected application/json only.",
+	)
+	err.Code = "415-01"
+	err.Instance = urlPath
+
+	return err
+}
+
+func canHTTPMethodHaveBody(method string) bool {
+	return method != http.MethodGet &&
+		method != http.MethodDelete &&
+		method != http.MethodConnect &&
+		method != http.MethodOptions &&
+		method != http.MethodHead
 }

@@ -1147,6 +1147,10 @@
      "type": "boolean",
      "description": "When this is true, parameter values are serialized using reserved expansion."
     },
+    "required": {
+     "type": "boolean",
+     "description": "Whether the parameter is required."
+    },
     "in": {
      "type": "string",
      "enum": [

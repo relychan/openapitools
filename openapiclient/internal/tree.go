@@ -17,16 +17,16 @@ package internal
 
 import (
 	"fmt"
-	"net/http"
-	"net/url"
 	"regexp"
 	"slices"
 	"strings"
 
-	"github.com/pb33f/libopenapi/datamodel/high/base"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/relychan/goutils"
+	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
-	"github.com/relychan/openapitools/openapiclient/handler"
+	"github.com/relychan/openapitools/oasvalidator"
+	"github.com/relychan/openapitools/oasvalidator/parameter"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 )
 
@@ -39,21 +39,14 @@ const (
 	ntCatchAll                 // /api/v1/*
 )
 
-// Route holds parameter values from the request path.
-type Route struct {
-	Pattern     string
-	Method      *MethodHandler
-	ParamValues map[string]string
-}
-
 // MethodHandler represents a handler data for a method.
 type MethodHandler struct {
-	Handler  proxyhandler.ProxyHandler
-	Security []*base.SecurityRequirement
+	Operation *oaschema.Operation
+	Handler   proxyhandler.ProxyHandler
 }
 
 // Node presents the route tree to organize the recursive route structure.
-type Node struct { //nolint:recvcheck
+type Node struct {
 	handlers map[string]MethodHandler
 
 	// regexp matcher for regexp nodes
@@ -75,11 +68,12 @@ type Node struct { //nolint:recvcheck
 
 // InsertRoute parses the route pattern into tree nodes and creates handlers.
 func (n *Node) InsertRoute(
+	document *highv3.Document,
 	pattern string,
 	operations *highv3.PathItem,
 	options *proxyhandler.InsertRouteOptions,
 ) (*Node, error) {
-	node, err := n.insertChildNode(pattern, operations, nil, options)
+	node, err := n.insertChildNode(document, pattern, operations, nil, options)
 	if err != nil {
 		return nil, err
 	}
@@ -91,21 +85,35 @@ func (n *Node) InsertRoute(
 	return node, err
 }
 
-func (n *Node) FindRoute(path string, method string) *Route {
-	route := &Route{
-		ParamValues: map[string]string{},
-	}
+func (n *Node) FindRoute(path string, method string) (*Route, *httperror.HTTPError) {
+	route := &Route{}
+	rawParams := make(map[string]string)
 
 	// Find the routing handlers for the path
-	m, pattern := route.findRouteRecursive(strings.TrimLeft(path, "/"), method, n)
+	m, pattern := route.findRouteRecursive(
+		strings.TrimLeft(path, "/"),
+		method,
+		n,
+		rawParams,
+	)
+
 	if m == nil {
-		return nil
+		return nil, httperror.NewNotFoundError()
 	}
 
 	route.Method = m
 	route.Pattern = pattern
 
-	return route
+	if m.Operation != nil {
+		params, errs := validateURLParams(m.Operation, rawParams)
+		if len(errs) > 0 {
+			return nil, httperror.NewBadRequestError(errs...)
+		}
+
+		route.ParamValues = params
+	}
+
+	return route, nil
 }
 
 // String implements the fmt.Stringer interface to print debug data.
@@ -125,6 +133,7 @@ func (n Node) String() string {
 }
 
 func (n *Node) insertChildNode(
+	document *highv3.Document,
 	pattern string,
 	operations *highv3.PathItem,
 	paramKeys []string,
@@ -149,7 +158,7 @@ func (n *Node) insertChildNode(
 		}
 
 		// Insert or update the node's leaf handler
-		handlers, err := createMethods(pattern, operations, paramKeys, options)
+		handlers, err := createMethods(document, pattern, operations, paramKeys, options)
 		if err != nil || len(handlers) == 0 {
 			return nil, err
 		}
@@ -183,7 +192,7 @@ func (n *Node) insertChildNode(
 			return nil, ErrDuplicatedRoutingPattern
 		}
 
-		handlers, err := createMethods(pattern, operations, nil, options)
+		handlers, err := createMethods(document, pattern, operations, nil, options)
 		if err != nil || len(handlers) == 0 {
 			return nil, err
 		}
@@ -205,24 +214,22 @@ func (n *Node) insertChildNode(
 	// We're going to be searching for a wild node next,
 	// in this case, we need to get the tail
 	if search[0] == '{' {
-		return n.insertChildParamNode(search, operations, paramKeys, options)
+		return n.insertChildParamNode(document, search, operations, paramKeys, options)
 	}
 
 	// Static nodes fall below here.
 	// Determine longest prefix of the search key on match.
-	return n.insertChildStaticNode(search, operations, paramKeys, options)
+	return n.insertChildStaticNode(document, search, operations, paramKeys, options)
 }
 
 func (n *Node) insertChildStaticNode(
+	document *highv3.Document,
 	search string,
 	operations *highv3.PathItem,
 	paramKeys []string,
 	options *proxyhandler.InsertRouteOptions,
 ) (*Node, error) {
-	rawSegment, remain, _, err := cutURLPath(search)
-	if err != nil {
-		return nil, err
-	}
+	rawSegment, remain := cutURLPath(search)
 
 	childIndex := slices.IndexFunc(n.children[ntStatic], func(child *Node) bool {
 		return child.key == rawSegment
@@ -243,11 +250,11 @@ func (n *Node) insertChildStaticNode(
 	}
 
 	if remain != "" {
-		return child.insertChildNode(remain, operations, paramKeys, options)
+		return child.insertChildNode(document, remain, operations, paramKeys, options)
 	}
 
 	// Insert or update the node's leaf handler
-	handlers, err := createMethods(search, operations, paramKeys, options)
+	handlers, err := createMethods(document, search, operations, paramKeys, options)
 	if err != nil || len(handlers) == 0 {
 		return nil, err
 	}
@@ -262,6 +269,7 @@ func (n *Node) insertChildStaticNode(
 }
 
 func (n *Node) insertChildParamNode(
+	document *highv3.Document,
 	search string,
 	operations *highv3.PathItem,
 	paramKeys []string,
@@ -295,7 +303,7 @@ func (n *Node) insertChildParamNode(
 			n.children[ntParam].Sort()
 		}
 
-		return child.insertChildNode(remain, operations, paramKeys, options)
+		return child.insertChildNode(document, remain, operations, paramKeys, options)
 	}
 
 	childIndex := slices.IndexFunc(n.children[ntRegexp], func(child *Node) bool {
@@ -322,7 +330,7 @@ func (n *Node) insertChildParamNode(
 		n.children[ntRegexp].Sort()
 	}
 
-	return child.insertChildNode(remain, operations, paramKeys, options)
+	return child.insertChildNode(document, remain, operations, paramKeys, options)
 }
 
 // Recursive edge traversal by checking all nodeTyp groups along the way.
@@ -331,6 +339,7 @@ func (r *Route) findRouteRecursive( //nolint:gocognit
 	search string,
 	method string,
 	node *Node,
+	params map[string]string,
 ) (*MethodHandler, string) {
 	left, remain, _ := strings.Cut(search, "/")
 
@@ -354,7 +363,7 @@ func (r *Route) findRouteRecursive( //nolint:gocognit
 						return method, nd.pattern
 					}
 				} else {
-					method, pattern := r.findRouteRecursive(remain, method, nd)
+					method, pattern := r.findRouteRecursive(remain, method, nd, params)
 					if method != nil {
 						return method, pattern
 					}
@@ -376,9 +385,10 @@ func (r *Route) findRouteRecursive( //nolint:gocognit
 					remain,
 					method,
 					nd,
+					params,
 				)
 				if method != nil {
-					r.ParamValues[nd.key] = left
+					params[nd.key] = left
 
 					return method, pattern
 				}
@@ -449,7 +459,7 @@ func patNextSegment(pattern string) (*patNextSegmentResult, error) {
 
 	var rePattern string
 
-	paramName := pattern[1:endIndex]
+	paramName := strings.Trim(pattern[1:endIndex], "*")
 
 	if regexIndex > 0 {
 		if regexIndex >= endIndex {
@@ -494,290 +504,43 @@ func patNextSegment(pattern string) (*patNextSegmentResult, error) {
 	}
 }
 
-func createMethods( //nolint:cyclop,funlen
-	pattern string,
-	operations *highv3.PathItem,
-	paramKeys []string,
-	options *proxyhandler.InsertRouteOptions,
-) (map[string]MethodHandler, error) {
-	params := extractParametersFromOperationV3(operations, paramKeys)
+func validateURLParams(
+	operation *oaschema.Operation,
+	values map[string]string,
+) (map[string]any, []httperror.ValidationError) {
+	result := goutils.ToAnyMap(values)
 
-	handlers := map[string]MethodHandler{}
-
-	if operations.Get != nil {
-		method := http.MethodGet
-
-		h, err := handler.NewProxyHandler(operations.Get, &proxyhandler.NewProxyHandlerOptions{
-			Method:     method,
-			Parameters: params,
-			GetEnv:     options.GetEnv,
-		})
-		if err != nil {
-			return nil, newInvalidOperationMetadataError(method, pattern, err)
-		}
-
-		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Get.Security,
-		}
+	if operation == nil || len(operation.Parameters) == 0 {
+		return result, nil
 	}
 
-	if operations.Post != nil {
-		method := http.MethodPost
+	var errs []httperror.ValidationError
 
-		h, err := handler.NewProxyHandler(operations.Post, &proxyhandler.NewProxyHandlerOptions{
-			Method:     method,
-			Parameters: params,
-			GetEnv:     options.GetEnv,
-		})
-		if err != nil {
-			return nil, newInvalidOperationMetadataError(method, pattern, err)
-		}
-
-		handlers[http.MethodPost] = MethodHandler{
-			Handler:  h,
-			Security: operations.Post.Security,
-		}
-	}
-
-	if operations.Put != nil {
-		method := http.MethodPut
-
-		h, err := handler.NewProxyHandler(operations.Put, &proxyhandler.NewProxyHandlerOptions{
-			Method:     method,
-			Parameters: params,
-			GetEnv:     options.GetEnv,
-		})
-		if err != nil {
-			return nil, newInvalidOperationMetadataError(method, pattern, err)
-		}
-
-		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Put.Security,
-		}
-	}
-
-	if operations.Patch != nil {
-		method := http.MethodPatch
-
-		h, err := handler.NewProxyHandler(operations.Patch, &proxyhandler.NewProxyHandlerOptions{
-			Method:     method,
-			Parameters: params,
-			GetEnv:     options.GetEnv,
-		})
-		if err != nil {
-			return handlers, newInvalidOperationMetadataError(method, pattern, err)
-		}
-
-		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Patch.Security,
-		}
-	}
-
-	if operations.Delete != nil {
-		method := http.MethodDelete
-
-		h, err := handler.NewProxyHandler(operations.Delete, &proxyhandler.NewProxyHandlerOptions{
-			Method:     method,
-			Parameters: params,
-			GetEnv:     options.GetEnv,
-		})
-		if err != nil {
-			return handlers, newInvalidOperationMetadataError(method, pattern, err)
-		}
-
-		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Delete.Security,
-		}
-	}
-
-	if operations.Head != nil {
-		method := http.MethodHead
-
-		h, err := handler.NewProxyHandler(operations.Head, &proxyhandler.NewProxyHandlerOptions{
-			Method:     method,
-			Parameters: params,
-			GetEnv:     options.GetEnv,
-		})
-		if err != nil {
-			return handlers, newInvalidOperationMetadataError(method, pattern, err)
-		}
-
-		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Head.Security,
-		}
-	}
-
-	if operations.Options != nil {
-		method := http.MethodOptions
-
-		h, err := handler.NewProxyHandler(
-			operations.Options,
-			&proxyhandler.NewProxyHandlerOptions{
-				Method:     method,
-				Parameters: params,
-				GetEnv:     options.GetEnv,
-			},
-		)
-		if err != nil {
-			return handlers, newInvalidOperationMetadataError(method, pattern, err)
-		}
-
-		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Options.Security,
-		}
-	}
-
-	if operations.Query != nil {
-		method := "QUERY"
-
-		h, err := handler.NewProxyHandler(operations.Query, &proxyhandler.NewProxyHandlerOptions{
-			Method:     method,
-			Parameters: params,
-			GetEnv:     options.GetEnv,
-		})
-		if err != nil {
-			return handlers, newInvalidOperationMetadataError(method, pattern, err)
-		}
-
-		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Query.Security,
-		}
-	}
-
-	if operations.Trace != nil {
-		method := http.MethodTrace
-
-		h, err := handler.NewProxyHandler(operations.Trace, &proxyhandler.NewProxyHandlerOptions{
-			Method:     method,
-			Parameters: params,
-			GetEnv:     options.GetEnv,
-		})
-		if err != nil {
-			return handlers, newInvalidOperationMetadataError(method, pattern, err)
-		}
-
-		handlers[method] = MethodHandler{
-			Handler:  h,
-			Security: operations.Trace.Security,
-		}
-	}
-
-	if operations.AdditionalOperations != nil {
-		for iter := operations.AdditionalOperations.Oldest(); iter != nil; iter = iter.Next() {
-			method := iter.Key
-			op := iter.Value
-
-			if op == nil {
-				continue
-			}
-
-			h, err := handler.NewProxyHandler(op, &proxyhandler.NewProxyHandlerOptions{
-				Method:     method,
-				Parameters: params,
-				GetEnv:     options.GetEnv,
-			})
-			if err != nil {
-				return handlers, newInvalidOperationMetadataError(method, pattern, err)
-			}
-
-			handlers[method] = MethodHandler{
-				Handler:  h,
-				Security: op.Security,
-			}
-		}
-	}
-
-	return handlers, nil
-}
-
-func extractParametersFromOperationV3(
-	operations *highv3.PathItem,
-	paramKeys []string,
-) []*highv3.Parameter {
-	params := operations.Parameters
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Get)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Post)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Put)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Patch)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Delete)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Head)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Options)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Query)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Trace)
-
-	if operations.AdditionalOperations != nil {
-		for iter := operations.AdditionalOperations.Oldest(); iter != nil; iter = iter.Next() {
-			if iter.Value == nil {
-				continue
-			}
-
-			params = oaschema.ExtractCommonParametersOfOperation(params, iter.Value)
-		}
-	}
-
-	// validates and add unknown parameters from the request pattern
-	for _, key := range paramKeys {
-		if slices.ContainsFunc(params, func(param *highv3.Parameter) bool {
-			return param.In == oaschema.InPath.String() && param.Name == key
-		}) {
+	for _, param := range operation.Parameters {
+		if param.In != oaschema.InPath {
 			continue
 		}
 
-		params = append(params, &highv3.Parameter{
-			Name:     key,
-			In:       oaschema.InPath.String(),
-			Required: new(true),
-			Schema: base.CreateSchemaProxy(&base.Schema{
-				Type: []string{"string"},
-			}),
-		})
-	}
-
-	return params
-}
-
-// cut the first path of the url and parse the query param if exists. Ignore fragments.
-func cutURLPath(search string) (string, string, url.Values, error) { //nolint:revive
-	if search == "" {
-		return search, "", nil, nil
-	}
-
-	var endPathIndex int
-
-	maxLength := len(search)
-
-L:
-	for ; endPathIndex < maxLength; endPathIndex++ {
-		c := search[endPathIndex]
-
-		switch c {
-		case '/', '#':
-			break L
-		case '?':
-			if endPathIndex == maxLength-1 {
-				return search[:endPathIndex], "", nil, nil
+		rawValue, ok := values[param.Name]
+		if !ok {
+			if param.Required {
+				errs = append(errs, httperror.ValidationError{
+					Code:      oasvalidator.ErrCodeInvalidURLParam,
+					Detail:    "Parameter is required",
+					Parameter: param.Name,
+				})
 			}
 
-			queryParams, err := url.ParseQuery(search[endPathIndex+1:])
-			if err != nil {
-				return "", "", nil, err
-			}
+			continue
+		}
 
-			return search[:endPathIndex], "", queryParams, nil
-		default:
+		value, decodeErrors := parameter.DecodePathValue(param, rawValue)
+		if len(decodeErrors) > 0 {
+			errs = append(errs, decodeErrors...)
+		} else {
+			result[param.Name] = value
 		}
 	}
 
-	if endPathIndex == maxLength {
-		return search, "", nil, nil
-	}
-
-	return search[0:endPathIndex], search[endPathIndex+1:], nil, nil
+	return result, errs
 }

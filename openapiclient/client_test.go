@@ -32,11 +32,12 @@ import (
 	"time"
 
 	"github.com/hasura/gotel/otelutils"
+	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator/contentdecoder"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/contenttype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -56,6 +57,11 @@ func TestProxyClient_RESTful(t *testing.T) {
 		config,
 		nil,
 		WithTimeout(time.Minute),
+		WithClientOptions(&gohttpc.ClientOptions{
+			RequestOptions: gohttpc.RequestOptions{
+				LogLevel: slog.LevelDebug,
+			},
+		}),
 	)
 	require.NoError(t, err)
 
@@ -142,17 +148,10 @@ func TestProxyClient_RESTful(t *testing.T) {
 			}
 		})
 
-		t.Run(tc.Name+"_stream", func(t *testing.T) {
+		t.Run(tc.Name+"_serve_http", func(t *testing.T) {
 			writer := httptest.NewRecorder()
 			request := tc.Request.WithContext(ctx)
-			_, err := client.Stream(writer, request)
-
-			if tc.ErrorMessage != "" {
-				require.ErrorContains(t, err, tc.ErrorMessage)
-				require.Equal(t, httpheader.ContentTypeJSON, writer.Header().Get(httpheader.ContentType))
-			} else {
-				require.NoError(t, err)
-			}
+			client.ServeHTTP(writer, request)
 
 			require.Equal(t, tc.StatusCode, writer.Code)
 
@@ -244,11 +243,7 @@ func TestRESTHandler_GraphQLServer(t *testing.T) {
 
 		t.Run(tc.Name+"_stream", func(t *testing.T) {
 			writer := httptest.NewRecorder()
-			_, err := client.Stream(writer, &http.Request{
-				URL:    tc.Request.GetURL(),
-				Method: tc.Request.Method(),
-				Header: tc.Request.Header(),
-			})
+			_, err := client.Stream(ctx, writer, tc.Request)
 
 			if tc.ErrorMessage != "" {
 				require.ErrorContains(t, err, tc.ErrorMessage)
@@ -383,24 +378,20 @@ func TestProxyClient_Auth(t *testing.T) {
 			}
 		})
 
-		t.Run(tc.Name+"_stream", func(t *testing.T) {
+		t.Run(tc.Name+"_server_http", func(t *testing.T) {
 			writer := httptest.NewRecorder()
 			request := tc.Request.WithContext(ctx)
-			resp, err := client.Stream(writer, request)
-
-			if tc.ErrorMessage != "" {
-				require.ErrorContains(t, err, tc.ErrorMessage)
-				require.Equal(t, httpheader.ContentTypeJSON, writer.Header().Get(httpheader.ContentType))
-			} else {
-				require.NoError(t, err)
-			}
+			client.ServeHTTP(writer, request)
 
 			require.Equal(t, tc.StatusCode, writer.Code)
 
 			if tc.ResponseBody != nil {
-				respBody, err := contenttype.Decode(resp.Header.Get(httpheader.ContentType), writer.Body)
+				contentType := writer.Header().Get(httpheader.ContentType)
+				assert.Equal(t, httpheader.ContentTypeTextPlain, contentType)
+
+				respBody, err := contentdecoder.Decode(contentType, writer.Body)
 				require.NoError(t, err)
-				require.Equal(t, tc.ResponseBody, respBody)
+				require.Equal(t, tc.ResponseBody, respBody, "Content Type: "+contentType)
 			}
 		})
 	}
@@ -467,11 +458,10 @@ func createMockServer(t *testing.T) *mockServerState {
 				t.Fatal("expected the value of X-Test-Server header to be 1 or 2")
 			}
 
-			w.Header().Add("Content-Type", "text/plain")
+			w.Header().Set(httpheader.ContentType, "text/plain")
 			writeResponse(w, "OK")
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
 		}
 	})
 
@@ -486,6 +476,7 @@ func createMockServer(t *testing.T) *mockServerState {
 				t.FailNow()
 			}
 
+			w.Header().Set("Content-Type", "text/plain")
 			writeResponse(w, "OK")
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -502,6 +493,7 @@ func createMockServer(t *testing.T) *mockServerState {
 			require.Equal(t, "test-token", tokenValue, "invalid forwarded auth header")
 			require.Equal(t, "true", testHeaderValue, "invalid X-Test-Header auth header")
 
+			w.Header().Set("Content-Type", "text/plain")
 			writeResponse(w, "OK")
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)

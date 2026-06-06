@@ -41,41 +41,4 @@ var (
 	ErrInvalidOpenAPIResourceDefinition = errors.New(
 		"invalid OpenAPIResourceDefinition",
 	)
-	// ErrInvalidContentType occurs when the content type string is invalid.
-	ErrInvalidContentType = errors.New("invalid content type")
-)
-
-const (
-	// ErrCodeRequestDecodeBodyError represents a code for an decoding error from request body.
-	ErrCodeRequestDecodeBodyError = "request_decode_body_error"
-	// ErrCodeResponseDecodeBodyError represents a code for an decoding error from response body.
-	ErrCodeResponseDecodeBodyError = "response_decode_body_error"
-	// ErrCodeRequestEncodeBodyError represents a code for an encoding error from request body.
-	ErrCodeRequestEncodeBodyError = "request_encode_body_error"
-	// ErrCodeResponseEncodeBodyError represents a code for an encoding error from response body.
-	ErrCodeResponseEncodeBodyError = "response_encode_body_error"
-	// ErrCodeMalformedXML represents a code for a malformed XML error.
-	ErrCodeMalformedXML = "malformed_xml"
-	// ErrCodeXMLEncodeError represents a code for a XML encoding error.
-	ErrCodeXMLEncodeError = "xml_encode_error"
-	// ErrCodeMultipartFormEncodeError represents a code for a multipart form encoding error.
-	ErrCodeMultipartFormEncodeError = "multipart_encode_error"
-	// ErrCodeRequestTransformError represents a code for a request transformation error.
-	ErrCodeRequestTransformError = "request_transform_error"
-	// ErrCodeResponseTransformError represents a code for a response transformation error.
-	ErrCodeResponseTransformError = "response_transform_error"
-	// ErrCodeWriteResponseError represents a code for a response write error.
-	ErrCodeWriteResponseError = "write_response_error"
-	// ErrCodeInvalidRESTfulRequestConfig represents a code for invalid errors of ProxyRESTfulRequestConfig.
-	ErrCodeInvalidRESTfulRequestConfig = "invalid_restful_request_config"
-	// ErrCodeProxyRESTfulResponseConfig represents a code for invalid errors of ProxyRESTfulResponseConfig.
-	ErrCodeProxyRESTfulResponseConfig = "invalid_restful_response_config"
-	// ErrCodeInvalidServerURL represents a code for invalid server URL errors.
-	ErrCodeInvalidServerURL = "invalid_server_url"
-	// ErrCodeInvalidRequestURL represents a code for invalid request URL errors.
-	ErrCodeInvalidRequestURL = "invalid_request_url"
-	// ErrCodeGraphQLResponseEmpty represents a code for empty graphql response.
-	ErrCodeGraphQLResponseEmpty = "graphql_response_empty"
-	// ErrCodeRemoteServerError represents a code for remote server errors.
-	ErrCodeRemoteServerError = "remote_server_error"
 )

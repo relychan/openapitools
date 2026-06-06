@@ -1,0 +1,264 @@
+// Copyright 2026 RelyChan Pte. Ltd
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package parameter
+
+import (
+	"net/http"
+	"slices"
+	"strings"
+
+	"github.com/relychan/goutils/httperror"
+	"github.com/relychan/openapitools/oaschema"
+	"github.com/relychan/openapitools/oasvalidator"
+)
+
+// NormalizeHeaders normalize HTTP headers to a string value map.
+// Header keys are transformed to lowercase.
+// Header values are transformed to either string or array string if they have many items.
+func NormalizeHeaders(headers http.Header) map[string]any {
+	results := make(map[string]any, len(headers))
+
+	for key, header := range headers {
+		if len(header) == 0 {
+			continue
+		}
+
+		results[strings.ToLower(key)] = normalizeRawParamValue(header)
+	}
+
+	return results
+}
+
+// DecodeHeaderParameters decodes header parameters from the header map value.
+// Each header value is encoded differently on each style, according to the [OpenAPI specification].
+//
+// [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
+func DecodeHeaderParameters(
+	definition []*oaschema.Parameter,
+	headers http.Header,
+) (map[string]any, []httperror.ValidationError) {
+	var decodeErrors []httperror.ValidationError
+
+	results := NormalizeHeaders(headers)
+
+	for _, def := range definition {
+		if def == nil || def.In != oaschema.InHeader {
+			continue
+		}
+
+		value, errs := decodeHeaderParameter(def, headers)
+		if len(errs) > 0 {
+			decodeErrors = append(decodeErrors, errs...)
+
+			continue
+		}
+
+		results[strings.ToLower(def.Name)] = value
+	}
+
+	if len(decodeErrors) > 0 {
+		return nil, decodeErrors
+	}
+
+	return results, nil
+}
+
+// decodeHeaderParameter decodes a header parameter from the header map value.
+// The value is encoded differently on each style, according to the [OpenAPI specification].
+//
+// [OpenAPI specification](https://github.com/OAI/OpenAPI-Specification/blob/3.2.0/versions/3.2.0.md#style-examples)
+func decodeHeaderParameter(
+	definition *oaschema.Parameter,
+	headers http.Header,
+) (any, []httperror.ValidationError) {
+	rawValues, ok := headers[definition.Name]
+	if !ok || len(rawValues) == 0 {
+		if !definition.Required {
+			return nil, nil
+		}
+
+		err := oasvalidator.ParameterRequiredError(definition.Name)
+		err.Location = oaschema.HeaderKey
+
+		return nil, []httperror.ValidationError{*err}
+	}
+
+	if definition.Content != nil {
+		result, errs := decodeParameterFromContent(definition, rawValues)
+		if len(errs) > 0 {
+			return nil, enrichHeaderErrors(errs, definition.Name)
+		}
+
+		return result, nil
+	}
+
+	if definition.Schema == nil {
+		rawResults := splitArrayParams(rawValues)
+
+		return normalizeRawParamValue(rawResults), nil
+	}
+
+	schemaTypes, nullable := oaschema.GetSchemaTypes(definition.Schema)
+
+	if len(rawValues) == 0 {
+		if nullable {
+			return nil, nil
+		}
+
+		err := oasvalidator.ParameterRequiredError(definition.Name)
+		err.Location = oaschema.HeaderKey
+
+		return nil, []httperror.ValidationError{*err}
+	}
+
+	if slices.Contains(schemaTypes, oaschema.Object) {
+		result, errs := decodeHeaderObjectParam(definition, rawValues)
+		if len(errs) == 0 {
+			return result, nil
+		}
+
+		if len(schemaTypes) == 1 {
+			return nil, enrichHeaderErrors(errs, definition.Name)
+		}
+
+		schemaTypes = slices.DeleteFunc(schemaTypes, func(t string) bool {
+			return t == oaschema.Object
+		})
+	}
+
+	if slices.Contains(schemaTypes, oaschema.Array) {
+		result, errs := splitAndDecodeArrayParam(definition, rawValues)
+		if len(errs) == 0 {
+			return result, nil
+		}
+
+		if len(schemaTypes) == 1 {
+			return nil, enrichHeaderErrors(errs, definition.Name)
+		}
+
+		schemaTypes = slices.DeleteFunc(schemaTypes, func(t string) bool {
+			return t == oaschema.Array
+		})
+	}
+
+	decoder := paramDecoder{
+		RawValues: rawValues,
+		Schema:    definition.Schema,
+	}
+
+	result, errs := decoder.Decode(schemaTypes)
+	if len(errs) > 0 {
+		return nil, enrichHeaderErrors(errs, definition.Name)
+	}
+
+	return result, nil
+}
+
+// Splits comma-joined header values and decodes the resulting array.
+func splitAndDecodeArrayParam(
+	definition *oaschema.Parameter,
+	rawValues []string,
+) (any, []httperror.ValidationError) {
+	rawParts := splitArrayParams(rawValues)
+
+	results, errs := decodeArrayParam(rawParts, definition.Schema)
+	if len(errs) > 0 {
+		return nil, enrichHeaderErrors(errs, definition.Name)
+	}
+
+	errs = oasvalidator.ValidateValue(definition.Schema, results)
+	if len(errs) > 0 {
+		return nil, enrichHeaderErrors(errs, definition.Name)
+	}
+
+	return results, nil
+}
+
+// decodeHeaderObjectParam splits header values and decodes them as an object, handling
+// exploded (key=value,key=value) and non-exploded (key,value,key,value) forms.
+func decodeHeaderObjectParam(
+	definition *oaschema.Parameter,
+	rawValues []string,
+) (any, []httperror.ValidationError) {
+	rawParts := splitArrayParams(rawValues)
+
+	explode := definition.Explode != nil && *definition.Explode
+
+	rawObjectValues, err := splitObjectFromHeaderValues(rawParts, explode)
+	if err != nil {
+		enrichHeaderError(err, definition.Name)
+
+		return nil, []httperror.ValidationError{*err}
+	}
+
+	decoder := newObjectParamDecoder(rawObjectValues)
+
+	errs := decoder.Decode(definition.Schema)
+	if len(errs) > 0 {
+		return nil, enrichHeaderErrors(errs, definition.Name)
+	}
+
+	return decoder.Result, nil
+}
+
+// Splits header values into a key→value map according to the serialization style.
+func splitObjectFromHeaderValues(
+	rawValues []string,
+	explode bool,
+) (map[string][]string, *httperror.ValidationError) {
+	// X-MyHeader: role=admin,firstName=Alex
+	if explode {
+		values := make(map[string][]string)
+
+		for _, rawValue := range rawValues {
+			if rawValue == "" {
+				continue
+			}
+
+			if !setExplodeObjectProperties(values, rawValue, oaschema.Comma) {
+				return nil, &httperror.ValidationError{
+					Detail: "Invalid syntax for exploded simple style in parameter value. The object value must follow this format: key1=value1,key2=value2",
+				}
+			}
+		}
+
+		return values, nil
+	}
+
+	values, ok := parseNonExplodeObject(rawValues)
+	if !ok {
+		return nil, &httperror.ValidationError{
+			Detail: "Invalid syntax for non-exploded simple style in parameter value. The object value must follow this format: key1,value1,key2,value2",
+		}
+	}
+
+	return values, nil
+}
+
+// enrichHeaderErrors stamps each error with the header error code and the header name.
+func enrichHeaderErrors(errs []httperror.ValidationError, name string) []httperror.ValidationError {
+	for i := range errs {
+		enrichHeaderError(&errs[i], name)
+	}
+
+	return errs
+}
+
+// enrichHeaderErrors stamps each error with the header error code and the header name.
+func enrichHeaderError(err *httperror.ValidationError, name string) {
+	err.Code = oasvalidator.ErrCodeInvalidHeader
+	err.Parameter = name
+	err.Location = oaschema.HeaderKey
+}

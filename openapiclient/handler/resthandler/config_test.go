@@ -21,7 +21,6 @@ import (
 	"github.com/relychan/gotransform"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/openapitools/oaschema"
-	"github.com/relychan/openapitools/openapiclient/handler/resthandler/parameter"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -169,14 +168,14 @@ func TestNewCustomRESTRequestFromConfig(t *testing.T) {
 	})
 
 	t.Run("with_headers", func(t *testing.T) {
-		baseParam := parameter.BaseParameter{
+		baseParam := oaschema.Parameter{
 			Name: "X-Custom-Header",
 			In:   oaschema.InHeader,
 		}
 		config := &ProxyRESTfulRequestConfig{
 			Parameters: []ProxyRESTfulParameterConfig{
 				{
-					BaseParameter: parameter.BaseParameter{
+					Parameter: oaschema.Parameter{
 						Name: "X-Custom-Header",
 						In:   oaschema.InHeader,
 					},
@@ -190,14 +189,14 @@ func TestNewCustomRESTRequestFromConfig(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Equal(t, len(result.Parameters), 1)
-		assert.Equal(t, result.Parameters[0].BaseParameter, baseParam)
+		assert.Equal(t, result.Parameters[0].Parameter, baseParam)
 	})
 
 	t.Run("with_path_and_headers", func(t *testing.T) {
 		config := &ProxyRESTfulRequestConfig{
 			Parameters: []ProxyRESTfulParameterConfig{
 				{
-					BaseParameter: parameter.BaseParameter{
+					Parameter: oaschema.Parameter{
 						Name: "Authorization",
 						In:   oaschema.InHeader,
 					},
@@ -219,7 +218,7 @@ func TestNewCustomRESTRequestFromConfig(t *testing.T) {
 		config := &ProxyRESTfulRequestConfig{
 			Parameters: []ProxyRESTfulParameterConfig{
 				{
-					BaseParameter: parameter.BaseParameter{
+					Parameter: oaschema.Parameter{
 						Name: "X-Invalid",
 						In:   10,
 					},
