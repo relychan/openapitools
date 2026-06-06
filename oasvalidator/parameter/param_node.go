@@ -479,7 +479,6 @@ func (pn *ParameterNode) decodeObjectProperties(
 			if propNode == nil {
 				if len(schemaDef.Required) > 0 && slices.Contains(schemaDef.Required, key) {
 					err := oasvalidator.ObjectRequiredPropertyError(key)
-					err.PrependPointer("/" + key)
 
 					errs = append(errs, *err)
 				}

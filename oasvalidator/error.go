@@ -321,18 +321,18 @@ func ObjectMaxPropertiesValidationError(expected, actual int64) *httperror.Valid
 // ObjectRequiredPropertyError returns a validation error for a missing required property in object.
 func ObjectRequiredPropertyError(name string) *httperror.ValidationError {
 	return &httperror.ValidationError{
-		Code:      ErrCodeValidationError,
-		Parameter: name,
-		Detail:    "Required property '" + name + "' is missing in the object",
+		Code:    ErrCodeValidationError,
+		Pointer: "/" + name,
+		Detail:  "Required property '" + name + "' is missing in the object",
 	}
 }
 
 // ObjectDependentRequiredError returns a validation error for a missing dependent required property in object.
 func ObjectDependentRequiredError(name string, dependent string) *httperror.ValidationError {
 	return &httperror.ValidationError{
-		Code:      ErrCodeValidationError,
-		Parameter: dependent,
-		Detail:    "Property '" + dependent + "' is required if '" + name + "' exists in the object",
+		Code:    ErrCodeValidationError,
+		Pointer: "/" + name,
+		Detail:  "Property '" + dependent + "' is required if '" + name + "' exists in the object",
 	}
 }
 
