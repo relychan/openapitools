@@ -155,6 +155,7 @@ type ParameterItems []ParameterItem
 func (ssp ParameterItems) Build(
 	prefix string,
 	isDeepObject bool,
+	formatFunc func(string) string,
 ) (map[string][]string, int) {
 	if len(ssp) == 0 {
 		return nil, 0
@@ -166,9 +167,16 @@ func (ssp ParameterItems) Build(
 
 	for _, item := range ssp {
 		key := item.keys.Format(prefix, isDeepObject)
+		value := item.value
+
+		if formatFunc != nil {
+			key = formatFunc(key)
+			value = formatFunc(value)
+		}
+
 		count += len(key)
-		count += len(item.value)
-		results[key] = append(results[key], item.value)
+		count += len(value)
+		results[key] = append(results[key], value)
 	}
 
 	return results, count

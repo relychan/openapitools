@@ -20,6 +20,10 @@ import (
 	"github.com/relychan/openapitools/oaschema"
 )
 
+const escapedQuerySpace = "+"
+
+var escapedPipe = url.QueryEscape("|")
+
 // queryParamSetter encodes a single query parameter into a url.Values map using the
 // style and explode settings resolved from the OpenAPI parameter definition.
 type queryParamSetter struct {
@@ -55,9 +59,9 @@ func (qre *queryParamSetter) Set(params ParameterItems) {
 
 	switch qre.style {
 	case oaschema.EncodingStyleSpaceDelimited:
-		qre.setParamDelimitedStyle(params, oaschema.Space[0])
+		qre.setParamDelimitedStyle(params, escapedQuerySpace)
 	case oaschema.EncodingStylePipeDelimited:
-		qre.setParamDelimitedStyle(params, oaschema.Pipe[0])
+		qre.setParamDelimitedStyle(params, escapedPipe)
 	case oaschema.EncodingStyleDeepObject:
 		qre.setParamDeepObjects(params)
 	default:
@@ -70,13 +74,13 @@ func (qre *queryParamSetter) Set(params ParameterItems) {
 			return
 		}
 
-		qre.setParamDelimitedStyleNonExplode(params, oaschema.Comma[0])
+		qre.setParamDelimitedStyleNonExplode(params, oaschema.Comma)
 	}
 }
 
 // Set delimited-separated array values for simple params.
 // For example: /users?id=3|4|5.
-func (qre *queryParamSetter) setParamDelimitedStyle(params ParameterItems, separator byte) {
+func (qre *queryParamSetter) setParamDelimitedStyle(params ParameterItems, separator string) {
 	if qre.explode {
 		// the same format with the form style
 		for _, param := range params {
@@ -107,10 +111,16 @@ func (qre *queryParamSetter) setParamFormExplode(param ParameterItem) {
 // Encode and set ampersand-separated values with explode=false.
 func (qre *queryParamSetter) setParamDelimitedStyleNonExplode(
 	params ParameterItems,
-	separator byte,
+	separator string,
 ) {
-	encodedValue := EncodeParamDelimitedStyleNonExplode(params, separator, separator)
-	qre.setParam(qre.rootKey, encodedValue)
+	encodedValue := EncodeParamDelimitedStyleNonExplode(
+		params,
+		separator,
+		separator,
+		GetQueryEscapeFunc(qre.allowReserved),
+	)
+
+	qre.params.Set(qre.rootKey, encodedValue)
 }
 
 // simple non-nested objects are serialized as paramName[prop1]=value1&paramName[prop2]=value2&...
@@ -141,18 +151,7 @@ func (qre *queryParamSetter) setParamDeepObject(param ParameterItem) {
 // addParam appends a key/value pair.  When allowReserved is set, RFC 3986 reserved
 // characters (e.g. ":", "/", "?") are left unescaped as permitted by the OpenAPI spec.
 func (qre *queryParamSetter) addParam(key string, value string) {
-	if qre.allowReserved {
-		qre.params.Add(QueryEscapeAllowReserved(key), QueryEscapeAllowReserved(value))
-	} else {
-		qre.params.Add(url.QueryEscape(key), url.QueryEscape(value))
-	}
-}
+	queryEscape := GetQueryEscapeFunc(qre.allowReserved)
 
-// setParam overwrites any existing value for the key (vs addParam which appends).
-func (qre *queryParamSetter) setParam(key string, value string) {
-	if qre.allowReserved {
-		qre.params.Set(QueryEscapeAllowReserved(key), QueryEscapeAllowReserved(value))
-	} else {
-		qre.params.Set(url.QueryEscape(key), url.QueryEscape(value))
-	}
+	qre.params.Add(queryEscape(key), queryEscape(value))
 }

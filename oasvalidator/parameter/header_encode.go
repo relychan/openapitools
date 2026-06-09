@@ -25,19 +25,5 @@ func EncodeHeader(definition *oaschema.Parameter, value any) string {
 	_, explode := definition.GetStyleAndExplode()
 	items := EvaluateParameterValue(value, ParamKeys{})
 
-	return encodeParamWithSimpleStyle(items, explode)
-}
-
-// encodeParamWithSimpleStyle serializes items using the OpenAPI simple style.
-// With explode=true object properties use '=' as the key/value separator (key=value,key=value);
-// without explode both keys and values are comma-separated (key,value,key,value).
-func encodeParamWithSimpleStyle(
-	items ParameterItems,
-	explode bool,
-) string {
-	if explode {
-		return EncodeParamDelimitedStyleNonExplode(items, ',', '=')
-	}
-
-	return EncodeParamDelimitedStyleNonExplode(items, ',', ',')
+	return encodeParamWithSimpleStyle(items, explode, nil)
 }

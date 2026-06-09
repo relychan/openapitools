@@ -15,6 +15,7 @@
 package parameter
 
 import (
+	"net/url"
 	"strings"
 
 	"github.com/relychan/openapitools/oaschema"
@@ -35,8 +36,9 @@ func EncodePathValue(definition *oaschema.Parameter, value any) string {
 		if explode {
 			return "." + EncodeParamDelimitedStyleNonExplode(
 				items,
-				oaschema.Dot[0],
-				oaschema.Equals[0],
+				oaschema.Dot,
+				oaschema.Equals,
+				url.PathEscape,
 			)
 		}
 
@@ -44,8 +46,9 @@ func EncodePathValue(definition *oaschema.Parameter, value any) string {
 		// /users/.role,admin,firstName,Alex
 		return "." + EncodeParamDelimitedStyleNonExplode(
 			items,
-			oaschema.Comma[0],
-			oaschema.Comma[0],
+			oaschema.Comma,
+			oaschema.Comma,
+			url.PathEscape,
 		)
 	case oaschema.EncodingStyleMatrix:
 		if len(items) == 0 {
@@ -62,18 +65,18 @@ func EncodePathValue(definition *oaschema.Parameter, value any) string {
 		// /users/;id=role,admin,firstName,Alex
 		var sb strings.Builder
 
-		builtParams, count := items.Build("", false)
+		builtParams, count := items.Build("", false, url.PathEscape)
 
 		sb.Grow(count + len(definition.Name) + 2)
 		sb.WriteByte(oaschema.SemiColon[0])
 		sb.WriteString(definition.Name)
 		sb.WriteByte(oaschema.Equals[0])
-		buildParamDelimitedStyleNonExplode(&sb, builtParams, oaschema.Comma[0], oaschema.Comma[0])
+		buildParamDelimitedStyleNonExplode(&sb, builtParams, oaschema.Comma, oaschema.Comma)
 
 		return sb.String()
 	default:
 		// encode with the simple style
-		return encodeParamWithSimpleStyle(items, explode)
+		return encodeParamWithSimpleStyle(items, explode, url.PathEscape)
 	}
 }
 

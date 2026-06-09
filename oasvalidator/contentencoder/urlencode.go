@@ -136,11 +136,11 @@ func (fue *formURLEncoder) buildParams(rootKey string, params parameter.Paramete
 			return
 		}
 
-		fue.setParamDelimitedStyleNonExplode(rootKey, params, oaschema.Comma[0], allowReserved)
+		fue.setParamDelimitedStyleNonExplode(rootKey, params, oaschema.Comma, allowReserved)
 	case oaschema.EncodingStyleSpaceDelimited:
-		fue.setParamDelimitedStyle(rootKey, params, oaschema.Space[0], explode, allowReserved)
+		fue.setParamDelimitedStyle(rootKey, params, oaschema.Space, explode, allowReserved)
 	case oaschema.EncodingStylePipeDelimited:
-		fue.setParamDelimitedStyle(rootKey, params, oaschema.Pipe[0], explode, allowReserved)
+		fue.setParamDelimitedStyle(rootKey, params, oaschema.Pipe, explode, allowReserved)
 	case oaschema.EncodingStyleDeepObject:
 		// simple non-nested objects are serialized as paramName[prop1]=value1&paramName[prop2]=value2&...
 		for _, param := range params {
@@ -167,7 +167,7 @@ func (fue *formURLEncoder) buildParams(rootKey string, params parameter.Paramete
 func (fue *formURLEncoder) setParamDelimitedStyle(
 	rootKey string,
 	params parameter.ParameterItems,
-	separator byte,
+	separator string,
 	explode bool,
 	allowReserved bool,
 ) {
@@ -206,10 +206,15 @@ func (fue *formURLEncoder) setParamFormExplode(
 func (fue *formURLEncoder) setParamDelimitedStyleNonExplode(
 	rootKey string,
 	params parameter.ParameterItems,
-	separator byte,
+	separator string,
 	allowReserved bool,
 ) {
-	encodedValue := parameter.EncodeParamDelimitedStyleNonExplode(params, separator, separator)
+	encodedValue := parameter.EncodeParamDelimitedStyleNonExplode(
+		params,
+		separator,
+		separator,
+		nil,
+	)
 	fue.addParam(rootKey, encodedValue, allowReserved)
 }
 

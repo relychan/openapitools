@@ -15,6 +15,7 @@
 package oasvalidator
 
 import (
+	"net/url"
 	"strings"
 
 	"github.com/hasura/goenvconf"
@@ -71,7 +72,7 @@ func ReplaceURLTemplate(input string, get goenvconf.GetEnvFunc) (string, error) 
 			return "", err
 		}
 
-		sb.WriteString(value)
+		sb.WriteString(url.PathEscape(value))
 
 		i = j
 	}
