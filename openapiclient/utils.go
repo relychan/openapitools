@@ -80,12 +80,12 @@ func parseServerURL(server *highv3.Server, getEnv goenvconf.GetEnvFunc) (string,
 		}
 
 		if variable != nil && len(variable.Enum) > 0 && !slices.Contains(variable.Enum, part) {
-			return "", fmt.Errorf( //nolint:err113
-				"value of environment variable %s must be in %v, got `%s`",
+			return "", goenvconf.NewParseEnvFailedError(fmt.Sprintf(
+				"value of environment variable %s must be in %v, got %q",
 				*envVar.Variable,
 				variable.Enum,
-				part,
-			)
+				part),
+				"")
 		}
 
 		return part, nil

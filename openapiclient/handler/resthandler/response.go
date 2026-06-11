@@ -249,12 +249,12 @@ func (re *RESTfulHandler) writeRawResponse(
 
 	switch {
 	case contentType == "":
-		err = streamResponseDirectly(response, writer)
+		err = streamResponseDirectly(contentType, response, writer)
 	case httpheader.IsContentTypeJSON(contentType):
 		if strict {
 			err = re.streamValidatedJSONResponse(contentType, response, writer)
 		} else {
-			err = streamResponseDirectly(response, writer)
+			err = streamResponseDirectly(contentType, response, writer)
 		}
 	case httpheader.IsContentTypeXML(contentType):
 		err = re.decodeAndStreamJSON(
@@ -265,7 +265,7 @@ func (re *RESTfulHandler) writeRawResponse(
 			contentdecoder.DecodeXML,
 		)
 	default:
-		err = streamResponseDirectly(response, writer)
+		err = streamResponseDirectly(contentType, response, writer)
 	}
 
 	if err != nil {
@@ -363,9 +363,14 @@ func (re *RESTfulHandler) decodeAndStreamJSON(
 
 // Stream response directly without validation.
 func streamResponseDirectly(
+	contentType string,
 	response *http.Response,
 	writer http.ResponseWriter,
 ) error {
+	if contentType != "" {
+		writer.Header()[httpheader.ContentType] = []string{contentType}
+	}
+
 	writer.WriteHeader(response.StatusCode)
 
 	_, err := io.Copy(writer, response.Body)

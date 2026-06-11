@@ -162,9 +162,10 @@ func (pc *ProxyClient) initServers(spec *highv3.Document) error {
 		return ErrServerURLRequired
 	}
 
-	var err error
-
-	var healthCheckBuilder *loadbalancer.HTTPHealthCheckPolicyBuilder
+	var (
+		err                error
+		healthCheckBuilder *loadbalancer.HTTPHealthCheckPolicyBuilder
+	)
 
 	if pc.settings != nil &&
 		pc.settings.HealthCheck != nil &&

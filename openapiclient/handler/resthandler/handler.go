@@ -54,6 +54,7 @@ func NewRESTfulHandler(
 ) (proxyhandler.ProxyHandler, error) {
 	handler := &RESTfulHandler{
 		parameters: operation.Parameters,
+		responses:  operation.Responses,
 	}
 
 	if operation.RequestBody != nil && operation.RequestBody.Content != nil {

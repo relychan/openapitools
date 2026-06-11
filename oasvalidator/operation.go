@@ -247,10 +247,8 @@ func getRequestContentSchema(
 func validateOperationResponses(
 	responses *highv3.Responses,
 ) (map[string]*oaschema.MediaType, []httperror.ValidationError) {
-	results := make(map[string]*oaschema.MediaType)
-
 	if responses == nil {
-		return results, nil
+		return nil, nil
 	}
 
 	if responses.Codes != nil && responses.Codes.Len() > 0 {

@@ -52,7 +52,7 @@ func EncodeFormURLEncoded(
 			Name: key,
 		}
 
-		if media.Encoding != nil {
+		if media != nil && media.Encoding != nil {
 			encoding, present := media.Encoding.Get(key)
 			if present {
 				param.AllowReserved = encoding.AllowReserved
@@ -69,6 +69,6 @@ func EncodeFormURLEncoded(
 
 		parameter.SetQueryParam(queryValues, param, value)
 	}
-	// Keys and values are already escaped. Do not to escape them again.
+	// Keys and values are already escaped. Do not escape them again.
 	return []byte(parameter.EncodeQueryValuesUnescape(queryValues)), nil
 }

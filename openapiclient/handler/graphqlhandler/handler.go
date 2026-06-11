@@ -206,6 +206,7 @@ func (ge *GraphQLHandler) Stream(
 			// No custom response. Write response directly for json content type without validation.
 			// You must trust the remote service that always responds the correct format.
 			writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
+			writer.WriteHeader(resp.StatusCode)
 
 			_, err = io.Copy(writer, resp.Body)
 
@@ -255,6 +256,7 @@ func (ge *GraphQLHandler) Stream(
 		}
 
 		writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
+		writer.WriteHeader(resp.StatusCode)
 
 		_, err = writer.Write(rawBody)
 

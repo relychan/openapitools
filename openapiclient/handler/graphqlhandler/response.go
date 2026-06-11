@@ -189,6 +189,7 @@ func (ge *GraphQLHandler) writeTransformResponse( //nolint:funlen
 
 	if ge.customResponse.Body == nil || ge.customResponse.Body.IsZero() {
 		writer.Header()[httpheader.ContentType] = []string{contentType}
+		writer.WriteHeader(resp.StatusCode)
 
 		_, err := writer.Write(rawBody)
 		if err != nil {
@@ -231,6 +232,7 @@ func (ge *GraphQLHandler) writeTransformResponse( //nolint:funlen
 	}
 
 	writer.Header()[httpheader.ContentType] = []string{contentType}
+	writer.WriteHeader(resp.StatusCode)
 
 	_, err = contentencoder.Write(writer, contentType, transformedBody, nil)
 	if err != nil {
