@@ -176,7 +176,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	if ok && reader != nil {
 		req.SetBody(reader)
 	} else {
-		newBodyBytes, err := contentencoder.Encode(contentType, newBody)
+		newBodyBytes, err := contentencoder.Encode(contentType, newBody, re.request)
 		if err != nil {
 			errDetail, ok := errors.AsType[*httperror.ValidationError](err)
 			if !ok {
@@ -200,8 +200,8 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 
 // Get the destined content type, fallback to application/json if it does not exist.
 func (re *RESTfulHandler) getDestinedContentType(request *proxyhandler.Request) string {
-	if re.requestContentType != "" {
-		return re.requestContentType
+	if re.request != nil && re.request.ContentType != "" {
+		return re.request.ContentType
 	}
 
 	contentType := httpheader.GetHeaderValue(request.Header(), httpheader.ContentType)

@@ -30,7 +30,6 @@ import (
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
-	"github.com/relychan/openapitools/oasvalidator/contentencoder"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/vektah/gqlparser/v2/ast"
 	"go.opentelemetry.io/otel/trace"
@@ -49,11 +48,10 @@ type GraphQLHandler struct {
 	operation           ast.Operation
 	variableDefinitions ast.VariableDefinitionList
 	// The configuration to transform request headers.
-	headers             map[string]jmes.FieldMappingEntryString
-	variables           map[string]jmes.FieldMappingEntry
-	extensions          map[string]jmes.FieldMappingEntry
-	customResponse      *proxyCustomGraphQLResponse
-	responseContentType string
+	headers        map[string]jmes.FieldMappingEntryString
+	variables      map[string]jmes.FieldMappingEntry
+	extensions     map[string]jmes.FieldMappingEntry
+	customResponse *proxyCustomGraphQLResponse
 }
 
 // NewGraphQLHandler creates a GraphQL request from operation.
@@ -89,18 +87,6 @@ func NewGraphQLHandler( //nolint:ireturn,nolintlint
 		handler.method = http.MethodPost
 	} else if handler.method != http.MethodPost && handler.method != http.MethodGet {
 		return nil, ErrInvalidRequestMethod
-	}
-
-	responseContentType := oaschema.GetResponseContentType(operation.Responses)
-	if responseContentType == "" {
-		handler.responseContentType = httpheader.ContentTypeJSON
-	} else {
-		handler.responseContentType, err = oasvalidator.ValidateContentType(
-			responseContentType,
-		)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	getEnvFunc := options.GetEnvFunc()
@@ -216,10 +202,11 @@ func (ge *GraphQLHandler) Stream(
 	options.ForwardResponseHeaders(writer, resp)
 
 	if ge.customResponse == nil {
-		if httpheader.IsContentTypeJSON(ge.responseContentType) {
-			writer.Header()[httpheader.ContentType] = []string{ge.responseContentType}
+		if options.Settings == nil || !options.Settings.Strict {
+			// No custom response. Write response directly for json content type without validation.
+			// You must trust the remote service that always responds the correct format.
+			writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
 
-			// No custom response. Write response directly for json content type
 			_, err = io.Copy(writer, resp.Body)
 
 			goutils.CatchWarnErrorFunc(resp.Body.Close)
@@ -235,9 +222,7 @@ func (ge *GraphQLHandler) Stream(
 			return resp, err
 		}
 
-		var respBody any
-
-		err := json.NewDecoder(resp.Body).Decode(&respBody)
+		rawBody, err := io.ReadAll(resp.Body)
 
 		goutils.CloseResponse(resp)
 
@@ -254,7 +239,33 @@ func (ge *GraphQLHandler) Stream(
 			return resp, err
 		}
 
-		_, err = contentencoder.Write(writer, ge.responseContentType, respBody)
+		if !json.Valid(rawBody) {
+			err := goutils.ErrMalformedJSON
+
+			ge.printLog(
+				ctx,
+				request,
+				graphqlPayload,
+				resp,
+				rawBody,
+				err,
+			)
+
+			return nil, err
+		}
+
+		writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
+
+		_, err = writer.Write(rawBody)
+
+		ge.printLog(
+			ctx,
+			request,
+			graphqlPayload,
+			resp,
+			rawBody,
+			err,
+		)
 
 		return resp, err
 	}
@@ -347,10 +358,18 @@ func (ge *GraphQLHandler) printLog(
 		)
 
 		if isDebug {
-			respLogAttrs = append(
-				respLogAttrs,
-				slog.Any("body", respBody),
-			)
+			respBytes, ok := respBody.([]byte)
+			if ok {
+				respLogAttrs = append(
+					respLogAttrs,
+					slog.String("body", string(respBytes)),
+				)
+			} else {
+				respLogAttrs = append(
+					respLogAttrs,
+					slog.Any("body", respBody),
+				)
+			}
 		}
 
 		attrs = append(attrs, slog.GroupAttrs("response", respLogAttrs...))

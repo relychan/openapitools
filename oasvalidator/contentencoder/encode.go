@@ -19,10 +19,11 @@ import (
 	"io"
 
 	"github.com/relychan/goutils/httpheader"
+	"github.com/relychan/openapitools/oaschema"
 )
 
 // Encode encodes the data by content type.
-func Encode(contentType string, body any) ([]byte, error) {
+func Encode(contentType string, body any, media *oaschema.MediaType) ([]byte, error) {
 	switch {
 	case httpheader.IsContentTypeJSON(contentType):
 		return json.Marshal(body)
@@ -30,6 +31,8 @@ func Encode(contentType string, body any) ([]byte, error) {
 		return EncodeXML(body)
 	case httpheader.IsContentTypeText(contentType):
 		return EncodeText(body)
+	case httpheader.IsContentType(contentType, httpheader.ContentTypeFormURLEncoded):
+		return EncodeFormURLEncoded(body, media)
 	default:
 		// Encode binary by default.
 		return EncodeBinary(body)
@@ -37,7 +40,7 @@ func Encode(contentType string, body any) ([]byte, error) {
 }
 
 // Write encodes the data by content type and writes it to the stream.
-func Write(writer io.Writer, contentType string, body any) (int, error) {
+func Write(writer io.Writer, contentType string, body any, media *oaschema.MediaType) (int, error) {
 	switch {
 	case httpheader.IsContentTypeJSON(contentType):
 		return -1, json.NewEncoder(writer).Encode(body)
@@ -45,6 +48,13 @@ func Write(writer io.Writer, contentType string, body any) (int, error) {
 		return WriteXML(writer, body)
 	case httpheader.IsContentTypeText(contentType):
 		return WriteText(writer, body)
+	case httpheader.IsContentType(contentType, httpheader.ContentTypeFormURLEncoded):
+		result, err := EncodeFormURLEncoded(body, media)
+		if err != nil {
+			return 0, err
+		}
+
+		return writer.Write(result)
 	default:
 		// Encode binary by default.
 		return WriteBinary(writer, body)

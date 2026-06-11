@@ -15,6 +15,9 @@
 package oasvalidator
 
 import (
+	"slices"
+	"strings"
+
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/relychan/goutils/httperror"
@@ -33,7 +36,6 @@ func ValidateOperation(
 
 	result := &oaschema.Operation{
 		OperationID: operation.OperationId,
-		Responses:   operation.Responses,
 		Security:    operation.Security,
 		Servers:     operation.Servers,
 		Extensions:  operation.Extensions,
@@ -61,6 +63,18 @@ func ValidateOperation(
 		} else if content != nil {
 			result.RequestBody.Content = content
 		}
+	}
+
+	responses, responseErrs := validateOperationResponses(operation.Responses)
+	if len(responseErrs) > 0 {
+		errs = slices.Grow(errs, len(responseErrs))
+
+		for _, err := range responseErrs {
+			err.PrependPointer("/responses")
+			errs = append(errs, err)
+		}
+	} else {
+		result.Responses = responses
 	}
 
 	if len(errs) > 0 {
@@ -230,6 +244,64 @@ func getRequestContentSchema(
 	return defaultContentType, defaultContentSchema
 }
 
+func validateOperationResponses(
+	responses *highv3.Responses,
+) (map[string]*oaschema.MediaType, []httperror.ValidationError) {
+	results := make(map[string]*oaschema.MediaType)
+
+	if responses == nil {
+		return results, nil
+	}
+
+	if responses.Codes != nil && responses.Codes.Len() > 0 {
+		for iter := responses.Codes.First(); iter != nil; iter = iter.Next() {
+			status := strings.TrimSpace(iter.Key())
+			if status != "200" && status != "201" && status != "204" {
+				continue
+			}
+
+			response := iter.Value()
+			if response == nil || response.Content == nil || response.Content.Len() == 0 {
+				continue
+			}
+
+			return validateOperationContents(response.Content)
+		}
+	}
+
+	// Try to evaluate the default response.
+	if responses.Default != nil && responses.Default.Content != nil &&
+		responses.Default.Content.Len() > 0 {
+		return validateOperationContents(responses.Default.Content)
+	}
+
+	return nil, nil
+}
+
+func validateOperationContents(
+	contents *orderedmap.Map[string, *highv3.MediaType],
+) (map[string]*oaschema.MediaType, []httperror.ValidationError) {
+	results := make(map[string]*oaschema.MediaType, contents.Len())
+
+	for content := contents.First(); content != nil; content = content.Next() {
+		contentType := content.Key()
+		mediaType := content.Value()
+
+		if contentType == "" || mediaType == nil {
+			continue
+		}
+
+		media, errs := validateMediaType(contentType, mediaType)
+		if len(errs) > 0 {
+			return nil, errs
+		}
+
+		results[contentType] = media
+	}
+
+	return results, nil
+}
+
 func validateRequestContent(
 	contents *orderedmap.Map[string, *highv3.MediaType],
 ) (*oaschema.MediaType, []httperror.ValidationError) {
@@ -242,16 +314,23 @@ func validateRequestContent(
 		return nil, nil
 	}
 
+	return validateMediaType(requestContentType, requestMediaType)
+}
+
+func validateMediaType(
+	contentType string,
+	mediaType *highv3.MediaType,
+) (*oaschema.MediaType, []httperror.ValidationError) {
 	var (
 		errs   []httperror.ValidationError
 		result = &oaschema.MediaType{}
 	)
 
-	if requestContentType != "" {
-		contentType, err := ValidateContentType(requestContentType)
+	if contentType != "" {
+		contentType, err := ValidateContentType(contentType)
 		if err != nil {
 			errs = append(errs, httperror.ValidationError{
-				Detail:  err.Error() + " " + requestContentType,
+				Detail:  err.Error() + " " + contentType,
 				Pointer: "/contentType",
 				Code:    ErrCodeOpenAPISchemaError,
 			})
@@ -260,22 +339,22 @@ func validateRequestContent(
 		result.ContentType = contentType
 	}
 
-	if requestMediaType != nil {
-		bodySchema, validateErrors := ValidateSchemaProxy(requestMediaType.Schema)
+	if mediaType != nil {
+		bodySchema, validateErrors := ValidateSchemaProxy(mediaType.Schema)
 		if len(validateErrors) > 0 {
 			errs = append(errs, validateErrors...)
 		}
 
 		result.Schema = bodySchema
 
-		itemSchema, validateErrors := ValidateSchemaProxy(requestMediaType.ItemSchema)
+		itemSchema, validateErrors := ValidateSchemaProxy(mediaType.ItemSchema)
 		if len(validateErrors) > 0 {
 			errs = append(errs, validateErrors...)
 		}
 
 		result.ItemSchema = itemSchema
-		result.Encoding = requestMediaType.Encoding
-		result.ItemEncoding = requestMediaType.ItemEncoding
+		result.Encoding = mediaType.Encoding
+		result.ItemEncoding = mediaType.ItemEncoding
 	}
 
 	if len(errs) > 0 {

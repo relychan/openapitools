@@ -82,7 +82,7 @@ func TestEncode(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := Encode(tc.contentType, tc.body)
+			result, err := Encode(tc.contentType, tc.body, nil)
 			if tc.errMsg != "" {
 				assert.ErrorContains(t, err, tc.errMsg)
 			} else {
@@ -129,7 +129,7 @@ func TestWrite(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			buf := new(bytes.Buffer)
-			_, err := Write(buf, tc.contentType, tc.body)
+			_, err := Write(buf, tc.contentType, tc.body, nil)
 			require.NoError(t, err)
 			assert.Equal(t, tc.expected, buf.String())
 		})

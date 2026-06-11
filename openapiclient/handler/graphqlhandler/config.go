@@ -24,6 +24,7 @@ import (
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
+	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 )
 
@@ -66,6 +67,8 @@ type ProxyGraphQLRequestConfig struct {
 
 // ProxyCustomGraphQLResponseConfig represents configurations for the proxy response.
 type ProxyCustomGraphQLResponseConfig struct {
+	// Content type of the response to be transformed to. Default is application/json.
+	ContentType string `json:"contentType,omitempty" yaml:"contentType,omitempty" jsonschema:"pattern=^((text/[a-z]+)|(application/json))$"`
 	// The default HTTP error code will be used if the response body has errors.
 	// If not set, forward the HTTP status from the upstream response which is usually 200 OK.
 	HTTPErrorCode *int `json:"httpErrorCode,omitempty" yaml:"httpErrorCode,omitempty" jsonschema:"minimum=400,maximum=599,default=400"`
@@ -91,6 +94,8 @@ type proxyHTTPErrorMapping struct {
 
 // proxyCustomGraphQLResponse represents configurations for the proxy response.
 type proxyCustomGraphQLResponse struct {
+	// Content type of the response to be transformed to. Default is application/json.
+	ContentType string
 	// HTTP error code will be used if the response body has errors.
 	// If not set, forward the HTTP status from the upstream response which is usually 200 OK.
 	HTTPErrorCode *int
@@ -110,7 +115,16 @@ func newProxyCustomGraphQLResponse(
 	}
 
 	result := &proxyCustomGraphQLResponse{
+		ContentType:   config.ContentType,
 		HTTPErrorCode: config.HTTPErrorCode,
+	}
+
+	if config.ContentType != "" && config.ContentType != httpheader.ContentTypeJSON &&
+		!httpheader.IsContentTypeText(config.ContentType) {
+		return nil, &httperror.ValidationError{
+			Detail:  "Accept text/* and application/json content types only",
+			Pointer: "/response/contentType",
+		}
 	}
 
 	if config.Body != nil {

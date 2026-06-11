@@ -25,7 +25,7 @@ type Operation struct {
 	OperationID string
 	Parameters  []*Parameter
 	RequestBody *RequestBody
-	Responses   *highv3.Responses
+	Responses   map[string]*MediaType
 	Security    []*base.SecurityRequirement
 	Servers     []*highv3.Server
 	Extensions  *orderedmap.Map[string, *yaml.Node]

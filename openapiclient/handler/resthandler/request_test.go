@@ -125,7 +125,9 @@ func TestExtractQueryValuesFromPath(t *testing.T) {
 
 func TestGetDestinedContentType(t *testing.T) {
 	t.Run("uses_handler_content_type", func(t *testing.T) {
-		handler := &RESTfulHandler{requestContentType: "application/xml"}
+		handler := &RESTfulHandler{request: &oaschema.MediaType{
+			ContentType: "application/xml",
+		}}
 		req := newRESTRequest(http.MethodPost, "/", nil)
 		assert.Equal(t, "application/xml", handler.getDestinedContentType(req))
 	})
@@ -371,7 +373,9 @@ func TestTransformRequest_DoesNotForwardQueryParamsWhenDisabled(t *testing.T) {
 
 func TestTransformRequest_WithJSONBody(t *testing.T) {
 	handler := &RESTfulHandler{
-		requestContentType: "application/json",
+		request: &oaschema.MediaType{
+			ContentType: "application/json",
+		},
 		customRequest: &customRESTRequest{
 			URL: "/api/users",
 		},
@@ -388,7 +392,9 @@ func TestTransformRequest_WithJSONBody(t *testing.T) {
 
 func TestTransformRequest_WithReaderBody(t *testing.T) {
 	handler := &RESTfulHandler{
-		requestContentType: "application/json",
+		request: &oaschema.MediaType{
+			ContentType: "application/json",
+		},
 		customRequest: &customRESTRequest{
 			URL: "/api/data",
 		},

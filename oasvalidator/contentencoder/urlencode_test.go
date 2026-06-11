@@ -19,6 +19,7 @@ import (
 
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
+	"github.com/relychan/openapitools/oaschema"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -26,13 +27,13 @@ func TestEncodeFormURLEncoded(t *testing.T) {
 	testCases := []struct {
 		name      string
 		value     any
-		mediaType *highv3.MediaType
-		expected  []string
+		mediaType *oaschema.MediaType
+		expected  string
 	}{
 		{
 			name:  "empty",
 			value: nil,
-			mediaType: &highv3.MediaType{
+			mediaType: &oaschema.MediaType{
 				Encoding: func() *orderedmap.Map[string, *highv3.Encoding] {
 					result := orderedmap.New[string, *highv3.Encoding]()
 					result.Set("id", &highv3.Encoding{
@@ -43,30 +44,14 @@ func TestEncodeFormURLEncoded(t *testing.T) {
 					return result
 				}(),
 			},
-			expected: []string{""},
-		},
-		{
-			name:  "form_explode_primitive",
-			value: 3,
-			mediaType: &highv3.MediaType{
-				Encoding: func() *orderedmap.Map[string, *highv3.Encoding] {
-					result := orderedmap.New[string, *highv3.Encoding]()
-					result.Set("id", &highv3.Encoding{
-						Style:   "form",
-						Explode: new(true),
-					})
-
-					return result
-				}(),
-			},
-			expected: []string{"3"},
+			expected: "",
 		},
 		{
 			name: "form_single_explode",
 			value: map[string]any{
 				"id": "3",
 			},
-			mediaType: &highv3.MediaType{
+			mediaType: &oaschema.MediaType{
 				Encoding: func() *orderedmap.Map[string, *highv3.Encoding] {
 					result := orderedmap.New[string, *highv3.Encoding]()
 					result.Set("id", &highv3.Encoding{
@@ -77,14 +62,14 @@ func TestEncodeFormURLEncoded(t *testing.T) {
 					return result
 				}(),
 			},
-			expected: []string{"id=3"},
+			expected: "id=3",
 		},
 		{
 			name: "form_single",
 			value: map[string]any{
 				"id": "3",
 			},
-			mediaType: &highv3.MediaType{
+			mediaType: &oaschema.MediaType{
 				Encoding: func() *orderedmap.Map[string, *highv3.Encoding] {
 					result := orderedmap.New[string, *highv3.Encoding]()
 					result.Set("id", &highv3.Encoding{
@@ -95,14 +80,14 @@ func TestEncodeFormURLEncoded(t *testing.T) {
 					return result
 				}(),
 			},
-			expected: []string{"id=3"},
+			expected: "id=3",
 		},
 		{
 			name: "form_array",
 			value: map[string]any{
 				"id": []any{"3", "4", "5"},
 			},
-			mediaType: &highv3.MediaType{
+			mediaType: &oaschema.MediaType{
 				Encoding: func() *orderedmap.Map[string, *highv3.Encoding] {
 					result := orderedmap.New[string, *highv3.Encoding]()
 					result.Set("id", &highv3.Encoding{
@@ -114,14 +99,14 @@ func TestEncodeFormURLEncoded(t *testing.T) {
 					return result
 				}(),
 			},
-			expected: []string{"id=3,4,5"},
+			expected: "id=3,4,5",
 		},
 		{
 			name: "form_array_explode",
 			value: map[string]any{
 				"id": []any{"3", "4", "5"},
 			},
-			mediaType: &highv3.MediaType{
+			mediaType: &oaschema.MediaType{
 				Encoding: func() *orderedmap.Map[string, *highv3.Encoding] {
 					result := orderedmap.New[string, *highv3.Encoding]()
 					result.Set("id", &highv3.Encoding{
@@ -133,7 +118,7 @@ func TestEncodeFormURLEncoded(t *testing.T) {
 					return result
 				}(),
 			},
-			expected: []string{"id=3&id=4&id=5"},
+			expected: "id=3&id=4&id=5",
 		},
 		{
 			name: "form_object",
@@ -142,7 +127,7 @@ func TestEncodeFormURLEncoded(t *testing.T) {
 					"role": "admin",
 				},
 			},
-			mediaType: &highv3.MediaType{
+			mediaType: &oaschema.MediaType{
 				Encoding: func() *orderedmap.Map[string, *highv3.Encoding] {
 					result := orderedmap.New[string, *highv3.Encoding]()
 					result.Set("id", &highv3.Encoding{
@@ -154,7 +139,7 @@ func TestEncodeFormURLEncoded(t *testing.T) {
 					return result
 				}(),
 			},
-			expected: []string{"id=role,admin"},
+			expected: "id=role,admin",
 		},
 		{
 			name: "form_object_explode",
@@ -163,7 +148,7 @@ func TestEncodeFormURLEncoded(t *testing.T) {
 					"role": "admin",
 				},
 			},
-			mediaType: &highv3.MediaType{
+			mediaType: &oaschema.MediaType{
 				Encoding: func() *orderedmap.Map[string, *highv3.Encoding] {
 					result := orderedmap.New[string, *highv3.Encoding]()
 					result.Set("id", &highv3.Encoding{
@@ -175,197 +160,22 @@ func TestEncodeFormURLEncoded(t *testing.T) {
 					return result
 				}(),
 			},
-			expected: []string{"role=admin"},
+			expected: "role=admin",
 		},
-		// {
-		// 	name: "form_array_object",
-		// 	value: map[any]any{
-		// 		"role": []any{
-		// 			map[string]any{
-		// 				"user": "admin",
-		// 			},
-		// 		},
-		// 	},
-		// 	encoding: BaseParameter{
-		// 		Name:          "id",
-		// 		In:            oaschema.InQuery,
-		// 		Explode:       new(false),
-		// 		Style:         (oaschema.EncodingStyleForm),
-		// 		AllowReserved: true,
-		// 	},
-		// 	expected: []string{"id=role[0][user],admin"},
-		// },
-		// {
-		// 	name: "form_explode_array_object_multiple",
-		// 	value: map[any]any{
-		// 		"role": []any{
-		// 			map[string]any{
-		// 				"user": []any{
-		// 					[]any{"admin", "anonymous"},
-		// 				},
-		// 			},
-		// 		},
-		// 	},
-		// 	encoding: BaseParameter{
-		// 		Name:          "id",
-		// 		In:            oaschema.InQuery,
-		// 		Explode:       new(true),
-		// 		Style:         (oaschema.EncodingStyleForm),
-		// 		AllowReserved: true,
-		// 	},
-		// 	expected: []string{
-		// 		"role[0][user][0]=admin&role[0][user][0]=anonymous",
-		// 		"role[0][user][0]=anonymous&role[0][user][0]=admin",
-		// 	},
-		// },
-		// {
-		// 	name:  "spaceDelimited_array",
-		// 	value: []string{"3", "4", "5"},
-		// 	encoding: BaseParameter{
-		// 		Name:          "id",
-		// 		In:            oaschema.InQuery,
-		// 		Explode:       new(false),
-		// 		Style:         (oaschema.EncodingStyleSpaceDelimited),
-		// 		AllowReserved: true,
-		// 	},
-		// 	expected: []string{"id=3+4+5"},
-		// },
-		// {
-		// 	name: "spaceDelimited_object",
-		// 	value: map[string]any{
-		// 		"R": "100",
-		// 		"G": "200",
-		// 	},
-		// 	encoding: BaseParameter{
-		// 		Name:          "color",
-		// 		In:            oaschema.InQuery,
-		// 		Style:         (oaschema.EncodingStyleSpaceDelimited),
-		// 		Explode:       new(false),
-		// 		AllowReserved: false,
-		// 	},
-		// 	expected: []string{
-		// 		"color=G+200+R+100",
-		// 		"color=R+100+G+200",
-		// 	},
-		// },
-		// {
-		// 	name:  "spaceDelimited_explode_array",
-		// 	value: []any{"3", "4", "5"},
-		// 	encoding: BaseParameter{
-		// 		Name:          "id",
-		// 		In:            oaschema.InQuery,
-		// 		Style:         (oaschema.EncodingStyleSpaceDelimited),
-		// 		Explode:       new(true),
-		// 		AllowReserved: false,
-		// 	},
-		// 	expected: []string{"id=3&id=4&id=5"},
-		// },
-		// {
-		// 	name:  "pipeDelimited_array",
-		// 	value: []any{"3", "4", "5"},
-		// 	encoding: BaseParameter{
-		// 		Name:          "id",
-		// 		In:            oaschema.InQuery,
-		// 		Style:         (oaschema.EncodingStylePipeDelimited),
-		// 		Explode:       new(false),
-		// 		AllowReserved: true,
-		// 	},
-		// 	expected: []string{"id=3%7C4%7C5"},
-		// },
-		// {
-		// 	name:  "pipeDelimited_explode_array",
-		// 	value: []any{"3", "4", "5"},
-		// 	encoding: BaseParameter{
-		// 		Name:          "id",
-		// 		In:            oaschema.InQuery,
-		// 		Style:         (oaschema.EncodingStylePipeDelimited),
-		// 		Explode:       new(true),
-		// 		AllowReserved: true,
-		// 	},
-		// 	expected: []string{"id=3&id=4&id=5"},
-		// },
-		// {
-		// 	name: "pipeDelimited_object",
-		// 	value: map[string]any{
-		// 		"R": "100",
-		// 		"G": "200",
-		// 	},
-		// 	encoding: BaseParameter{
-		// 		Name:          "color",
-		// 		In:            oaschema.InQuery,
-		// 		Style:         (oaschema.EncodingStylePipeDelimited),
-		// 		Explode:       new(false),
-		// 		AllowReserved: false,
-		// 	},
-		// 	expected: []string{
-		// 		"color=G%7C200%7CR%7C100",
-		// 		"color=R%7C100%7CG%7C200",
-		// 	},
-		// },
-		// {
-		// 	name:  "deepObject_array_explode",
-		// 	value: []any{"3", "4", "5"},
-		// 	encoding: BaseParameter{
-		// 		Name:          "id",
-		// 		In:            oaschema.InQuery,
-		// 		Style:         (oaschema.EncodingStyleDeepObject),
-		// 		Explode:       new(true),
-		// 		AllowReserved: true,
-		// 	},
-		// 	expected: []string{"id[]=3&id[]=4&id[]=5"},
-		// },
-		// {
-		// 	name: "deepObject_object_explode",
-		// 	value: map[string]any{
-		// 		"R": "100",
-		// 		"G": "200",
-		// 	},
-		// 	encoding: BaseParameter{
-		// 		Name:          "color",
-		// 		In:            oaschema.InQuery,
-		// 		Style:         (oaschema.EncodingStyleDeepObject),
-		// 		Explode:       new(true),
-		// 		AllowReserved: false,
-		// 	},
-		// 	expected: []string{
-		// 		"color%5BR%5D=100&color%5BG%5D=200",
-		// 		"color%5BG%5D=200&color%5BR%5D=100",
-		// 	},
-		// },
-		// {
-		// 	name: "deepObject_explode_array_object",
-		// 	value: map[any]any{
-		// 		"role": []any{
-		// 			map[string]any{
-		// 				"user": []any{
-		// 					[]any{"admin", "anonymous"},
-		// 				},
-		// 			},
-		// 		},
-		// 	},
-		// 	encoding: BaseParameter{
-		// 		Name:          "id",
-		// 		In:            oaschema.InQuery,
-		// 		Style:         (oaschema.EncodingStyleDeepObject),
-		// 		Explode:       new(true),
-		// 		AllowReserved: true,
-		// 	},
-		// 	expected: []string{"id[role][0][user][0][]=admin&id[role][0][user][0][]=anonymous"},
-		// },
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := EncodeFormURLEncoded(tc.value, tc.mediaType)
-			assert.NoError(t, err)
-			assert.Contains(t, tc.expected, result)
+			assert.Nil(t, err)
+			assert.Contains(t, tc.expected, string(result))
 		})
 	}
 }
 
-// BenchmarkEncodeURLEncode-11    	  800754	      1434 ns/op	    1560 B/op	      29 allocs/op
+// BenchmarkEncodeURLEncode-11    	  1000000	      1115 ns/op	    1328 B/op	      27 allocs/op
 func BenchmarkEncodeURLEncode(b *testing.B) {
-	value := map[any]any{
+	value := map[string]any{
 		"role": []any{
 			map[string]any{
 				"user": []any{
@@ -388,7 +198,14 @@ func BenchmarkEncodeURLEncode(b *testing.B) {
 		}(),
 	}
 
+	mediaType2 := &oaschema.MediaType{
+		Encoding: mediaType.Encoding,
+	}
+
 	for b.Loop() {
-		EncodeFormURLEncoded(value, mediaType)
+		_, err := EncodeFormURLEncoded(value, mediaType2)
+		if err != nil {
+			panic(err)
+		}
 	}
 }

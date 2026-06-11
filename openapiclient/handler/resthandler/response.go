@@ -25,9 +25,9 @@ import (
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
+	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/oasvalidator/contentdecoder"
-	"github.com/relychan/openapitools/oasvalidator/contentencoder"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -143,85 +143,10 @@ func (*RESTfulHandler) postTransformedResponse(
 	return respErr
 }
 
-func (re *RESTfulHandler) writeRawResponse(
+func (re *RESTfulHandler) decodeRawResponse(
 	ctx context.Context,
 	response *http.Response,
-	writer http.ResponseWriter,
 	options *proxyhandler.ProxyHandleOptions,
-) error {
-	_, span := tracer.Start(ctx, "write_raw_response", trace.WithSpanKind(trace.SpanKindInternal))
-	defer span.End()
-
-	options.ForwardResponseHeaders(writer, response)
-
-	if response.Body == nil || response.Body == http.NoBody {
-		writer.WriteHeader(response.StatusCode)
-		span.SetStatus(codes.Ok, "empty response body")
-
-		return nil
-	}
-
-	var (
-		err          error
-		contentType  = httpheader.GetHeaderValue(response.Header, httpheader.ContentType)
-		responseBody = response.Body
-	)
-
-	if re.responseContentType == "" || contentType == "" ||
-		!oasvalidator.EqualContentType(re.responseContentType, contentType) {
-		// Stream response directly without conversion.
-		writer.Header()[httpheader.ContentType] = response.Header[httpheader.ContentType]
-		writer.WriteHeader(response.StatusCode)
-
-		_, err = io.Copy(writer, responseBody)
-
-		goutils.CatchWarnErrorFunc(response.Body.Close)
-	} else {
-		decodedBody, decodeError := contentdecoder.Decode(contentType, response.Body)
-		goutils.CloseResponse(response)
-
-		if decodeError != nil {
-			respErr := httperror.NewServerError(httperror.ValidationError{
-				Code:   oasvalidator.ErrCodeWriteResponseError,
-				Detail: decodeError.Error(),
-			})
-
-			respErr.Detail = "failed to decode response body"
-
-			span.SetStatus(codes.Error, respErr.Detail)
-			span.RecordError(decodeError)
-
-			return respErr
-		}
-
-		writer.Header()[httpheader.ContentType] = []string{re.responseContentType}
-		writer.WriteHeader(response.StatusCode)
-
-		_, err = contentencoder.Write(writer, re.responseContentType, decodedBody)
-	}
-
-	if err != nil {
-		respErr := httperror.NewServerError(httperror.ValidationError{
-			Code:   oasvalidator.ErrCodeWriteResponseError,
-			Detail: err.Error(),
-		})
-
-		respErr.Detail = "failed to write response body"
-
-		span.SetStatus(codes.Error, respErr.Detail)
-		span.RecordError(err)
-
-		return respErr
-	}
-
-	span.SetStatus(codes.Ok, "wrote response successfully")
-
-	return nil
-}
-
-func (*RESTfulHandler) decodeRawResponse(
-	ctx context.Context,
-	response *http.Response,
 ) (any, error) {
 	_, span := tracer.Start(ctx, "decode_raw_response", trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
@@ -245,7 +170,207 @@ func (*RESTfulHandler) decodeRawResponse(
 		return nil, respErr
 	}
 
+	if options.Settings != nil && options.Settings.Strict {
+		validatedErr := re.validateResponse(contentType, decodedBody)
+		if validatedErr != nil {
+			span.SetStatus(codes.Error, validatedErr.Detail)
+			span.RecordError(validatedErr)
+
+			return nil, validatedErr
+		}
+	}
+
 	span.SetStatus(codes.Ok, "")
 
 	return decodedBody, nil
+}
+
+func (re *RESTfulHandler) validateResponse(
+	contentType string,
+	decodedBody any,
+) *httperror.HTTPError {
+	mediaType := re.findResponseMediaType(contentType)
+	if mediaType != nil && mediaType.Schema != nil {
+		errs := oasvalidator.ValidateValue(mediaType.Schema, decodedBody)
+		if len(errs) > 0 {
+			respErr := httperror.NewServerError(errs...)
+			respErr.Detail = "response body is invalid"
+
+			return respErr
+		}
+	}
+
+	return nil
+}
+
+func (re *RESTfulHandler) findResponseMediaType(contentType string) *oaschema.MediaType {
+	if len(re.responses) == 0 {
+		return nil
+	}
+
+	media, ok := re.responses[contentType]
+	if ok {
+		return media
+	}
+
+	for key, media := range re.responses {
+		if httpheader.IsContentType(contentType, key) {
+			return media
+		}
+	}
+
+	return nil
+}
+
+// Write raw response if the response schema does not exist.
+func (re *RESTfulHandler) writeRawResponse(
+	ctx context.Context,
+	response *http.Response,
+	writer http.ResponseWriter,
+	options *proxyhandler.ProxyHandleOptions,
+) error {
+	_, span := tracer.Start(ctx, "write_raw_response", trace.WithSpanKind(trace.SpanKindInternal))
+	defer span.End()
+
+	options.ForwardResponseHeaders(writer, response)
+
+	if response.Body == nil || response.Body == http.NoBody {
+		writer.WriteHeader(response.StatusCode)
+		span.SetStatus(codes.Ok, "empty response body")
+
+		return nil
+	}
+
+	var (
+		err         error
+		contentType = httpheader.GetHeaderValue(response.Header, httpheader.ContentType)
+		strict      = options.Settings != nil && options.Settings.Strict
+	)
+
+	switch {
+	case contentType == "":
+		err = streamResponseDirectly(response, writer)
+	case httpheader.IsContentTypeJSON(contentType):
+		if strict {
+			err = re.streamValidatedJSONResponse(contentType, response, writer)
+		} else {
+			err = streamResponseDirectly(response, writer)
+		}
+	case httpheader.IsContentTypeXML(contentType):
+		err = re.decodeAndStreamJSON(
+			contentType,
+			response,
+			writer,
+			options,
+			contentdecoder.DecodeXML,
+		)
+	default:
+		err = streamResponseDirectly(response, writer)
+	}
+
+	if err != nil {
+		respErr := httperror.NewServerError(httperror.ValidationError{
+			Code:   oasvalidator.ErrCodeWriteResponseError,
+			Detail: "failed to write response body: " + err.Error(),
+		})
+
+		span.SetStatus(codes.Error, "failed to write response body")
+		span.RecordError(err)
+
+		return respErr
+	}
+
+	span.SetStatus(codes.Ok, "wrote response successfully")
+
+	return nil
+}
+
+// Validate the JSON response before streaming to the client.
+func (re *RESTfulHandler) streamValidatedJSONResponse(
+	contentType string,
+	response *http.Response,
+	writer http.ResponseWriter,
+) error {
+	mediaType := re.findResponseMediaType(contentType)
+	if mediaType == nil {
+		rawBytes, err := io.ReadAll(response.Body)
+
+		goutils.CloseResponse(response)
+
+		if err != nil {
+			return err
+		}
+
+		if !json.Valid(rawBytes) {
+			return goutils.ErrMalformedJSON
+		}
+
+		writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
+		writer.WriteHeader(response.StatusCode)
+
+		_, err = writer.Write(rawBytes)
+
+		return err
+	}
+
+	var decodedBody any
+
+	err := json.NewDecoder(response.Body).Decode(&decodedBody)
+
+	goutils.CloseResponse(response)
+
+	if err != nil {
+		return err
+	}
+
+	validatedErr := re.validateResponse(contentType, decodedBody)
+	if validatedErr != nil {
+		return validatedErr
+	}
+
+	writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
+	writer.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(writer).Encode(decodedBody)
+}
+
+func (re *RESTfulHandler) decodeAndStreamJSON(
+	contentType string,
+	response *http.Response,
+	writer http.ResponseWriter,
+	options *proxyhandler.ProxyHandleOptions,
+	decode func(io.Reader) (any, error),
+) error {
+	decoded, decodeErr := decode(response.Body)
+	goutils.CloseResponse(response)
+
+	if decodeErr != nil {
+		return decodeErr
+	}
+
+	if options.Settings != nil && options.Settings.Strict {
+		validatedErr := re.validateResponse(contentType, decoded)
+		if validatedErr != nil {
+			return validatedErr
+		}
+	}
+
+	writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
+	writer.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(writer).Encode(decoded)
+}
+
+// Stream response directly without validation.
+func streamResponseDirectly(
+	response *http.Response,
+	writer http.ResponseWriter,
+) error {
+	writer.WriteHeader(response.StatusCode)
+
+	_, err := io.Copy(writer, response.Body)
+
+	goutils.CatchWarnErrorFunc(response.Body.Close)
+
+	return err
 }

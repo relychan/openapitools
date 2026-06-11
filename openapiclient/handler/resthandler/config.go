@@ -53,6 +53,8 @@ func (conf ProxyCustomRESTfulResponseConfig) IsZero() bool {
 }
 
 type customRESTResponse struct {
+	// Content type of the response to be transformed to.
+	ContentType string
 	// Configurations for transforming response body data.
 	Body gotransform.TemplateTransformer
 }
@@ -73,6 +75,17 @@ func newCustomRESTResponse(
 
 	result := &customRESTResponse{
 		Body: transformer,
+	}
+
+	if config.ContentType != "" {
+		result.ContentType, err = oasvalidator.ValidateContentType(config.ContentType)
+		if err != nil {
+			return nil, &httperror.ValidationError{
+				Detail:  err.Error() + " " + config.ContentType,
+				Pointer: "/contentType",
+				Code:    oasvalidator.ErrCodeProxyRESTfulResponseConfig,
+			}
+		}
 	}
 
 	return result, nil
@@ -213,30 +226,6 @@ func parseRequestContentType(
 			Detail:  err.Error() + " " + conf.ContentType,
 			Pointer: "/contentType",
 			Code:    oasvalidator.ErrCodeInvalidRESTfulRequestConfig,
-		}
-	}
-
-	return result, nil
-}
-
-func parseResponseContentType(
-	operation *oaschema.Operation,
-	conf *ProxyCustomRESTfulResponseConfig,
-) (string, error) {
-	var contentType string
-
-	if conf != nil && conf.ContentType != "" {
-		contentType = conf.ContentType
-	} else {
-		contentType = oaschema.GetResponseContentType(operation.Responses)
-	}
-
-	result, err := oasvalidator.ValidateContentType(contentType)
-	if err != nil {
-		return "", &httperror.ValidationError{
-			Detail:  err.Error() + " " + contentType,
-			Pointer: "/contentType",
-			Code:    oasvalidator.ErrCodeProxyRESTfulResponseConfig,
 		}
 	}
 

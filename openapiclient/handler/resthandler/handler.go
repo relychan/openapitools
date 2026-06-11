@@ -17,6 +17,7 @@ package resthandler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -38,11 +39,11 @@ var tracer = gotel.NewTracer("openapitools/resthandler")
 
 // RESTfulHandler implements the ProxyHandler interface for RESTful proxy.
 type RESTfulHandler struct {
-	requestContentType  string
-	responseContentType string
-	customRequest       *customRESTRequest
-	customResponse      *customRESTResponse
-	parameters          []*oaschema.Parameter
+	request        *oaschema.MediaType
+	responses      map[string]*oaschema.MediaType
+	customRequest  *customRESTRequest
+	customResponse *customRESTResponse
+	parameters     []*oaschema.Parameter
 }
 
 // NewRESTfulHandler creates a RESTHandler from operation.
@@ -55,19 +56,20 @@ func NewRESTfulHandler(
 		parameters: operation.Parameters,
 	}
 
+	if operation.RequestBody != nil && operation.RequestBody.Content != nil {
+		md := *operation.RequestBody.Content
+		handler.request = &md
+	} else {
+		handler.request = &oaschema.MediaType{}
+	}
+
 	if rawProxyAction == nil {
 		requestContentType, err := parseRequestContentType(operation, nil)
 		if err != nil {
 			return nil, err
 		}
 
-		responseContentType, err := parseResponseContentType(operation, nil)
-		if err != nil {
-			return nil, err
-		}
-
-		handler.requestContentType = requestContentType
-		handler.responseContentType = responseContentType
+		handler.request.ContentType = requestContentType
 
 		return handler, nil
 	}
@@ -84,13 +86,7 @@ func NewRESTfulHandler(
 		return nil, err
 	}
 
-	responseContentType, err := parseResponseContentType(operation, proxyAction.Response)
-	if err != nil {
-		return nil, err
-	}
-
-	handler.requestContentType = requestContentType
-	handler.responseContentType = responseContentType
+	handler.request.ContentType = requestContentType
 
 	getEnvFunc := options.GetEnvFunc()
 
@@ -194,7 +190,7 @@ func (re *RESTfulHandler) handleRequest(
 		)
 
 		if writer == nil {
-			respBody, respError = re.decodeRawResponse(ctx, resp)
+			respBody, respError = re.decodeRawResponse(ctx, resp, options)
 		} else {
 			respError = re.writeRawResponse(ctx, resp, writer, options)
 		}
@@ -230,16 +226,28 @@ func (re *RESTfulHandler) handleRequest(
 	}
 
 	// encode the body back to the response stream.
-	contentTypeTo := re.responseContentType
-	if contentTypeTo == "" {
-		contentTypeTo = contentTypeFrom
-	}
-
 	options.ForwardResponseHeaders(writer, resp)
-	writer.Header()[httpheader.ContentType] = []string{contentTypeTo}
-	writer.WriteHeader(resp.StatusCode)
 
-	_, err = contentencoder.Write(writer, contentTypeTo, transformedBody)
+	if re.customResponse.ContentType != "" {
+		writer.Header()[httpheader.ContentType] = []string{re.customResponse.ContentType}
+		writer.WriteHeader(resp.StatusCode)
+
+		_, err = contentencoder.Write(writer, re.customResponse.ContentType, transformedBody, nil)
+	} else {
+		// auto-detect the response content type by the transformed body's type.
+		str, ok := transformedBody.(string)
+		if ok {
+			writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeTextPlain}
+			writer.WriteHeader(resp.StatusCode)
+
+			_, err = writer.Write([]byte(str))
+		} else {
+			writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
+			writer.WriteHeader(resp.StatusCode)
+
+			err = json.NewEncoder(writer).Encode(transformedBody)
+		}
+	}
 
 	re.printRequestLog(
 		ctx,

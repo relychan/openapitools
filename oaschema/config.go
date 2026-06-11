@@ -34,6 +34,8 @@ type OpenAPIResourceSettings struct {
 	ForwardHeaders *OpenAPIForwardHeadersConfig `json:"forwardHeaders,omitempty" yaml:"forwardHeaders,omitempty"`
 	// HealthCheck define the health check policy for load balancer recovery.
 	HealthCheck *HealthCheckConfig `json:"healthCheck,omitempty" yaml:"healthCheck,omitempty"`
+	// Enable or disable the strict validation mode.
+	Strict bool `json:"strict,omitempty" yaml:"strict,omitempty"`
 }
 
 // OpenAPIForwardHeadersConfig contains configurations for headers forwarding,.
