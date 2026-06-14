@@ -80,8 +80,8 @@ func NewGraphQLHandler( //nolint:ireturn,nolintlint
 		return nil, err
 	}
 
-	if proxyAction.Request.URL != "" {
-		customURL, err := goutils.ParseRelativeURI(proxyAction.Request.URL)
+	if proxyAction.Request.Path != "" {
+		customURL, err := goutils.ParseRelativeURI(proxyAction.Request.Path)
 		if err != nil {
 			return nil, err
 		}

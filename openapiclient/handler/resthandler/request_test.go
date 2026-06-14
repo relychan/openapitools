@@ -245,7 +245,7 @@ func TestPrepareRequest_ZeroCustomRequest(t *testing.T) {
 func TestTransformRequest_OverridesURLAndMethod(t *testing.T) {
 	handler := &RESTfulHandler{
 		customRequest: &customRESTRequest{
-			URL:    "/new/path",
+			Path:   "/new/path",
 			Method: http.MethodPut,
 		},
 	}
@@ -317,7 +317,7 @@ func TestTransformRequest_ForwardsAllQueryParams(t *testing.T) {
 	forwardAll := true
 	handler := &RESTfulHandler{
 		customRequest: &customRESTRequest{
-			URL:                   "/proxy",
+			Path:                  "/proxy",
 			ForwardAllQueryParams: &forwardAll,
 		},
 	}
@@ -336,7 +336,7 @@ func TestTransformRequest_DoesNotForwardQueryParamsWhenDisabled(t *testing.T) {
 	forwardAll := false
 	handler := &RESTfulHandler{
 		customRequest: &customRESTRequest{
-			URL:                   "/proxy",
+			Path:                  "/proxy",
 			ForwardAllQueryParams: &forwardAll,
 		},
 	}
@@ -356,7 +356,7 @@ func TestTransformRequest_WithJSONBody(t *testing.T) {
 			ContentType: "application/json",
 		},
 		customRequest: &customRESTRequest{
-			URL: "/api/users",
+			Path: "/api/users",
 		},
 	}
 
@@ -375,7 +375,7 @@ func TestTransformRequest_WithReaderBody(t *testing.T) {
 			ContentType: "application/json",
 		},
 		customRequest: &customRESTRequest{
-			URL: "/api/data",
+			Path: "/api/data",
 		},
 	}
 

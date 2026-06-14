@@ -1065,9 +1065,9 @@
   },
   "ProxyGraphQLRequestConfig": {
    "properties": {
-    "url": {
+    "path": {
      "type": "string",
-     "description": "Overrides the request URL. Use the original request path if empty."
+     "description": "Overrides the request path. Use the original request path if empty."
     },
     "method": {
      "type": "string",
@@ -1185,9 +1185,9 @@
   },
   "ProxyRESTfulRequestConfig": {
    "properties": {
-    "url": {
+    "path": {
      "type": "string",
-     "description": "Overrides the request URL. Use the original request path if empty."
+     "description": "Overrides the request path. Use the original request path if empty."
     },
     "method": {
      "type": "string",

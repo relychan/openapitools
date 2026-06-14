@@ -39,7 +39,7 @@ func TestProxyRESTRequestConfigIsZero(t *testing.T) {
 		{
 			name: "with_path",
 			config: ProxyRESTfulRequestConfig{
-				URL: "/test",
+				Path: "/test",
 			},
 			expected: false,
 		},
@@ -112,7 +112,7 @@ func TestCustomRESTRequestIsZero(t *testing.T) {
 		{
 			name: "with_path",
 			request: customRESTRequest{
-				URL: "/test",
+				Path: "/test",
 			},
 			expected: false,
 		},
@@ -159,12 +159,12 @@ func TestNewCustomRESTRequestFromConfig(t *testing.T) {
 
 	t.Run("with_path", func(t *testing.T) {
 		config := &ProxyRESTfulRequestConfig{
-			URL: "/custom/path",
+			Path: "/custom/path",
 		}
 		result, err := newCustomRESTRequestFromConfig(config, goenvconf.GetOSEnv)
 		assert.NoError(t, err)
 		assert.True(t, result != nil)
-		assert.Equal(t, "/custom/path", result.URL)
+		assert.Equal(t, "/custom/path", result.Path)
 	})
 
 	t.Run("with_headers", func(t *testing.T) {
@@ -205,12 +205,12 @@ func TestNewCustomRESTRequestFromConfig(t *testing.T) {
 					},
 				},
 			},
-			URL: "/api/endpoint",
+			Path: "/api/endpoint",
 		}
 		result, err := newCustomRESTRequestFromConfig(config, goenvconf.GetOSEnv)
 		assert.NoError(t, err)
 		assert.True(t, result != nil)
-		assert.Equal(t, "/api/endpoint", result.URL)
+		assert.Equal(t, "/api/endpoint", result.Path)
 		assert.True(t, len(result.Parameters) > 0)
 	})
 

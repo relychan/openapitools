@@ -110,8 +110,8 @@ type ProxyRESTfulParameter struct {
 
 // ProxyRESTfulRequestConfig represents configurations for the proxy request.
 type ProxyRESTfulRequestConfig struct {
-	// Overrides the request URL. Use the original request path if empty.
-	URL string `json:"url,omitempty" yaml:"url,omitempty"`
+	// Overrides the request path. Use the original request path if empty.
+	Path string `json:"path,omitempty" yaml:"path,omitempty"`
 	// Overrides the request method. Use the original request method if empty.
 	Method string `json:"method,omitempty" jsonschema:"enum=GET,enum=POST,enum=PATCH,enum=PUT,enum=DELETE" yaml:"method,omitempty"`
 	// The configuration to transform query, path, header and cookie parameters.
@@ -127,7 +127,7 @@ type ProxyRESTfulRequestConfig struct {
 
 // IsZero checks if the configuration is empty.
 func (rr ProxyRESTfulRequestConfig) IsZero() bool {
-	return rr.URL == "" &&
+	return rr.Path == "" &&
 		rr.Method == "" &&
 		len(rr.Parameters) == 0 &&
 		(rr.Body == nil || rr.Body.IsZero()) &&
@@ -135,7 +135,7 @@ func (rr ProxyRESTfulRequestConfig) IsZero() bool {
 }
 
 type customRESTRequest struct {
-	URL                   string
+	Path                  string
 	Method                string
 	Parameters            []ProxyRESTfulParameter
 	Body                  gotransform.TemplateTransformer
@@ -144,7 +144,7 @@ type customRESTRequest struct {
 
 // IsZero checks if the configuration is empty.
 func (rr customRESTRequest) IsZero() bool {
-	return rr.URL == "" &&
+	return rr.Path == "" &&
 		rr.Method == "" &&
 		len(rr.Parameters) == 0 &&
 		(rr.Body == nil || rr.Body.IsZero()) &&
@@ -160,7 +160,7 @@ func newCustomRESTRequestFromConfig(
 	}
 
 	result := &customRESTRequest{
-		URL:                   conf.URL,
+		Path:                  conf.Path,
 		Method:                conf.Method,
 		ForwardAllQueryParams: conf.ForwardAllQueryParams,
 		Parameters:            make([]ProxyRESTfulParameter, len(conf.Parameters)),

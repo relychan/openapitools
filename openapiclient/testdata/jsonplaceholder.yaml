@@ -24,7 +24,7 @@ spec:
         x-rely-proxy-action:
           type: rest
           request:
-            url: /albums
+            path: /albums
             method: GET
           response:
             body:

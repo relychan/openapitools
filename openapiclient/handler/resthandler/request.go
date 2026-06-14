@@ -66,9 +66,9 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 
 	var resolvedRequestURL *url.URL
 
-	if re.customRequest.URL != "" {
+	if re.customRequest.Path != "" {
 		resolvedRequestPath, err := re.evaluateRequestPath(
-			re.customRequest.URL,
+			re.customRequest.Path,
 			request,
 			rawRequestData,
 		)

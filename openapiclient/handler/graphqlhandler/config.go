@@ -51,8 +51,8 @@ type ProxyGraphQLActionConfig struct {
 
 // ProxyGraphQLRequestConfig represents configurations for the proxy request.
 type ProxyGraphQLRequestConfig struct {
-	// Overrides the request URL. Use the original request path if empty.
-	URL string `json:"url,omitempty" yaml:"url,omitempty"`
+	// Overrides the request path. Use the original request path if empty.
+	Path string `json:"path,omitempty" yaml:"path,omitempty"`
 	// Indicate the request method. The default method is POST.
 	Method string `json:"method,omitempty" yaml:"method,omitempty" jsonschema:"enum=GET,enum=POST,default=POST"`
 	// The configuration to transform request headers.

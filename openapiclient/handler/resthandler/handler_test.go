@@ -51,7 +51,7 @@ func TestRESTHandler_Properties(t *testing.T) {
 			name: "handler with POST method and custom path",
 			handler: &RESTfulHandler{
 				customRequest: &customRESTRequest{
-					URL:    "/custom/path",
+					Path:   "/custom/path",
 					Method: "POST",
 				},
 			},
@@ -63,7 +63,7 @@ func TestRESTHandler_Properties(t *testing.T) {
 			name: "handler with PUT method",
 			handler: &RESTfulHandler{
 				customRequest: &customRESTRequest{
-					URL:    "/api/resource",
+					Path:   "/api/resource",
 					Method: "PUT",
 				},
 			},
@@ -81,7 +81,7 @@ func TestRESTHandler_Properties(t *testing.T) {
 
 			assert.Equal(t, ProxyActionTypeREST, tc.handler.Type())
 			if tc.expectedPath != "" {
-				assert.Equal(t, tc.expectedPath, tc.handler.customRequest.URL)
+				assert.Equal(t, tc.expectedPath, tc.handler.customRequest.Path)
 			}
 		})
 	}
@@ -164,7 +164,7 @@ func TestHandle_WithCustomRequestURL(t *testing.T) {
 
 	handler := &RESTfulHandler{
 		customRequest: &customRESTRequest{
-			URL:    "/overridden/path",
+			Path:   "/overridden/path",
 			Method: http.MethodPost,
 		},
 	}
