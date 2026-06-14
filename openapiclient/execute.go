@@ -38,10 +38,16 @@ func (pc *ProxyClient) Execute(
 	header http.Header,
 	body any,
 ) (*http.Response, any, error) {
-	requestURL, err := goutils.ParsePathOrHTTPURL(requestPath)
+	requestURL, err := goutils.ParseRelativeURI(requestPath)
 	if err != nil {
 		respErr := httperror.NewBadRequestError()
-		respErr.Detail = err.Error()
+
+		ve, ok := errors.AsType[*httperror.ValidationError](err)
+		if ok {
+			respErr.Errors = []httperror.ValidationError{*ve}
+		} else {
+			respErr.Detail = err.Error()
+		}
 
 		return nil, nil, respErr
 	}

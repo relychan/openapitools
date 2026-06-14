@@ -164,7 +164,7 @@ func TestHandle_WithCustomRequestURL(t *testing.T) {
 
 	handler := &RESTfulHandler{
 		customRequest: &customRESTRequest{
-			URL:    server.URL + "/overridden/path",
+			URL:    "/overridden/path",
 			Method: http.MethodPost,
 		},
 	}

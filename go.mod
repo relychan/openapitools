@@ -10,10 +10,10 @@ require (
 	github.com/hasura/goenvconf v0.7.0
 	github.com/hasura/gotel v0.8.1
 	github.com/jmespath-community/go-jmespath v1.1.2-0.20250228093220-ef5fae83c6c0
-	github.com/pb33f/libopenapi v0.37.3
-	github.com/relychan/gohttpc v0.0.0-20260531030038-6fc91e67f25f
+	github.com/pb33f/libopenapi v0.38.0
+	github.com/relychan/gohttpc v0.0.0-20260614074723-2b795d7950c8
 	github.com/relychan/gotransform v0.0.0-20260404192235-bcef8d71746d
-	github.com/relychan/goutils v0.0.0-20260611084653-88c610d171e5
+	github.com/relychan/goutils v0.0.0-20260614100657-a30e947facc0
 	github.com/samber/lo v1.53.0
 	github.com/stretchr/testify v1.11.1
 	github.com/vektah/gqlparser/v2 v2.5.34
@@ -71,7 +71,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.44.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
-	golang.org/x/exp v0.0.0-20260603202125-055de637280b // indirect
+	golang.org/x/exp v0.0.0-20260611194520-c48552f49976 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect

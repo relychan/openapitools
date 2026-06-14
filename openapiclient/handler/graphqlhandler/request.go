@@ -220,7 +220,7 @@ func (ge *GraphQLHandler) prepareRequestGET(
 	req *gohttpc.RequestWithClient,
 	graphqlPayload *GraphQLRequestBody,
 ) (*gohttpc.RequestWithClient, error) {
-	reqURL, err := goutils.ParsePathOrHTTPURL(ge.url)
+	reqURL, err := goutils.ParseRelativeURI(ge.url)
 	if err != nil {
 		respErr := httperror.NewServerError(httperror.ValidationError{
 			Detail:  err.Error(),

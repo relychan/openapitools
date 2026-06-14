@@ -444,7 +444,7 @@ paths:
 	require.NoError(t, err)
 
 	_, _, err = client.Execute(context.TODO(), http.MethodGet, "/a/fishy/on/a/dishy?fishy=12/25/2024", nil, nil)
-	require.ErrorContains(t, err, "invalid date format: 12/25/2024")
+	require.ErrorContains(t, err, `invalid date format: "12/25/2024"`)
 }
 
 func TestExecute_QueryParamInvalidTypeArrayStringEnum(t *testing.T) {
@@ -833,7 +833,7 @@ paths:
 	client, err := NewProxyClient(context.TODO(), config)
 	require.NoError(t, err)
 
-	_, _, err = client.Execute(context.TODO(), http.MethodGet, "https://things.com/a/fishy/on/a/dishy?fishy[ocean]=atlantic&fishy[salt]=12"+
+	_, _, err = client.Execute(context.TODO(), http.MethodGet, "/a/fishy/on/a/dishy?fishy[ocean]=atlantic&fishy[salt]=12"+
 		"&dishy[size]=big&dishy[numCracks]=false"+
 		"&cake[message]=happy%20birthday&cake[numCandles]=false", nil, nil)
 	herr, _ := errors.AsType[*httperror.HTTPError](err)

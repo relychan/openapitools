@@ -235,7 +235,7 @@ func (pc *ProxyClient) initServer(
 
 	rawWeight, exist := server.Extensions.Get(oaschema.XRelyServerWeight)
 	if exist && rawWeight != nil {
-		var weight int
+		var weight int32
 
 		err := rawWeight.Decode(&weight)
 		if err != nil {

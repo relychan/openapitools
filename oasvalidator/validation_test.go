@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/pb33f/libopenapi"
+	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -496,6 +497,7 @@ components:
 
 	expectedErrors := []httperror.ValidationError{
 		{
+			Code:    goutils.ErrCodeInvalidEmail,
 			Detail:  "Invalid email; @ character must exist",
 			Pointer: "/email",
 		},

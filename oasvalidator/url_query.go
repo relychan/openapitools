@@ -26,14 +26,20 @@ func ReplaceURLTemplate(input string, get goenvconf.GetEnvFunc) (string, error) 
 		return "", nil
 	}
 
+	openBracketIndex := strings.IndexRune(input, '{')
+	if openBracketIndex == -1 {
+		return input, nil
+	}
+
 	var (
 		sb        strings.Builder
 		inBracket bool
-		i         int
+		i         = openBracketIndex
 	)
 
 	strLength := len(input)
 	sb.Grow(strLength)
+	sb.WriteString(input[:openBracketIndex])
 
 	for ; i < strLength; i++ {
 		char := input[i]
@@ -66,6 +72,11 @@ func ReplaceURLTemplate(input string, get goenvconf.GetEnvFunc) (string, error) 
 			return "", errUnclosedTemplateString
 		}
 
+		envName := input[i:j]
+		if envName == "" {
+			return "", errInvalidURLTemplateSyntax
+		}
+
 		value, err := get(input[i:j])
 		if err != nil {
 			return "", err
@@ -80,5 +91,7 @@ func ReplaceURLTemplate(input string, get goenvconf.GetEnvFunc) (string, error) 
 		return "", errUnclosedTemplateString
 	}
 
-	return sb.String(), nil
+	result := sb.String()
+
+	return result, nil
 }

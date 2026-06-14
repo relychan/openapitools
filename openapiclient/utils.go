@@ -20,7 +20,6 @@ import (
 	"html"
 	"net/http"
 	"slices"
-	"strings"
 
 	"github.com/hasura/goenvconf"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
@@ -60,9 +59,7 @@ func writeErrorResponse(writer http.ResponseWriter, status int, err error) {
 
 // parse server url from static string or environment variables.
 func parseServerURL(server *highv3.Server, getEnv goenvconf.GetEnvFunc) (string, error) {
-	rawServerURL := strings.TrimSpace(server.URL)
-
-	return oasvalidator.ReplaceURLTemplate(rawServerURL, func(s string) (string, error) {
+	serverURL, err := oasvalidator.ReplaceURLTemplate(server.URL, func(s string) (string, error) {
 		var variable *highv3.ServerVariable
 
 		envVar := goenvconf.NewEnvStringVariable(s)
@@ -90,6 +87,11 @@ func parseServerURL(server *highv3.Server, getEnv goenvconf.GetEnvFunc) (string,
 
 		return part, nil
 	})
+	if err != nil {
+		return "", err
+	}
+
+	return serverURL, nil
 }
 
 func parseHTTPRequestBody(

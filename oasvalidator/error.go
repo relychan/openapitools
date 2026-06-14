@@ -27,9 +27,10 @@ import (
 
 var (
 	// ErrInvalidContentType occurs when the content type string is invalid.
-	ErrInvalidContentType     = errors.New("invalid content type")
-	errUnclosedTemplateString = errors.New("expected a closed curly bracket")
-	errInvalidIntegerString   = errors.New("the value is not a valid integer")
+	ErrInvalidContentType       = errors.New("invalid content type")
+	errUnclosedTemplateString   = errors.New("expected a closed curly bracket")
+	errInvalidURLTemplateSyntax = errors.New("invalid URL template syntax")
+	errInvalidIntegerString     = errors.New("the value is not a valid integer")
 )
 
 const (
