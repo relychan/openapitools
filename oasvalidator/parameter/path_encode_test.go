@@ -328,6 +328,17 @@ func TestEncodingURLPathParam(t *testing.T) {
 				";role=admin;firstName=Alex",
 			},
 		},
+		{
+			name:  "escaped",
+			value: "thesauri/material/AAT.11914",
+			encoding: &oaschema.Parameter{
+				Name:    "id",
+				In:      oaschema.InPath,
+				Explode: new(false),
+				Style:   new(oaschema.EncodingStyleSimple),
+			},
+			expected: []string{"thesauri%2Fmaterial%2FAAT.11914"},
+		},
 	}
 
 	for _, tc := range testCases {

@@ -137,7 +137,7 @@ func (ge *GraphQLHandler) handleTransformResponse(
 // writeTransformResponse is the streaming counterpart of handleTransformResponse: it evaluates
 // GraphQL errors, writes error or success payloads directly to the ResponseWriter, and applies
 // any configured body transformation before writing the final content-typed response.
-func (ge *GraphQLHandler) writeTransformResponse(
+func (ge *GraphQLHandler) writeTransformResponse( //nolint:funlen
 	ctx context.Context,
 	resp *http.Response,
 	writer http.ResponseWriter,
@@ -148,8 +148,6 @@ func (ge *GraphQLHandler) writeTransformResponse(
 		trace.WithSpanKind(trace.SpanKindInternal),
 	)
 	defer span.End()
-
-	var responseBody any
 
 	status, rawBody, gqlError := ge.evaluateGraphQLError(resp)
 	if gqlError != nil {
@@ -184,8 +182,14 @@ func (ge *GraphQLHandler) writeTransformResponse(
 		return nil, nil
 	}
 
+	contentType := ge.customResponse.ContentType
+	if contentType == "" {
+		contentType = httpheader.ContentTypeJSON
+	}
+
 	if ge.customResponse.Body == nil || ge.customResponse.Body.IsZero() {
-		writer.Header()[httpheader.ContentType] = []string{ge.responseContentType}
+		writer.Header()[httpheader.ContentType] = []string{contentType}
+		writer.WriteHeader(resp.StatusCode)
 
 		_, err := writer.Write(rawBody)
 		if err != nil {
@@ -202,6 +206,8 @@ func (ge *GraphQLHandler) writeTransformResponse(
 
 		return nil, nil
 	}
+
+	var responseBody any
 
 	err := json.Unmarshal(rawBody, &responseBody)
 	if err != nil {
@@ -225,9 +231,10 @@ func (ge *GraphQLHandler) writeTransformResponse(
 		)
 	}
 
-	writer.Header()[httpheader.ContentType] = []string{ge.responseContentType}
+	writer.Header()[httpheader.ContentType] = []string{contentType}
+	writer.WriteHeader(resp.StatusCode)
 
-	_, err = contentencoder.Write(writer, ge.responseContentType, transformedBody)
+	_, err = contentencoder.Write(writer, contentType, transformedBody, nil)
 	if err != nil {
 		span.SetStatus(codes.Error, "failed to write response body")
 		span.RecordError(err)

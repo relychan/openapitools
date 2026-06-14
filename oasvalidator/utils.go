@@ -24,17 +24,6 @@ import (
 	"github.com/relychan/goutils/httpheader"
 )
 
-// EqualContentType checks if both content type are equal with parameters excluded.
-func EqualContentType(left, right string) bool {
-	leftMediaType, _, _ := strings.Cut(left, ";")
-	rightMediaType, _, _ := strings.Cut(right, ";")
-
-	return strings.EqualFold(
-		strings.TrimSpace(leftMediaType),
-		strings.TrimSpace(rightMediaType),
-	)
-}
-
 // ValidateContentType validates the content type and prefer the application/json content type
 // if the content type string has many content types.
 func ValidateContentType(contentType string) (string, error) {

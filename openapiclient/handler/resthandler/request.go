@@ -19,7 +19,6 @@ import (
 	"errors"
 	"io"
 	"net/url"
-	"strings"
 
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils"
@@ -55,12 +54,8 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	request *proxyhandler.Request,
 	options *proxyhandler.ProxyHandleOptions,
 ) (*gohttpc.RequestWithClient, error) {
-	requestPath := request.URL()
+	requestPath := request.Path()
 	method := request.Method()
-
-	if re.customRequest.URL != "" {
-		requestPath = re.customRequest.URL
-	}
 
 	if re.customRequest.Method != "" {
 		method = re.customRequest.Method
@@ -69,16 +64,30 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	rawRequestData := request.ToMap()
 	hasQueryParam := false
 
-	resolvedRequestPath, queryValues, err := re.evaluateRequestPath(
-		requestPath,
-		request,
-		rawRequestData,
-	)
-	if err != nil {
-		return nil, err
+	var resolvedRequestURL *url.URL
+
+	if re.customRequest.Path != "" {
+		resolvedRequestPath, err := re.evaluateRequestPath(
+			re.customRequest.Path,
+			request,
+			rawRequestData,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		resolvedRequestURL, err = goutils.ParseRelativeURI(resolvedRequestPath)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		resolvedRequestURL = &url.URL{
+			Path: requestPath,
+		}
 	}
 
-	req := options.NewRequest(method, resolvedRequestPath)
+	req := options.NewRequest(method, resolvedRequestURL.Path)
+	queryValues := resolvedRequestURL.Query()
 
 	for _, param := range re.customRequest.Parameters {
 		switch param.In {
@@ -139,22 +148,13 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	}
 
 	if len(queryValues) > 0 {
-		requestURL, err := goutils.ParsePathOrHTTPURL(resolvedRequestPath)
-		if err != nil {
-			respErr := httperror.NewBadRequestError(httperror.ValidationError{
-				Code:   oasvalidator.ErrCodeInvalidRequestURL,
-				Detail: err.Error(),
-			})
-			respErr.Detail = "failed to parse request URL"
-
-			return nil, respErr
-		}
-
-		requestURL.RawQuery = parameter.EncodeQueryValuesUnescape(queryValues)
-		req.SetURL(requestURL.String())
+		resolvedRequestURL.RawQuery = parameter.EncodeQueryValuesUnescape(queryValues)
+		req.SetURL(resolvedRequestURL.String())
 	}
 
 	newBody := request.Body()
+
+	var err error
 
 	if re.customRequest.Body != nil {
 		newBody, err = re.customRequest.Body.Transform(rawRequestData)
@@ -176,7 +176,7 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 	if ok && reader != nil {
 		req.SetBody(reader)
 	} else {
-		newBodyBytes, err := contentencoder.Encode(contentType, newBody)
+		newBodyBytes, err := contentencoder.Encode(contentType, newBody, re.request)
 		if err != nil {
 			errDetail, ok := errors.AsType[*httperror.ValidationError](err)
 			if !ok {
@@ -200,8 +200,8 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 
 // Get the destined content type, fallback to application/json if it does not exist.
 func (re *RESTfulHandler) getDestinedContentType(request *proxyhandler.Request) string {
-	if re.requestContentType != "" {
-		return re.requestContentType
+	if re.request != nil && re.request.ContentType != "" {
+		return re.request.ContentType
 	}
 
 	contentType := httpheader.GetHeaderValue(request.Header(), httpheader.ContentType)
@@ -216,12 +216,8 @@ func (re *RESTfulHandler) evaluateRequestPath(
 	requestPath string,
 	request *proxyhandler.Request,
 	rawRequestData map[string]any,
-) (string, url.Values, error) {
-	if requestPath == "" {
-		return "", url.Values{}, nil
-	}
-
-	newRequestPath, err := oasvalidator.ReplaceURLTemplate(
+) (string, error) {
+	return oasvalidator.ReplaceURLTemplate(
 		requestPath,
 		func(key string) (string, error) {
 			for _, param := range re.customRequest.Parameters {
@@ -260,37 +256,4 @@ func (re *RESTfulHandler) evaluateRequestPath(
 
 			return "", respErr
 		})
-	if err != nil {
-		return "", nil, err
-	}
-
-	return extractQueryValuesFromPath(newRequestPath)
-}
-
-func extractQueryValuesFromPath(
-	newRequestPath string,
-) (string, url.Values, error) {
-	u, query, _ := strings.Cut(newRequestPath, "?")
-	if query == "" {
-		return newRequestPath, url.Values{}, nil
-	}
-
-	query, fragment, _ := strings.Cut(query, "#")
-
-	q, err := url.ParseQuery(query)
-	if err != nil {
-		respErr := httperror.NewBadRequestError(httperror.ValidationError{
-			Detail: err.Error(),
-			Code:   oasvalidator.ErrCodeInvalidRequestURL,
-		})
-		respErr.Detail = "invalid query params"
-
-		return "", nil, respErr
-	}
-
-	if fragment != "" {
-		u += "#" + fragment
-	}
-
-	return u, q, nil
 }

@@ -848,6 +848,10 @@
     "healthCheck": {
      "$ref": "#/$defs/HealthCheckConfig",
      "description": "HealthCheck define the health check policy for load balancer recovery."
+    },
+    "strict": {
+     "type": "boolean",
+     "description": "Enable or disable the strict validation mode."
     }
    },
    "additionalProperties": false,
@@ -928,6 +932,11 @@
   },
   "ProxyCustomGraphQLResponseConfig": {
    "properties": {
+    "contentType": {
+     "type": "string",
+     "pattern": "^((text/[a-z]+)|(application/json))$",
+     "description": "Content type of the response to be transformed to. Default is application/json."
+    },
     "httpErrorCode": {
      "type": "integer",
      "maximum": 599,
@@ -1056,9 +1065,9 @@
   },
   "ProxyGraphQLRequestConfig": {
    "properties": {
-    "url": {
+    "path": {
      "type": "string",
-     "description": "Overrides the request URL. Use the original request path if empty."
+     "description": "Overrides the request path. Use the original request path if empty."
     },
     "method": {
      "type": "string",
@@ -1176,9 +1185,9 @@
   },
   "ProxyRESTfulRequestConfig": {
    "properties": {
-    "url": {
+    "path": {
      "type": "string",
-     "description": "Overrides the request URL. Use the original request path if empty."
+     "description": "Overrides the request path. Use the original request path if empty."
     },
     "method": {
      "type": "string",

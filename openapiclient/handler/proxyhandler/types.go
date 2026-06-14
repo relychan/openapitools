@@ -78,8 +78,6 @@ type Request struct {
 	headerParams map[string]any
 	// Evaluated cookies of the request.
 	cookieParams map[string]any
-	// URL fragment.
-	fragment string
 }
 
 // NewRequest creates a new [Request] instance.
@@ -100,7 +98,6 @@ func NewRequest(method string, uri *url.URL, headers http.Header, body any) *Req
 		}
 
 		result.path = uriPath
-		result.fragment = uri.RawFragment
 		result.query = uri.Query()
 	}
 
@@ -121,7 +118,7 @@ func (r *Request) SetMethod(method string) {
 func (r *Request) URL() string {
 	result := r.path
 
-	if len(r.query) == 0 && r.fragment == "" {
+	if len(r.query) == 0 {
 		return r.path
 	}
 
@@ -132,11 +129,6 @@ func (r *Request) URL() string {
 	if len(r.query) > 0 {
 		sb.WriteByte('?')
 		sb.WriteString(r.query.Encode())
-	}
-
-	if r.fragment != "" {
-		sb.WriteByte('#')
-		sb.WriteString(r.fragment)
 	}
 
 	return sb.String()

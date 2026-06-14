@@ -53,6 +53,8 @@ func (conf ProxyCustomRESTfulResponseConfig) IsZero() bool {
 }
 
 type customRESTResponse struct {
+	// Content type of the response to be transformed to.
+	ContentType string
 	// Configurations for transforming response body data.
 	Body gotransform.TemplateTransformer
 }
@@ -73,6 +75,17 @@ func newCustomRESTResponse(
 
 	result := &customRESTResponse{
 		Body: transformer,
+	}
+
+	if config.ContentType != "" {
+		result.ContentType, err = oasvalidator.ValidateContentType(config.ContentType)
+		if err != nil {
+			return nil, &httperror.ValidationError{
+				Detail:  err.Error() + " " + config.ContentType,
+				Pointer: "/contentType",
+				Code:    oasvalidator.ErrCodeProxyRESTfulResponseConfig,
+			}
+		}
 	}
 
 	return result, nil
@@ -97,8 +110,8 @@ type ProxyRESTfulParameter struct {
 
 // ProxyRESTfulRequestConfig represents configurations for the proxy request.
 type ProxyRESTfulRequestConfig struct {
-	// Overrides the request URL. Use the original request path if empty.
-	URL string `json:"url,omitempty" yaml:"url,omitempty"`
+	// Overrides the request path. Use the original request path if empty.
+	Path string `json:"path,omitempty" yaml:"path,omitempty"`
 	// Overrides the request method. Use the original request method if empty.
 	Method string `json:"method,omitempty" jsonschema:"enum=GET,enum=POST,enum=PATCH,enum=PUT,enum=DELETE" yaml:"method,omitempty"`
 	// The configuration to transform query, path, header and cookie parameters.
@@ -114,7 +127,7 @@ type ProxyRESTfulRequestConfig struct {
 
 // IsZero checks if the configuration is empty.
 func (rr ProxyRESTfulRequestConfig) IsZero() bool {
-	return rr.URL == "" &&
+	return rr.Path == "" &&
 		rr.Method == "" &&
 		len(rr.Parameters) == 0 &&
 		(rr.Body == nil || rr.Body.IsZero()) &&
@@ -122,7 +135,7 @@ func (rr ProxyRESTfulRequestConfig) IsZero() bool {
 }
 
 type customRESTRequest struct {
-	URL                   string
+	Path                  string
 	Method                string
 	Parameters            []ProxyRESTfulParameter
 	Body                  gotransform.TemplateTransformer
@@ -131,7 +144,7 @@ type customRESTRequest struct {
 
 // IsZero checks if the configuration is empty.
 func (rr customRESTRequest) IsZero() bool {
-	return rr.URL == "" &&
+	return rr.Path == "" &&
 		rr.Method == "" &&
 		len(rr.Parameters) == 0 &&
 		(rr.Body == nil || rr.Body.IsZero()) &&
@@ -147,7 +160,7 @@ func newCustomRESTRequestFromConfig(
 	}
 
 	result := &customRESTRequest{
-		URL:                   conf.URL,
+		Path:                  conf.Path,
 		Method:                conf.Method,
 		ForwardAllQueryParams: conf.ForwardAllQueryParams,
 		Parameters:            make([]ProxyRESTfulParameter, len(conf.Parameters)),
@@ -213,30 +226,6 @@ func parseRequestContentType(
 			Detail:  err.Error() + " " + conf.ContentType,
 			Pointer: "/contentType",
 			Code:    oasvalidator.ErrCodeInvalidRESTfulRequestConfig,
-		}
-	}
-
-	return result, nil
-}
-
-func parseResponseContentType(
-	operation *oaschema.Operation,
-	conf *ProxyCustomRESTfulResponseConfig,
-) (string, error) {
-	var contentType string
-
-	if conf != nil && conf.ContentType != "" {
-		contentType = conf.ContentType
-	} else {
-		contentType = oaschema.GetResponseContentType(operation.Responses)
-	}
-
-	result, err := oasvalidator.ValidateContentType(contentType)
-	if err != nil {
-		return "", &httperror.ValidationError{
-			Detail:  err.Error() + " " + contentType,
-			Pointer: "/contentType",
-			Code:    oasvalidator.ErrCodeProxyRESTfulResponseConfig,
 		}
 	}
 

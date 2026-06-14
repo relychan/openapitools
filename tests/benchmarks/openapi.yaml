@@ -11,13 +11,13 @@ spec:
         x-rely-proxy-action:
           type: graphql
           request:
-            url: /graphql
+            path: /graphql
             method: GET
             query: query GetUsers { users { id }}
       post:
         x-rely-proxy-action:
           type: graphql
           request:
-            url: /graphql
+            path: /graphql
             method: POST
             query: query GetUsers { users { id }}

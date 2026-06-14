@@ -43,7 +43,9 @@ func validateFormat(value string, format string) *httperror.ValidationError {
 	case "date-time":
 		return goutils.ValidateDateTime(value)
 	case "uri":
-		return goutils.ValidateURI(value)
+		return goutils.ValidateAbsoluteURI(value)
+	case "url":
+		return goutils.ValidateAbsoluteURL(value)
 	case "semver":
 		return validateSemver(value)
 	default:

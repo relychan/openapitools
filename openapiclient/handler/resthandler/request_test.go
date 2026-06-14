@@ -24,6 +24,8 @@ import (
 
 	"github.com/jmespath-community/go-jmespath"
 	"github.com/relychan/gohttpc"
+	"github.com/relychan/gohttpc/loadbalancer"
+	"github.com/relychan/gohttpc/loadbalancer/roundrobin"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
@@ -33,7 +35,17 @@ import (
 
 // newTestRequestFunc creates a NewRequestFunc backed by a real gohttpc client.
 func newTestRequestFunc(baseURL string) proxyhandler.NewRequestFunc {
-	client := gohttpc.NewClient()
+	host, err := loadbalancer.NewHost(http.DefaultClient, baseURL)
+	if err != nil {
+		panic(err)
+	}
+
+	wrr, err := roundrobin.NewWeightedRoundRobin([]*loadbalancer.Host{host})
+	if err != nil {
+		panic(err)
+	}
+
+	client := loadbalancer.NewLoadBalancerClient(wrr)
 
 	return func(method string, uri string) *gohttpc.RequestWithClient {
 		target := uri
@@ -81,7 +93,7 @@ func TestEvaluateRequestPath(t *testing.T) {
 		"postId": "2",
 	})
 
-	uri, _, err := input.evaluateRequestPath(
+	uri, err := input.evaluateRequestPath(
 		"https://localhost:8080/users/{id}/posts/{postId}",
 		req,
 		map[string]any{},
@@ -90,42 +102,13 @@ func TestEvaluateRequestPath(t *testing.T) {
 	assert.Equal(t, "https://localhost:8080/users/1/posts/2", uri)
 }
 
-func TestExtractQueryValuesFromPath(t *testing.T) {
-	t.Run("no_query", func(t *testing.T) {
-		path, values, err := extractQueryValuesFromPath("/users/1")
-		require.NoError(t, err)
-		assert.Equal(t, "/users/1", path)
-		assert.Empty(t, values)
-	})
-
-	t.Run("with_query", func(t *testing.T) {
-		path, values, err := extractQueryValuesFromPath("/users?limit=10&offset=0")
-		require.NoError(t, err)
-		assert.Equal(t, "/users", path)
-		assert.Equal(t, "10", values.Get("limit"))
-		assert.Equal(t, "0", values.Get("offset"))
-	})
-
-	t.Run("with_fragment", func(t *testing.T) {
-		path, values, err := extractQueryValuesFromPath("/users?limit=5#section")
-		require.NoError(t, err)
-		assert.Equal(t, "/users#section", path)
-		assert.Equal(t, "5", values.Get("limit"))
-	})
-
-	t.Run("empty_path", func(t *testing.T) {
-		path, values, err := extractQueryValuesFromPath("")
-		require.NoError(t, err)
-		assert.Equal(t, "", path)
-		assert.Empty(t, values)
-	})
-}
-
 // ---- getDestinedContentType ----
 
 func TestGetDestinedContentType(t *testing.T) {
 	t.Run("uses_handler_content_type", func(t *testing.T) {
-		handler := &RESTfulHandler{requestContentType: "application/xml"}
+		handler := &RESTfulHandler{request: &oaschema.MediaType{
+			ContentType: "application/xml",
+		}}
 		req := newRESTRequest(http.MethodPost, "/", nil)
 		assert.Equal(t, "application/xml", handler.getDestinedContentType(req))
 	})
@@ -150,22 +133,20 @@ func TestGetDestinedContentType(t *testing.T) {
 
 func TestEvaluateRequestPath_EmptyPath(t *testing.T) {
 	handler := &RESTfulHandler{customRequest: &customRESTRequest{}}
-	path, values, err := handler.evaluateRequestPath("", &proxyhandler.Request{}, map[string]any{})
+	path, err := handler.evaluateRequestPath("", &proxyhandler.Request{}, map[string]any{})
 	require.NoError(t, err)
 	assert.Equal(t, "", path)
-	assert.Empty(t, values)
 }
 
 func TestEvaluateRequestPath_StaticPath(t *testing.T) {
 	handler := &RESTfulHandler{customRequest: &customRESTRequest{}}
-	path, values, err := handler.evaluateRequestPath(
+	path, err := handler.evaluateRequestPath(
 		"/users",
 		&proxyhandler.Request{},
 		map[string]any{},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, "/users", path)
-	assert.Empty(t, values)
 }
 
 func TestEvaluateRequestPath_WithParams(t *testing.T) {
@@ -174,7 +155,7 @@ func TestEvaluateRequestPath_WithParams(t *testing.T) {
 	req := &proxyhandler.Request{}
 	req.SetURLParams(map[string]any{"id": "42", "postId": "7"})
 
-	path, _, err := handler.evaluateRequestPath(
+	path, err := handler.evaluateRequestPath(
 		"/users/{id}/posts/{postId}",
 		req,
 		map[string]any{},
@@ -185,7 +166,7 @@ func TestEvaluateRequestPath_WithParams(t *testing.T) {
 
 func TestEvaluateRequestPath_MissingParam(t *testing.T) {
 	handler := &RESTfulHandler{customRequest: &customRESTRequest{}}
-	_, _, err := handler.evaluateRequestPath(
+	_, err := handler.evaluateRequestPath(
 		"/users/{id}",
 		&proxyhandler.Request{},
 		map[string]any{},
@@ -213,7 +194,7 @@ func TestEvaluateRequestPath_ParamFromCustomParameters(t *testing.T) {
 	req := &proxyhandler.Request{}
 	req.SetURLParams(map[string]any{"userId": "99"})
 
-	path, _, err := handler.evaluateRequestPath(
+	path, err := handler.evaluateRequestPath(
 		"/users/{id}",
 		req,
 		map[string]any{
@@ -264,7 +245,7 @@ func TestPrepareRequest_ZeroCustomRequest(t *testing.T) {
 func TestTransformRequest_OverridesURLAndMethod(t *testing.T) {
 	handler := &RESTfulHandler{
 		customRequest: &customRESTRequest{
-			URL:    "/new/path",
+			Path:   "/new/path",
 			Method: http.MethodPut,
 		},
 	}
@@ -336,7 +317,7 @@ func TestTransformRequest_ForwardsAllQueryParams(t *testing.T) {
 	forwardAll := true
 	handler := &RESTfulHandler{
 		customRequest: &customRESTRequest{
-			URL:                   "/proxy",
+			Path:                  "/proxy",
 			ForwardAllQueryParams: &forwardAll,
 		},
 	}
@@ -355,7 +336,7 @@ func TestTransformRequest_DoesNotForwardQueryParamsWhenDisabled(t *testing.T) {
 	forwardAll := false
 	handler := &RESTfulHandler{
 		customRequest: &customRESTRequest{
-			URL:                   "/proxy",
+			Path:                  "/proxy",
 			ForwardAllQueryParams: &forwardAll,
 		},
 	}
@@ -371,9 +352,11 @@ func TestTransformRequest_DoesNotForwardQueryParamsWhenDisabled(t *testing.T) {
 
 func TestTransformRequest_WithJSONBody(t *testing.T) {
 	handler := &RESTfulHandler{
-		requestContentType: "application/json",
+		request: &oaschema.MediaType{
+			ContentType: "application/json",
+		},
 		customRequest: &customRESTRequest{
-			URL: "/api/users",
+			Path: "/api/users",
 		},
 	}
 
@@ -388,9 +371,11 @@ func TestTransformRequest_WithJSONBody(t *testing.T) {
 
 func TestTransformRequest_WithReaderBody(t *testing.T) {
 	handler := &RESTfulHandler{
-		requestContentType: "application/json",
+		request: &oaschema.MediaType{
+			ContentType: "application/json",
+		},
 		customRequest: &customRESTRequest{
-			URL: "/api/data",
+			Path: "/api/data",
 		},
 	}
 

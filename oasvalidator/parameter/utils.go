@@ -27,11 +27,16 @@ import (
 
 // EncodeQueryEscape encodes the values into “URL encoded” form ("bar=baz&foo=quux") sorted by key with escape.
 func EncodeQueryEscape(value string, allowReserved bool) string { //nolint:revive,nolintlint
+	return GetQueryEscapeFunc(allowReserved)(value)
+}
+
+// GetQueryEscapeFunc returns either query escape or allow-reserved encoder function.
+func GetQueryEscapeFunc(allowReserved bool) func(string) string {
 	if allowReserved {
-		return QueryEscapeAllowReserved(value)
+		return QueryEscapeAllowReserved
 	}
 
-	return url.QueryEscape(value)
+	return url.QueryEscape
 }
 
 // EncodeQueryValuesUnescape encode query values into “URL encoded” form ("bar=baz&foo=quux") sorted by key without escape.
@@ -272,10 +277,11 @@ func evaluateParameterValueReflection(
 // EncodeParamDelimitedStyleNonExplode encodes ampersand-separated values with explode=false.
 func EncodeParamDelimitedStyleNonExplode(
 	params ParameterItems,
-	separator byte,
-	assignSymbol byte,
+	separator string,
+	assignSymbol string,
+	formatFunc func(string) string,
 ) string {
-	builtParams, count := params.Build("", false)
+	builtParams, count := params.Build("", false, formatFunc)
 	if len(builtParams) == 0 {
 		return ""
 	}
@@ -294,8 +300,8 @@ func EncodeParamDelimitedStyleNonExplode(
 func buildParamDelimitedStyleNonExplode(
 	sb *strings.Builder,
 	builtParams map[string][]string,
-	separator byte,
-	assignSymbol byte,
+	separator string,
+	assignSymbol string,
 ) {
 	first := true
 	keys := goutils.GetSortedKeys(builtParams)
@@ -304,7 +310,7 @@ func buildParamDelimitedStyleNonExplode(
 		values := builtParams[key]
 
 		if !first {
-			sb.WriteByte(separator)
+			sb.WriteString(separator)
 		} else {
 			first = false
 		}
@@ -313,7 +319,7 @@ func buildParamDelimitedStyleNonExplode(
 			// /users?id=3,4,5
 			for j, value := range values {
 				if j > 0 {
-					sb.WriteByte(separator)
+					sb.WriteString(separator)
 				}
 
 				sb.WriteString(value)
@@ -325,11 +331,11 @@ func buildParamDelimitedStyleNonExplode(
 		// Nested fields are flattened.
 		// /users?id=role,admin,firstName,Alex
 		sb.WriteString(key)
-		sb.WriteByte(assignSymbol)
+		sb.WriteString(assignSymbol)
 
 		for i, value := range values {
 			if i > 0 {
-				sb.WriteByte(separator)
+				sb.WriteString(separator)
 			}
 
 			sb.WriteString(value)
@@ -581,4 +587,20 @@ func splitArrayParams(rawValues []string) []string {
 	}
 
 	return slices.Clip(results)
+}
+
+// encodeParamWithSimpleStyle serializes items using the OpenAPI simple style.
+// With explode=true object properties use '=' as the key/value separator (key=value,key=value);
+// without explode both keys and values are comma-separated (key,value,key,value).
+func encodeParamWithSimpleStyle(
+	items ParameterItems,
+	explode bool,
+	formatFunc func(string) string,
+) string {
+	assignSymbol := oaschema.Comma
+	if explode {
+		assignSymbol = oaschema.Equals
+	}
+
+	return EncodeParamDelimitedStyleNonExplode(items, oaschema.Comma, assignSymbol, formatFunc)
 }
