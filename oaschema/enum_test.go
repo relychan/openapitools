@@ -18,8 +18,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/pb33f/go-yaml"
 	"github.com/stretchr/testify/assert"
-	"go.yaml.in/yaml/v4"
 )
 
 func TestParseSecuritySchemeType(t *testing.T) {

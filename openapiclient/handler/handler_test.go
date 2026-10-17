@@ -17,13 +17,13 @@ package handler
 import (
 	"testing"
 
+	"github.com/pb33f/go-yaml"
 	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/graphqlhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler"
 	"github.com/stretchr/testify/assert"
-	"go.yaml.in/yaml/v4"
 )
 
 func TestNewProxyHandler(t *testing.T) {

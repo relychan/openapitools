@@ -613,7 +613,7 @@ paths:
                                 type: string
                                 maximum: 0
                                 minimum: 0
-                                format: string
+                                format: date-time
                         X-Rate-Limit:
                             description: calls per hour allowed by the user
                             schema:
@@ -622,7 +622,7 @@ paths:
                                 type: integer
                                 maximum: 0
                                 minimum: 0
-                                format: integer
+                                format: int32
                     content:
                         application/json:
                             schema:

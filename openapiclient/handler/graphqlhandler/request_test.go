@@ -23,13 +23,13 @@ import (
 	"testing"
 
 	"github.com/jmespath-community/go-jmespath"
+	"github.com/pb33f/go-yaml"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator/parameter"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/stretchr/testify/assert"
 	"github.com/vektah/gqlparser/v2/ast"
-	"go.yaml.in/yaml/v4"
 )
 
 func TestTransformRequest(t *testing.T) {

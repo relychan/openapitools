@@ -21,12 +21,12 @@ import (
 	"io"
 	"strings"
 
+	"github.com/pb33f/go-yaml"
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/overlay"
 	"github.com/relychan/goutils"
-	"go.yaml.in/yaml/v4"
 )
 
 // OpenAPIResourceDefinition defines fields of an OpenAPI resource.

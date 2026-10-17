@@ -20,7 +20,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"go.yaml.in/yaml/v4"
+	"github.com/pb33f/go-yaml"
 )
 
 // EncodeBinary encodes the arbitrary value to bytes for binary content type.

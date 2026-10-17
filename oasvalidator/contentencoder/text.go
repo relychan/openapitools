@@ -20,8 +20,8 @@ import (
 	"encoding/json"
 	"io"
 
+	"github.com/pb33f/go-yaml"
 	"github.com/relychan/goutils"
-	"go.yaml.in/yaml/v4"
 )
 
 // EncodeText encodes the arbitrary value to text for text/xxx content type.

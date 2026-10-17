@@ -17,6 +17,8 @@ linters:
     - recvcheck
     - gomodguard
     - goconst
+    - nonamedreturns
+    - exhaustruct_v5
   settings:
     depguard:
       rules:

@@ -17,11 +17,11 @@ package oaschema
 import (
 	"context"
 
+	"github.com/pb33f/go-yaml"
 	highoverlay "github.com/pb33f/libopenapi/datamodel/high/overlay"
 	"github.com/pb33f/libopenapi/datamodel/low"
 	lowoverlay "github.com/pb33f/libopenapi/datamodel/low/overlay"
 	"github.com/relychan/goutils"
-	"go.yaml.in/yaml/v4"
 )
 
 // newOverlayDocumentFromActionNodes creates a new overlay document from actions node.
@@ -37,8 +37,14 @@ func newOverlayDocumentFromActionNodes(
 			newYAMLScalarStringNode("1.1.0"),
 			newYAMLScalarStringNode("info"),
 			{
-				Kind: yaml.ScalarNode,
-				Tag:  goutils.YAMLNullTag,
+				Kind: yaml.MappingNode,
+				Tag:  goutils.YAMLMapTag,
+				Content: []*yaml.Node{
+					newYAMLScalarStringNode("title"),
+					newYAMLScalarStringNode("patches"),
+					newYAMLScalarStringNode("version"),
+					newYAMLScalarStringNode("1.0.0"),
+				},
 			},
 			newYAMLScalarStringNode("actions"),
 			actionNodes,

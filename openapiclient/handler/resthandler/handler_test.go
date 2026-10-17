@@ -21,11 +21,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/pb33f/go-yaml"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.yaml.in/yaml/v4"
 )
 
 func TestRESTHandler_Type(t *testing.T) {

@@ -23,12 +23,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/pb33f/go-yaml"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator/regexps"
-	"go.yaml.in/yaml/v4"
 )
 
 // ValidateContains validates the contains rule against an array value.
