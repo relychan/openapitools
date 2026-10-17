@@ -24,6 +24,7 @@ import (
 
 	"github.com/hasura/gotel"
 	"github.com/hasura/gotel/otelutils"
+	"github.com/pb33f/go-yaml"
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
@@ -32,7 +33,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 	"go.opentelemetry.io/otel/trace"
-	"go.yaml.in/yaml/v4"
 )
 
 var tracer = gotel.NewTracer("openapitools/resthandler")

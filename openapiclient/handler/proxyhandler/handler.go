@@ -20,9 +20,9 @@ import (
 	"net/http"
 
 	"github.com/hasura/goenvconf"
+	"github.com/pb33f/go-yaml"
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/openapitools/oaschema"
-	"go.yaml.in/yaml/v4"
 )
 
 // ProxyHandler abstracts the executor to proxy HTTP requests.

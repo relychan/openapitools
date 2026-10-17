@@ -17,10 +17,10 @@ package oaschema
 import (
 	"testing"
 
+	"github.com/pb33f/go-yaml"
 	"github.com/pb33f/libopenapi/datamodel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.yaml.in/yaml/v4"
 )
 
 func TestExtractOpenAPIv3SpecInfoFromYAML(t *testing.T) {

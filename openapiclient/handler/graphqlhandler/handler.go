@@ -25,6 +25,7 @@ import (
 
 	"github.com/hasura/gotel"
 	"github.com/hasura/gotel/otelutils"
+	"github.com/pb33f/go-yaml"
 	"github.com/relychan/gotransform/jmes"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httpheader"
@@ -33,7 +34,6 @@ import (
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/vektah/gqlparser/v2/ast"
 	"go.opentelemetry.io/otel/trace"
-	"go.yaml.in/yaml/v4"
 )
 
 var tracer = gotel.NewTracer("openapitools/graphqlhandler")

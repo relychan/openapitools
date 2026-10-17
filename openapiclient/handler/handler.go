@@ -19,11 +19,11 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/pb33f/go-yaml"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/graphqlhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/relychan/openapitools/openapiclient/handler/resthandler"
-	"go.yaml.in/yaml/v4"
 )
 
 // ErrUnsupportedProxyType occurs when the proxy type is unsupported.

@@ -19,8 +19,8 @@ import (
 	"testing"
 
 	"github.com/hasura/goenvconf"
+	"github.com/pb33f/go-yaml"
 	"github.com/stretchr/testify/assert"
-	"go.yaml.in/yaml/v4"
 )
 
 func TestOpenAPIResourceSettings_JSONMarshal(t *testing.T) {

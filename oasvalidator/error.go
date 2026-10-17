@@ -20,9 +20,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pb33f/go-yaml"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	"github.com/relychan/goutils/httperror"
-	"go.yaml.in/yaml/v4"
 )
 
 var (

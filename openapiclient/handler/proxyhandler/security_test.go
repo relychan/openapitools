@@ -18,13 +18,13 @@ import (
 	"testing"
 
 	"github.com/hasura/goenvconf"
+	"github.com/pb33f/go-yaml"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/relychan/gohttpc/authc/authscheme"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/stretchr/testify/assert"
-	"go.yaml.in/yaml/v4"
 )
 
 func TestNewOpenAPIv3Authenticator_EmptyDocument(t *testing.T) {

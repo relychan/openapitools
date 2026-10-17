@@ -17,11 +17,11 @@ package oaschema
 import (
 	"context"
 
+	"github.com/pb33f/go-yaml"
 	highoverlay "github.com/pb33f/libopenapi/datamodel/high/overlay"
 	"github.com/pb33f/libopenapi/datamodel/low"
 	lowoverlay "github.com/pb33f/libopenapi/datamodel/low/overlay"
 	"github.com/relychan/goutils"
-	"go.yaml.in/yaml/v4"
 )
 
 // newOverlayDocumentFromActionNodes creates a new overlay document from actions node.
