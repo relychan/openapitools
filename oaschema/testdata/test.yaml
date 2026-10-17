@@ -31,8 +31,6 @@ patches:
           get:
             summary: "Retrieve a list of pets"
             x-rate-limit: 100
-      components:
-      tags:
 spec:
   openapi: "3.2.0"
   servers:

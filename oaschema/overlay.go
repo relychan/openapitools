@@ -37,8 +37,14 @@ func newOverlayDocumentFromActionNodes(
 			newYAMLScalarStringNode("1.1.0"),
 			newYAMLScalarStringNode("info"),
 			{
-				Kind: yaml.ScalarNode,
-				Tag:  goutils.YAMLNullTag,
+				Kind: yaml.MappingNode,
+				Tag:  goutils.YAMLMapTag,
+				Content: []*yaml.Node{
+					newYAMLScalarStringNode("title"),
+					newYAMLScalarStringNode("patches"),
+					newYAMLScalarStringNode("version"),
+					newYAMLScalarStringNode("1.0.0"),
+				},
 			},
 			newYAMLScalarStringNode("actions"),
 			actionNodes,
