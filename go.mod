@@ -12,9 +12,9 @@ require (
 	github.com/jmespath-community/go-jmespath v1.1.2-0.20250228093220-ef5fae83c6c0
 	github.com/pb33f/go-yaml v0.1.1
 	github.com/pb33f/libopenapi v0.41.6
-	github.com/relychan/gohttpc v0.0.0-20261017081102-ea2565550107
-	github.com/relychan/gotransform v0.0.0-20261017090710-8a799b6171e7
-	github.com/relychan/goutils v0.0.0-20261016081333-a535416d898b
+	github.com/relychan/gohttpc v0.0.0-20261017112843-31eb07fc027a
+	github.com/relychan/gotransform v0.0.0-20261017145819-4f6b0b16d1e3
+	github.com/relychan/goutils v0.0.0-20261017111743-d09d3d665f7f
 	github.com/samber/lo v1.53.0
 	github.com/stretchr/testify v1.12.1
 	github.com/vektah/gqlparser/v2 v2.5.63
@@ -69,7 +69,6 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.47.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	go.yaml.in/yaml/v4 v4.0.0-rc.6 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/net v0.61.0 // indirect
