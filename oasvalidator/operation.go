@@ -289,7 +289,7 @@ func validateOperationContents(
 			continue
 		}
 
-		media, errs := validateMediaType(contentType, mediaType)
+		media, errs := validateMediaType(contentType, mediaType, ValidateResponseContentType)
 		if len(errs) > 0 {
 			return nil, errs
 		}
@@ -312,12 +312,13 @@ func validateRequestContent(
 		return nil, nil
 	}
 
-	return validateMediaType(requestContentType, requestMediaType)
+	return validateMediaType(requestContentType, requestMediaType, ValidateContentType)
 }
 
 func validateMediaType(
 	contentType string,
 	mediaType *highv3.MediaType,
+	validateContentType func(string) (string, error),
 ) (*oaschema.MediaType, []httperror.ValidationError) {
 	var (
 		errs   []httperror.ValidationError
@@ -325,7 +326,7 @@ func validateMediaType(
 	)
 
 	if contentType != "" {
-		contentType, err := ValidateContentType(contentType)
+		validContentType, err := validateContentType(contentType)
 		if err != nil {
 			errs = append(errs, httperror.ValidationError{
 				Detail:  err.Error() + " " + contentType,
@@ -334,7 +335,7 @@ func validateMediaType(
 			})
 		}
 
-		result.ContentType = contentType
+		result.ContentType = validContentType
 	}
 
 	if mediaType != nil {

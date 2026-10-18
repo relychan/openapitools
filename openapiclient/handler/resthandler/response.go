@@ -21,6 +21,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
@@ -204,7 +205,7 @@ func (re *RESTfulHandler) validateResponse(
 }
 
 func (re *RESTfulHandler) findResponseMediaType(contentType string) *oaschema.MediaType {
-	if len(re.responses) == 0 {
+	if len(re.responses) == 0 || contentType == "" {
 		return nil
 	}
 
@@ -219,7 +220,26 @@ func (re *RESTfulHandler) findResponseMediaType(contentType string) *oaschema.Me
 		}
 	}
 
-	return nil
+	// Fall back to media type ranges, e.g. image/* or */*. Prefer the more specific range.
+	var anyMedia *oaschema.MediaType
+
+	for key, media := range re.responses {
+		mediaRange := httpheader.ExtractBaseMediaType(key)
+
+		if mediaRange == "*/*" {
+			anyMedia = media
+
+			continue
+		}
+
+		prefix, isRange := strings.CutSuffix(mediaRange, "*")
+		if isRange && strings.HasSuffix(prefix, "/") &&
+			goutils.HasStringPrefixFold(contentType, prefix) {
+			return media
+		}
+	}
+
+	return anyMedia
 }
 
 // Write raw response if the response schema does not exist.

@@ -2,9 +2,10 @@
 
 ## Project Overview
 
-`github.com/relychan/openapitools` — a Go library providing OpenAPI-aware HTTP proxy client capabilities. Two main packages:
+`github.com/relychan/openapitools` — a Go library providing OpenAPI-aware HTTP proxy client capabilities. Three main packages:
 
 - **`oaschema`** — parses OpenAPI 3.0 / Swagger 2.0 resource definitions, handles JSON/YAML unmarshaling, converts Swagger 2.0 → OpenAPI 3.0, and merges spec overlays.
+- **`oasvalidator`** — validates operations, parameters, schemas and content types at load time (`ValidateOperation` → `oaschema.Operation`), validates values against schemas at runtime (strict mode), and encodes/decodes bodies and parameters.
 - **`openapiclient`** — builds a proxy client from an `oaschema.OpenAPIResourceDefinition`: HTTP client, weighted round-robin load balancer, trie-based route matching, and per-operation handlers (REST, GraphQL).
 
 The `jsonschema/generator/` subdirectory is a **separate Go module** (`go.mod`) that generates `jsonschema/openapitools.schema.json` from the `oaschema` Go types.
@@ -48,8 +49,19 @@ oaschema/                        # OpenAPI schema parsing
   config.go                      # OpenAPIResourceSettings (HTTP config, headers, health check)
   enum.go                        # Extension name constants, security/encoding enums
   error.go                       # Error constants for encoding/decoding stages
-  resource_v2.go / resource_v3.go  # Swagger 2.0 / OpenAPI 3.0 specific handling
+  resource_v2.go                 # Swagger 2.0 → OpenAPI 3.0 conversion
+  operation.go                   # Operation, RequestBody, MediaType — validated operation model (output of oasvalidator)
+  parser.go / overlay.go         # Spec parsing and overlay (patch) application
   utils.go                       # Spec building/merging utilities
+
+oasvalidator/                    # Load-time spec validation and runtime value validation
+  operation.go                   # ValidateOperation() — resolves $refs, validates parameters, request body and success responses
+  parameter.go / schema.go       # Parameter definition and schema validation
+  validation.go                  # ValidateValue() and typed validators used in strict mode
+  utils.go                       # ValidateContentType() (request bodies), ValidateResponseContentType() (responses)
+  contentdecoder/                # Body decoders by content type (JSON, XML, text, data URI; binary → []byte fallback)
+  contentencoder/                # Body encoders (JSON, XML, multipart, URL-encoded, text, binary)
+  parameter/                     # Path, query, header, cookie parameter encoding/decoding
 
 openapiclient/
   client.go                      # ProxyClient struct — Execute(), Stream(), Metadata(), Close()
@@ -67,9 +79,7 @@ openapiclient/
     resthandler/
       handler.go                 # RESTfulHandler implementation
       config.go                  # ProxyRESTfulRequestConfig; ProxyActionTypeREST constant
-      request.go / response.go   # Request/response building and transformation
-      contenttype/               # Per-content-type encoders/decoders (XML, binary, multipart, URL-encoded, text, data URI)
-      parameter/                 # Path, query, header parameter serialization
+      request.go / response.go   # Request/response building, transformation and strict-mode response validation
     graphqlhandler/
       handler.go                 # GraphQLHandler implementation
       config.go                  # GraphQL-specific configuration (ProxyGraphQLActionConfig, ProxyGraphQLRequestConfig, ProxyCustomGraphQLResponseConfig)
@@ -86,6 +96,16 @@ jsonschema/generator/            # Separate Go module — generates openapitools
 ### Route matching
 
 `openapiclient/internal/tree.go` implements a trie with four node types: static, regexp, parameter (`:name`), and catch-all (`*`). `metadata.go` populates the tree from OpenAPI path/method definitions at client init time.
+
+### Operation validation & content types
+
+`openapiclient/internal/method.go` calls `oasvalidator.ValidateOperation()` for every operation at client init; any validation error fails loading the whole resource. Only the first `200`/`201`/`204` response with content (else `default`) is kept in `oaschema.Operation.Responses`, keyed by the spec's media type.
+
+Request and response content types are validated differently:
+- **Request bodies** use `ValidateContentType()` — only types the proxy can encode (JSON, XML, text, multipart); JSON is preferred.
+- **Responses** use `ValidateResponseContentType()` — any well-formed media type, including binary (`image/png`, `application/pdf`) and ranges (`image/*`, `*/*`), since undecodable bodies pass through as `[]byte`.
+
+At runtime, `resthandler.findResponseMediaType()` matches the upstream `Content-Type` against response keys: exact → same base type → `type/*` range → `*/*`.
 
 ### Handler dispatch
 

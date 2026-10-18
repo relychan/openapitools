@@ -77,6 +77,28 @@ func ValidateContentType(contentType string) (string, error) {
 	return "", ErrInvalidContentType
 }
 
+// ValidateResponseContentType validates the content type of a response. Unlike [ValidateContentType],
+// it accepts any well-formed media type, including binary and wildcard types such as image/png,
+// application/pdf or */*, because responses that cannot be decoded are passed through as raw bytes.
+// Content types that [ValidateContentType] supports are still preferred and normalized.
+func ValidateResponseContentType(contentType string) (string, error) {
+	result, err := ValidateContentType(contentType)
+	if err == nil {
+		return result, nil
+	}
+
+	for item := range strings.SplitSeq(contentType, ",") {
+		trimmed := strings.TrimSpace(item)
+
+		_, _, err := mime.ParseMediaType(trimmed)
+		if err == nil {
+			return trimmed, nil
+		}
+	}
+
+	return "", ErrInvalidContentType
+}
+
 // FindDuplicatedItems find duplicated items in the array.
 func FindDuplicatedItems[T cmp.Ordered](values []T) []T {
 	if len(values) <= 1 {

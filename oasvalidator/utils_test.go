@@ -180,3 +180,31 @@ func TestFindDuplicatedItems(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateResponseContentType(t *testing.T) {
+	testCases := []struct {
+		name          string
+		contentType   string
+		expected      string
+		expectedError error
+	}{
+		{name: "empty", contentType: "", expected: ""},
+		{name: "json", contentType: "application/json", expected: "application/json"},
+		{name: "prefers supported types", contentType: "image/png, text/plain", expected: "text/plain"},
+		{name: "image", contentType: "image/png", expected: "image/png"},
+		{name: "pdf", contentType: "application/pdf", expected: "application/pdf"},
+		{name: "octet stream", contentType: "application/octet-stream", expected: "application/octet-stream"},
+		{name: "any", contentType: "*/*", expected: "*/*"},
+		{name: "image range", contentType: "image/*", expected: "image/*"},
+		{name: "first valid binary type", contentType: "///invalid, application/pdf, image/png", expected: "application/pdf"},
+		{name: "invalid", contentType: "not/a/valid/type, ///invalid", expectedError: ErrInvalidContentType},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := ValidateResponseContentType(tc.contentType)
+			assert.Equal(t, tc.expected, result)
+			assert.Equal(t, tc.expectedError, err)
+		})
+	}
+}
