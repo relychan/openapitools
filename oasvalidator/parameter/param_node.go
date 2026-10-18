@@ -270,8 +270,8 @@ func (pn *ParameterNode) Decode(schema *base.Schema) (any, []httperror.Validatio
 		return nil, errs
 	}
 
-	errFuncs := oasvalidator.ValidateValue(schema, result)
-	if len(errFuncs) > 0 {
+	errs = oasvalidator.ValidateValue(schema, result)
+	if len(errs) > 0 {
 		return nil, enrichQueryErrors(errs, pn.key.String())
 	}
 
@@ -338,7 +338,7 @@ func (pn *ParameterNode) decodeArrayValues(
 		errs    []httperror.ValidationError
 	)
 
-	for _, item := range pn.items {
+	for _, item := range pn.arrayItems() {
 		itemValue, decodeErrors := item.Decode(itemSchema)
 		if len(decodeErrors) > 0 {
 			errs = append(errs, decodeErrors...)
@@ -697,11 +697,89 @@ func (pn *ParameterNode) decodeArbitraryArray() []any {
 
 	results := make([]any, 0, len(pn.items))
 
-	for _, item := range pn.items {
+	for _, item := range pn.arrayItems() {
 		results = append(results, item.decodeArbitrary())
 	}
 
 	return results
+}
+
+// arrayItems returns the child nodes ordered as array elements. Deep-object keys such as
+// ids[0]=a&ids[1]=b are parsed as string keys ("0", "1") whose insertion order follows the
+// random iteration order of the query map, so when the node is decoded as an array the
+// children are sorted by their numeric value. Numeric keys sort before non-numeric keys,
+// and non-numeric keys sort lexicographically, so the result is always deterministic.
+func (pn *ParameterNode) arrayItems() ParameterNodes {
+	if len(pn.items) < 2 {
+		return pn.items
+	}
+
+	if IsParamIndex(pn.items[0].key) {
+		// already sorted by Normalize.
+		return pn.items
+	}
+
+	items := slices.Clone(pn.items)
+
+	slices.SortStableFunc(items, compareArrayItemNodes)
+
+	return items
+}
+
+// compareArrayItemNodes orders nodes by the numeric value of their key. Keys that are not
+// numeric sort after numeric keys and are compared lexicographically.
+func compareArrayItemNodes(a, b *ParameterNode) int {
+	indexA, okA := paramSelectorToIndex(a.key)
+	indexB, okB := paramSelectorToIndex(b.key)
+
+	switch {
+	case okA && okB:
+		return compareParamIndexes(indexA, indexB)
+	case okA:
+		return -1
+	case okB:
+		return 1
+	default:
+		return strings.Compare(a.key.String(), b.key.String())
+	}
+}
+
+// paramSelectorToIndex converts the selector to an array index if possible.
+func paramSelectorToIndex(selector ParamSelector) (ParamIndex, bool) {
+	switch key := selector.(type) {
+	case ParamIndex:
+		return key, true
+	case ParamKey:
+		index, err := strconv.Atoi(string(key))
+		if err != nil {
+			return 0, false
+		}
+
+		return ParamIndex(index), true
+	default:
+		return 0, false
+	}
+}
+
+// compareParamIndexes compares two indexes numerically; the -1 placeholder (bare "[]") sorts last.
+func compareParamIndexes(a, b ParamIndex) int {
+	if a == b {
+		return 0
+	}
+
+	if a == -1 {
+		return 1
+	}
+
+	if b == -1 {
+		return -1
+	}
+
+	if a < b {
+		return -1
+	}
+
+	return 1
 }
 
 // decodeArbitraryObject populates results with string-keyed children decoded arbitrarily.

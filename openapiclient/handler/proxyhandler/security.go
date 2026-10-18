@@ -15,6 +15,8 @@
 package proxyhandler
 
 import (
+	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/hasura/goenvconf"
@@ -33,8 +35,9 @@ import (
 
 // OpenAPIAuthenticator manages security schemes from the openapi document.
 type OpenAPIAuthenticator struct {
-	securitySchemes map[string]authscheme.HTTPClientAuthenticator
-	security        []*base.SecurityRequirement
+	securitySchemes   map[string]authscheme.HTTPClientAuthenticator
+	security          []*base.SecurityRequirement
+	operationSecurity [][]*base.SecurityRequirement
 }
 
 // NewOpenAPIv3Authenticator an authenticator from an OpenAPI v3 document.
@@ -43,8 +46,9 @@ func NewOpenAPIv3Authenticator(
 	getEnv goenvconf.GetEnvFunc,
 ) (*OpenAPIAuthenticator, error) {
 	result := &OpenAPIAuthenticator{
-		securitySchemes: make(map[string]authscheme.HTTPClientAuthenticator),
-		security:        document.Security,
+		securitySchemes:   make(map[string]authscheme.HTTPClientAuthenticator),
+		security:          document.Security,
+		operationSecurity: collectOperationSecurity(document),
 	}
 
 	if document.Components == nil || document.Components.SecuritySchemes == nil {
@@ -78,52 +82,132 @@ func NewOpenAPIv3Authenticator(
 	return result, nil
 }
 
-// GetAuthenticator finds a suitable authenticator by security requirements.
-func (oaa *OpenAPIAuthenticator) GetAuthenticator(
-	security []*base.SecurityRequirement,
-) authscheme.HTTPClientAuthenticator {
-	if len(oaa.securitySchemes) == 0 {
+func collectOperationSecurity(document *highv3.Document) [][]*base.SecurityRequirement {
+	if document.Paths == nil || document.Paths.PathItems == nil {
 		return nil
 	}
 
-	if len(security) == 0 {
-		security = oaa.security
-	}
+	var result [][]*base.SecurityRequirement
 
-	var defaultAuthenticator, authenticator authscheme.HTTPClientAuthenticator
-
-	var isOptional bool
-
-	for _, ss := range oaa.securitySchemes {
-		defaultAuthenticator = ss
-
-		break
-	}
-
-	for _, sec := range security {
-		if sec.ContainsEmptyRequirement || sec.Requirements == nil {
-			isOptional = true
-
+	for pathItem := range document.Paths.PathItems.ValuesFromOldest() {
+		if pathItem == nil {
 			continue
 		}
 
-		name := sec.Requirements.Oldest().Key
-
-		au, ok := oaa.securitySchemes[name]
-		if ok {
-			authenticator = au
+		for operation := range pathItem.GetOperations().ValuesFromOldest() {
+			if operation != nil && len(operation.Security) > 0 {
+				result = append(result, operation.Security)
+			}
 		}
 	}
 
-	if authenticator == nil {
-		if isOptional {
-			return nil
-		}
+	return result
+}
 
-		return defaultAuthenticator
+// GetAuthenticator finds a suitable authenticator by security requirements.
+//
+// The operationSecurity argument follows the OpenAPI semantics as represented by libopenapi:
+//   - nil (the security field is absent): inherits the document-level security requirements.
+//   - non-nil empty slice (explicit `security: []`): no authentication is required.
+//
+// Requirements are evaluated in order. The first requirement whose security schemes
+// are all configured with credentials wins. A requirement containing multiple schemes
+// (logical AND) returns a composite authenticator that applies every scheme.
+// An empty requirement (`- {}`) marks the authentication as optional and is skipped;
+// if no other requirement is satisfiable, nil is returned.
+//
+// No authenticator is returned if no requirement matches. The default authenticator of
+// the HTTP client (settings.http.authentication) is still applied in that case,
+// unless the operation explicitly disables security, see [OpenAPIAuthenticator.IsSecurityDisabled].
+func (oaa *OpenAPIAuthenticator) GetAuthenticator(
+	operationSecurity []*base.SecurityRequirement,
+) authscheme.HTTPClientAuthenticator {
+	if oaa == nil || len(oaa.securitySchemes) == 0 {
+		return nil
 	}
 
-	return authenticator
+	security := operationSecurity
+	if security == nil {
+		security = oaa.security
+	}
+
+	for _, sec := range security {
+		if sec == nil || sec.ContainsEmptyRequirement || sec.Requirements == nil ||
+			sec.Requirements.Len() == 0 {
+			// optional authentication
+			continue
+		}
+
+		authenticators := make([]authscheme.HTTPClientAuthenticator, 0, sec.Requirements.Len())
+
+		for name := range sec.Requirements.KeysFromOldest() {
+			au, ok := oaa.securitySchemes[name]
+			if !ok {
+				authenticators = nil
+
+				break
+			}
+
+			authenticators = append(authenticators, au)
+		}
+
+		switch len(authenticators) {
+		case 0:
+			continue
+		case 1:
+			return authenticators[0]
+		default:
+			return compositeAuthenticator(authenticators)
+		}
+	}
+
+	return nil
+}
+
+// IsSecurityDisabled checks if the operation security explicitly disables authentication (`security: []`).
+// It is safe to call with a nil receiver.
+func (*OpenAPIAuthenticator) IsSecurityDisabled(
+	operationSecurity []*base.SecurityRequirement,
+) bool {
+	return operationSecurity != nil && len(operationSecurity) == 0
+}
+
+// compositeAuthenticator applies multiple authenticators for AND security requirements.
+// The inner authenticators are owned by [OpenAPIAuthenticator] so Close is a no-op.
+type compositeAuthenticator []authscheme.HTTPClientAuthenticator
+
+// Authenticate the credential into the incoming request.
+func (ca compositeAuthenticator) Authenticate(
+	req *http.Request,
+	options ...authscheme.AuthenticateOption,
+) error {
+	for _, au := range ca {
+		err := au.Authenticate(req, options...)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Close terminates internal processes before destroyed.
+func (compositeAuthenticator) Close() error {
+	return nil
+}
+
+// NoopAuthenticator is an authenticator that does nothing.
+// It is used to override the default authenticator of the HTTP client.
+type NoopAuthenticator struct{}
+
+// Authenticate does nothing.
+func (NoopAuthenticator) Authenticate(*http.Request, ...authscheme.AuthenticateOption) error {
+	return nil
+}
+
+// Close does nothing.
+func (NoopAuthenticator) Close() error {
+	return nil
 }
 
 func (oaa *OpenAPIAuthenticator) createAuthenticatorFromSecurityScheme(
@@ -240,7 +324,7 @@ func newStaticAuthenticator(
 	}, authOptions)
 }
 
-func (oaa *OpenAPIAuthenticator) createOAuthAuthenticator( //nolint:cyclop,funlen
+func (oaa *OpenAPIAuthenticator) createOAuthAuthenticator( //nolint:cyclop
 	key string,
 	security *highv3.SecurityScheme,
 	authOptions *authscheme.HTTPClientAuthenticatorOptions,
@@ -340,25 +424,10 @@ func (oaa *OpenAPIAuthenticator) createOAuthAuthenticator( //nolint:cyclop,funle
 		refreshURL = nil
 	}
 
-	scopes := []string{}
-
-	for _, sec := range oaa.security {
-		if sec.ContainsEmptyRequirement || sec.Requirements == nil {
-			continue
-		}
-
-		oauth2Sec, present := sec.Requirements.Get(key)
-		if present {
-			scopes = append(scopes, oauth2Sec...)
-		}
-	}
+	scopes := oaa.collectOAuth2Scopes(key)
 
 	return oauth2scheme.NewOAuth2Credential(&oauth2scheme.OAuth2Config{
-		TokenLocation: &authscheme.TokenLocation{
-			In:     authscheme.InHeader,
-			Name:   httpheader.Authorization,
-			Scheme: "bearer",
-		},
+		TokenLocation: tokenLocation,
 		Flows: oauth2scheme.OAuth2Flows{
 			ClientCredentials: oauth2scheme.ClientCredentialsOAuthFlow{
 				ClientID:       creds.ClientID,
@@ -370,6 +439,40 @@ func (oaa *OpenAPIAuthenticator) createOAuthAuthenticator( //nolint:cyclop,funle
 			},
 		},
 	}, authOptions)
+}
+
+// collectOAuth2Scopes collects requested scopes of the security scheme from
+// document-level and operation-level security requirements.
+// The authenticator is shared across operations so the token is requested with the union of scopes.
+func (oaa *OpenAPIAuthenticator) collectOAuth2Scopes(key string) []string {
+	scopes := []string{}
+
+	appendScopes := func(security []*base.SecurityRequirement) {
+		for _, sec := range security {
+			if sec == nil || sec.ContainsEmptyRequirement || sec.Requirements == nil {
+				continue
+			}
+
+			oauth2Sec, present := sec.Requirements.Get(key)
+			if !present {
+				continue
+			}
+
+			for _, scope := range oauth2Sec {
+				if scope != "" && !slices.Contains(scopes, scope) {
+					scopes = append(scopes, scope)
+				}
+			}
+		}
+	}
+
+	appendScopes(oaa.security)
+
+	for _, security := range oaa.operationSecurity {
+		appendScopes(security)
+	}
+
+	return scopes
 }
 
 func parseStringFromExtensions(

@@ -24,6 +24,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -165,4 +166,27 @@ func TestPostTransformedResponse_NilBodies(t *testing.T) {
 		nil,
 	)
 	assert.NoError(t, err)
+}
+
+func TestFindResponseMediaType_Ranges(t *testing.T) {
+	jsonMedia := &oaschema.MediaType{ContentType: "application/json"}
+	imageMedia := &oaschema.MediaType{ContentType: "image/*"}
+	anyMedia := &oaschema.MediaType{ContentType: "*/*"}
+
+	handler := &RESTfulHandler{
+		responses: map[string]*oaschema.MediaType{
+			"application/json": jsonMedia,
+			"image/*":          imageMedia,
+			"*/*":              anyMedia,
+		},
+	}
+
+	assert.Same(t, jsonMedia, handler.findResponseMediaType("application/json; charset=utf-8"))
+	assert.Same(t, imageMedia, handler.findResponseMediaType("image/png"))
+	assert.Same(t, imageMedia, handler.findResponseMediaType("IMAGE/JPEG"))
+	assert.Same(t, anyMedia, handler.findResponseMediaType("application/pdf"))
+	assert.Nil(t, handler.findResponseMediaType(""))
+
+	handler.responses = map[string]*oaschema.MediaType{"image/*": imageMedia}
+	assert.Nil(t, handler.findResponseMediaType("application/pdf"))
 }

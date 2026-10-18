@@ -26,6 +26,7 @@ import (
 	"github.com/pb33f/libopenapi/datamodel"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/overlay"
+	"github.com/pb33f/libopenapi/utils"
 	"github.com/relychan/goutils"
 )
 
@@ -238,30 +239,21 @@ func (j *OpenAPIResourceDefinition) Build(
 			return doc, nil, err
 		}
 
-		if !strings.HasSuffix(j.Ref, ".yaml") {
-			return j.buildJSONDocumentWithOverlay(ctx)
-		}
-
-		// read document file to apply overlay patches.
-		rawSourceReader, _, err := goutils.FileReaderFromPath(ctx, j.Ref)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		specBytes, err = io.ReadAll(rawSourceReader)
-
-		goutils.CatchWarnErrorFunc(rawSourceReader.Close)
-
-		if err != nil {
-			return nil, nil, err
-		}
+		return j.buildRefDocumentWithOverlay(ctx)
 	}
 
 	if len(specBytes) == 0 {
 		return nil, nil, ErrResourceSpecRequired
 	}
 
-	// apply overlay patches
+	return j.applyPatches(ctx, specBytes)
+}
+
+// applyPatches applies overlay patches to the OpenAPI v3 spec bytes and builds the v3 model.
+func (j *OpenAPIResourceDefinition) applyPatches(
+	ctx context.Context,
+	specBytes []byte,
+) (*highv3.Document, []*overlay.Warning, error) {
 	ov, err := newOverlayDocumentFromActionNodes(ctx, j.Patches)
 	if err != nil {
 		return nil, nil, err
@@ -295,41 +287,36 @@ func (j *OpenAPIResourceDefinition) buildSpecNodeWithoutPatch() (*highv3.Documen
 	return &spec.Model, nil
 }
 
-func (j *OpenAPIResourceDefinition) buildJSONDocumentWithOverlay(
+// buildRefDocumentWithOverlay builds the referenced document and applies overlay patches.
+// Patches always target the OpenAPI v3 document. A Swagger 2.0 document is converted
+// to OpenAPI v3 before patches are applied, consistent with inline specs that must be v3.
+func (j *OpenAPIResourceDefinition) buildRefDocumentWithOverlay(
 	ctx context.Context,
 ) (*highv3.Document, []*overlay.Warning, error) {
-	doc, err := j.buildDocumentFromRef(ctx)
+	sourceDoc, err := j.buildDocumentFromRef(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	model, err := doc.BuildV3Model()
+	specInfo := sourceDoc.GetSpecInfo()
+
+	// apply patches to the original YAML source of OpenAPI v3 documents to keep the original layout.
+	if specInfo.SpecType == utils.OpenApi3 && strings.HasSuffix(j.Ref, ".yaml") &&
+		specInfo.SpecBytes != nil {
+		return j.applyPatches(ctx, *specInfo.SpecBytes)
+	}
+
+	doc, err := buildV3DocumentFromSource(sourceDoc)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	rawYaml, err := model.Model.Render()
+	rawYaml, err := doc.Render()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// apply overlay patches
-	ov, err := newOverlayDocumentFromActionNodes(ctx, j.Patches)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	result, err := libopenapi.ApplyOverlayToSpecBytes(rawYaml, ov)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	model, err = result.OverlayDocument.BuildV3Model()
-	if err != nil {
-		return nil, result.Warnings, err
-	}
-
-	return &model.Model, result.Warnings, nil
+	return j.applyPatches(ctx, rawYaml)
 }
 
 func (j *OpenAPIResourceDefinition) buildDocumentFromRef(
@@ -359,15 +346,19 @@ func (j *OpenAPIResourceDefinition) buildSpecFromRef(
 		return nil, err
 	}
 
-	var doc *highv3.Document
+	return buildV3DocumentFromSource(sourceDoc)
+}
 
+// buildV3DocumentFromSource builds the OpenAPI v3 model of the document.
+// Swagger 2.0 documents are converted to OpenAPI v3.
+func buildV3DocumentFromSource(sourceDoc libopenapi.Document) (*highv3.Document, error) {
 	if sourceDoc.GetSpecInfo().SpecFormat == datamodel.OAS2 {
 		spec, err := sourceDoc.BuildV2Model()
 		if err != nil {
 			return nil, err
 		}
 
-		doc, err = convertSwaggerToOpenAPIv3Document(&spec.Model)
+		doc, err := convertSwaggerToOpenAPIv3Document(&spec.Model)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert openapi spec v2 to v3: %w", err)
 		}
@@ -393,7 +384,7 @@ func (j *OpenAPIResourceDefinition) validatePatchesNode(node *yaml.Node) error {
 	}
 
 	if node.Kind != yaml.ScalarNode ||
-		node.Tag != goutils.NullStr {
+		node.Tag != goutils.YAMLNullTag {
 		return fmt.Errorf(
 			"%w. Expected patches as an array, got %s",
 			ErrInvalidOpenAPIResourceDefinition,

@@ -15,12 +15,16 @@
 package oaschema
 
 import (
+	"os"
 	"testing"
 
+	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v2high "github.com/pb33f/libopenapi/datamodel/high/v2"
+	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestConvertSwaggerToOpenAPIv3Document tests the main conversion function
@@ -254,7 +258,11 @@ func TestConvertSecurityScheme(t *testing.T) {
 		assert.Equal(t, OAuth2Scheme.String(), result.Type)
 		assert.True(t, result.Flows != nil)
 		assert.True(t, result.Flows.Implicit != nil)
-		assert.Equal(t, "https://example.com/oauth/authorize", result.Flows.Implicit.AuthorizationUrl)
+		assert.Equal(
+			t,
+			"https://example.com/oauth/authorize",
+			result.Flows.Implicit.AuthorizationUrl,
+		)
 		assert.Equal(t, 2, result.Flows.Implicit.Scopes.Len())
 	})
 
@@ -477,4 +485,200 @@ func TestConvertOperation(t *testing.T) {
 		assert.Equal(t, "Test description", result.Description)
 		assert.Equal(t, "testOp", result.OperationId)
 	})
+}
+
+func buildSwagger2RegressionDocument(t *testing.T) *v3high.Document {
+	t.Helper()
+
+	rawBytes, err := os.ReadFile("testdata/swagger2/swagger.yaml")
+	require.NoError(t, err)
+
+	doc, err := libopenapi.NewDocument(rawBytes)
+	require.NoError(t, err)
+
+	v2Model, err := doc.BuildV2Model()
+	require.NoError(t, err)
+
+	var result *v3high.Document
+
+	require.NotPanics(t, func() {
+		result, err = convertSwaggerToOpenAPIv3Document(&v2Model.Model)
+	})
+	require.NoError(t, err)
+
+	return result
+}
+
+func TestConvertSwaggerToOpenAPIv3Document_Regressions(t *testing.T) {
+	result := buildSwagger2RegressionDocument(t)
+
+	listItems := result.Paths.PathItems.GetOrZero("/items").Get
+	require.NotNil(t, listItems)
+
+	findParam := func(name string) *base.Schema {
+		for _, param := range listItems.Parameters {
+			if param.Name == name {
+				return param.Schema.Schema()
+			}
+		}
+
+		t.Fatalf("parameter %s not found", name)
+
+		return nil
+	}
+
+	t.Run("param_min_items_without_max_items", func(t *testing.T) {
+		schema := findParam("tags")
+		require.NotNil(t, schema.MinItems)
+		assert.Equal(t, int64(1), *schema.MinItems)
+		assert.Nil(t, schema.MaxItems)
+	})
+
+	t.Run("param_min_length_is_not_max_length", func(t *testing.T) {
+		schema := findParam("q")
+		require.NotNil(t, schema.MinLength)
+		assert.Equal(t, int64(2), *schema.MinLength)
+		assert.Nil(t, schema.MaxLength)
+	})
+
+	t.Run("items_constraints", func(t *testing.T) {
+		items := findParam("tags").Items.A.Schema()
+		require.NotNil(t, items.MinLength)
+		require.NotNil(t, items.MaxLength)
+		assert.Equal(t, int64(3), *items.MinLength)
+		assert.Equal(t, int64(10), *items.MaxLength)
+		assert.Nil(t, items.Maximum)
+		assert.Nil(t, items.Minimum)
+		assert.Nil(t, items.MultipleOf)
+		assert.Nil(t, items.ExclusiveMaximum)
+		assert.Nil(t, items.ExclusiveMinimum)
+		assert.Nil(t, items.UniqueItems)
+	})
+
+	t.Run("header_constraints", func(t *testing.T) {
+		resp := listItems.Responses.Codes.GetOrZero("200")
+		require.NotNil(t, resp)
+
+		token := resp.Headers.GetOrZero("X-Token").Schema.Schema()
+		require.NotNil(t, token.MinLength)
+		assert.Equal(t, int64(4), *token.MinLength)
+		assert.Nil(t, token.MaxLength)
+		assert.Nil(t, token.Maximum)
+		assert.Nil(t, token.Minimum)
+
+		rate := resp.Headers.GetOrZero("X-Rate-Limit").Schema.Schema()
+		require.NotNil(t, rate.Minimum)
+		assert.Equal(t, float64(1), *rate.Minimum)
+		assert.Nil(t, rate.Maximum)
+		assert.Nil(t, rate.MultipleOf)
+	})
+
+	t.Run("operation_consumes_without_produces", func(t *testing.T) {
+		upload := result.Paths.PathItems.GetOrZero("/upload").Post
+		require.NotNil(t, upload)
+		require.NotNil(t, upload.RequestBody)
+
+		_, ok := upload.RequestBody.Content.Get("multipart/form-data")
+		assert.True(t, ok)
+		_, ok = upload.RequestBody.Content.Get("application/json")
+		assert.False(t, ok)
+	})
+
+	t.Run("oauth2_without_scopes", func(t *testing.T) {
+		scheme := result.Components.SecuritySchemes.GetOrZero("oauth")
+		require.NotNil(t, scheme)
+		require.NotNil(t, scheme.Flows)
+		require.NotNil(t, scheme.Flows.ClientCredentials)
+		assert.Equal(t, "https://example.com/token", scheme.Flows.ClientCredentials.TokenUrl)
+	})
+
+	t.Run("base_path_without_host", func(t *testing.T) {
+		require.Len(t, result.Servers, 1)
+		assert.Equal(t, "/api/v1", result.Servers[0].URL)
+	})
+}
+
+func TestSchemaFromParameter_MinItemsOnly(t *testing.T) {
+	converter := &swaggerToOpenAPIv3Converter{swagger: &v2high.Swagger{}}
+
+	var proxy *base.SchemaProxy
+
+	require.NotPanics(t, func() {
+		proxy = converter.schemaFromParameter(&v2high.Parameter{
+			Type:      "array",
+			MinItems:  new(2),
+			MinLength: new(3),
+		})
+	})
+
+	schema := proxy.Schema()
+	require.NotNil(t, schema.MinItems)
+	assert.Equal(t, int64(2), *schema.MinItems)
+	assert.Nil(t, schema.MaxItems)
+	require.NotNil(t, schema.MinLength)
+	assert.Equal(t, int64(3), *schema.MinLength)
+	assert.Nil(t, schema.MaxLength)
+}
+
+func TestConvertSecurityScheme_OAuth2NilScopes(t *testing.T) {
+	converter := &swaggerToOpenAPIv3Converter{swagger: &v2high.Swagger{}}
+
+	require.NotPanics(t, func() {
+		result := converter.convertSecurityScheme(&v2high.SecurityScheme{
+			Type:     "oauth2",
+			Flow:     "implicit",
+			TokenUrl: "https://example.com/token",
+		})
+		require.NotNil(t, result.Flows.Implicit)
+		assert.Nil(t, result.Flows.Implicit.Scopes)
+	})
+}
+
+func TestConvertServers(t *testing.T) {
+	testCases := []struct {
+		name     string
+		swagger  *v2high.Swagger
+		expected []string
+	}{
+		{name: "nothing", swagger: &v2high.Swagger{}, expected: nil},
+		{name: "root_base_path_only", swagger: &v2high.Swagger{BasePath: "/"}, expected: nil},
+		{
+			name:     "base_path_only",
+			swagger:  &v2high.Swagger{BasePath: "/v2"},
+			expected: []string{"/v2"},
+		},
+		{
+			name:     "base_path_without_slash",
+			swagger:  &v2high.Swagger{BasePath: "v2"},
+			expected: []string{"/v2"},
+		},
+		{
+			name:     "host_only",
+			swagger:  &v2high.Swagger{Host: "example.com"},
+			expected: []string{"https://example.com"},
+		},
+		{
+			name: "host_and_base_path",
+			swagger: &v2high.Swagger{
+				Host:     "example.com",
+				BasePath: "/v2",
+				Schemes:  []string{"http"},
+			},
+			expected: []string{"http://example.com/v2"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			converter := &swaggerToOpenAPIv3Converter{swagger: tc.swagger}
+
+			var urls []string
+
+			for _, server := range converter.convertServers() {
+				urls = append(urls, server.URL)
+			}
+
+			assert.Equal(t, tc.expected, urls)
+		})
+	}
 }

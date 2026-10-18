@@ -15,23 +15,37 @@
 package contentdecoder
 
 import (
+	"bufio"
 	"bytes"
+	"errors"
 	"io"
+	"net/http"
 
 	"github.com/relychan/goutils/httpheader"
 )
 
 // Decode decodes the data by content type to arbitrary value.
+// An empty JSON or XML body is decoded to nil without error.
 func Decode(contentType string, rawBody io.Reader) (any, error) {
-	if rawBody == nil {
+	if rawBody == nil || rawBody == http.NoBody {
 		return nil, nil
 	}
 
 	switch {
 	case httpheader.IsContentTypeJSON(contentType):
-		return DecodeJSON(rawBody)
+		reader, isEmpty, err := peekEmptyReader(rawBody)
+		if err != nil || isEmpty {
+			return nil, err
+		}
+
+		return DecodeJSON(reader)
 	case httpheader.IsContentTypeXML(contentType):
-		return DecodeXML(rawBody)
+		reader, isEmpty, err := peekEmptyReader(rawBody)
+		if err != nil || isEmpty {
+			return nil, err
+		}
+
+		return DecodeXML(reader)
 	case httpheader.IsContentTypeText(contentType):
 		resultBytes, err := io.ReadAll(rawBody)
 		if err != nil {
@@ -46,6 +60,7 @@ func Decode(contentType string, rawBody io.Reader) (any, error) {
 }
 
 // Unmarshal decodes data bytes by content type to arbitrary value.
+// An empty JSON or XML body is decoded to nil without error.
 func Unmarshal(contentType string, rawBody []byte) (any, error) {
 	if rawBody == nil {
 		return nil, nil
@@ -53,8 +68,16 @@ func Unmarshal(contentType string, rawBody []byte) (any, error) {
 
 	switch {
 	case httpheader.IsContentTypeJSON(contentType):
+		if len(rawBody) == 0 {
+			return nil, nil
+		}
+
 		return UnmarshalJSON(rawBody)
 	case httpheader.IsContentTypeXML(contentType):
+		if len(rawBody) == 0 {
+			return nil, nil
+		}
+
 		return DecodeXML(bytes.NewReader(rawBody))
 	case httpheader.IsContentTypeText(contentType):
 		return string(rawBody), nil
@@ -62,4 +85,21 @@ func Unmarshal(contentType string, rawBody []byte) (any, error) {
 		// Decode binary by default.
 		return rawBody, nil
 	}
+}
+
+// peekEmptyReader checks if the reader is empty without consuming its content.
+// It returns a reader that must be used for further reads.
+func peekEmptyReader(reader io.Reader) (io.Reader, bool, error) {
+	bufReader := bufio.NewReader(reader)
+
+	_, err := bufReader.Peek(1)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, true, nil
+		}
+
+		return nil, false, err
+	}
+
+	return bufReader, false, nil
 }

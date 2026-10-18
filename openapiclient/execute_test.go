@@ -18,12 +18,17 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/pb33f/go-yaml"
+	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -916,4 +921,99 @@ paths:
 	require.Len(t, herr.Errors, 1)
 	require.Equal(t, herr.Errors[0].Detail, "Required parameter 'Bash' is missing")
 	require.Equal(t, herr.Errors[0].Parameter, "Bash")
+}
+
+const binaryResponseSpec = `
+settings:
+  strict: %STRICT%
+spec:
+  openapi: "3.1.0"
+  info:
+    title: binary
+    version: "1.0"
+  servers:
+    - url: %SERVER_URL%
+  paths:
+    /image:
+      get:
+        operationId: getImage
+        responses:
+          "200":
+            description: image
+            content:
+              image/png:
+                schema:
+                  type: string
+                  format: binary
+    /document:
+      get:
+        operationId: getDocument
+        responses:
+          "200":
+            description: document
+            content:
+              application/pdf:
+                schema:
+                  type: string
+                  format: binary
+    /any:
+      get:
+        operationId: getAny
+        responses:
+          "200":
+            description: anything
+            content:
+              "*/*":
+                schema:
+                  type: string
+                  format: binary
+`
+
+func TestProxyClient_BinaryResponses(t *testing.T) {
+	payloads := map[string]struct {
+		contentType string
+		body        []byte
+	}{
+		"/image":    {contentType: "image/png", body: []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}},
+		"/document": {contentType: "application/pdf", body: []byte("%PDF-1.7\n")},
+		"/any":      {contentType: "application/octet-stream", body: []byte{0x00, 0x01, 0x02}},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, ok := payloads[r.URL.Path]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+
+			return
+		}
+
+		w.Header().Set("Content-Type", payload.contentType)
+		_, _ = w.Write(payload.body)
+	}))
+	defer server.Close()
+
+	for _, strict := range []string{"false", "true"} {
+		t.Run("strict="+strict, func(t *testing.T) {
+			specPath := filepath.Join(t.TempDir(), "spec.yaml")
+			spec := strings.NewReplacer("%STRICT%", strict, "%SERVER_URL%", server.URL).Replace(binaryResponseSpec)
+			require.NoError(t, os.WriteFile(specPath, []byte(spec), 0o600))
+
+			config, err := goutils.ReadJSONOrYAMLFile[oaschema.OpenAPIResourceDefinition](context.TODO(), specPath)
+			require.NoError(t, err)
+
+			client, err := NewProxyClient(context.TODO(), config)
+			require.NoError(t, err)
+
+			defer goutils.CatchWarnErrorFunc(client.Close)
+
+			for path, payload := range payloads {
+				t.Run(path, func(t *testing.T) {
+					resp, body, err := client.Execute(context.TODO(), http.MethodGet, path, http.Header{}, nil)
+					require.NoError(t, err)
+					assert.Equal(t, http.StatusOK, resp.StatusCode)
+					assert.Equal(t, payload.body, body)
+				})
+			}
+		})
+	}
 }

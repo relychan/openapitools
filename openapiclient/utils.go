@@ -15,13 +15,15 @@
 package openapiclient
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"html"
+	"log/slog"
 	"net/http"
 	"slices"
 
 	"github.com/hasura/goenvconf"
+	"github.com/hasura/gotel"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/goutils/httpheader"
@@ -30,31 +32,51 @@ import (
 	"github.com/relychan/openapitools/openapiclient/internal"
 )
 
-func writeErrorResponse(writer http.ResponseWriter, status int, err error) {
-	tracingWriter, ok := writer.(tracingResponseWriter)
-	if ok && tracingWriter.BytesWritten() > 0 {
-		// The writer were already written. Do not write again.
+func writeErrorResponse(ctx context.Context, writer http.ResponseWriter, status int, err error) {
+	if isResponseWritten(writer) {
+		// The response was already (partially) written. Do not write again.
+		gotel.GetLogger(ctx).ErrorContext(
+			ctx,
+			"failed to proxy the request after the response was written",
+			slog.String("error", err.Error()),
+		)
+
 		return
+	}
+
+	if status < 100 || status > 999 {
+		status = http.StatusInternalServerError
+	}
+
+	body, encodeErr := json.Marshal(err)
+	if encodeErr != nil {
+		status = http.StatusInternalServerError
+
+		body = []byte(fallbackErrorResponseBody)
+
+		gotel.GetLogger(ctx).ErrorContext(
+			ctx,
+			"failed to encode the error response",
+			slog.String("error", encodeErr.Error()),
+		)
 	}
 
 	writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
 	writer.WriteHeader(status)
 
-	writeErr := json.NewEncoder(writer).Encode(err)
-	if writeErr == nil {
-		return
+	_, _ = writer.Write(append(body, '\n'))
+}
+
+const fallbackErrorResponseBody = `{"title":"Internal Server Error","status":500,"detail":"failed to encode the error response"}`
+
+func isResponseWritten(writer http.ResponseWriter) bool {
+	if tw, ok := writer.(headerTrackingResponseWriter); ok && tw.HeaderWritten() {
+		return true
 	}
 
-	if ok && tracingWriter.BytesWritten() > 0 {
-		// The writer were already written. Do not write again.
-		return
-	}
+	tw, ok := writer.(tracingResponseWriter)
 
-	_, _ = fmt.Fprintf(
-		writer,
-		`{"title":"Internal Server Error","detail":"%s"}`,
-		html.EscapeString(writeErr.Error()),
-	)
+	return ok && tw.BytesWritten() > 0
 }
 
 // parse server url from static string or environment variables.
@@ -104,10 +126,9 @@ func parseHTTPRequestBody(
 			return nil, nil
 		}
 
-		err := httperror.NewBadRequestError()
-		err.Detail = "request body is required"
+		err := newRequestBodyRequiredError(request.URL.Path)
 
-		writeErrorResponse(writer, err.Status, err)
+		writeErrorResponse(request.Context(), writer, err.Status, err)
 
 		return nil, err
 	}
@@ -116,7 +137,7 @@ func parseHTTPRequestBody(
 	if canHTTPMethodHaveBody(request.Method) && !httpheader.IsContentTypeJSON(originalContentType) {
 		err := newUnsupportedContentTypeError(request.URL.Path, originalContentType)
 
-		writeErrorResponse(writer, err.Status, err)
+		writeErrorResponse(request.Context(), writer, err.Status, err)
 
 		return nil, err
 	}
@@ -129,12 +150,24 @@ func parseHTTPRequestBody(
 		})
 		respErr.Detail = "failed to decode request"
 
-		writeErrorResponse(writer, respErr.Status, respErr)
+		writeErrorResponse(request.Context(), writer, respErr.Status, respErr)
 
 		return nil, respErr
 	}
 
 	return decodedBody, nil
+}
+
+func newRequestBodyRequiredError(urlPath string) *httperror.HTTPError {
+	err := httperror.NewBadRequestError(httperror.ValidationError{
+		Code:     oasvalidator.ErrCodeRequestBodyError,
+		Detail:   "request body is required",
+		Location: "body",
+	})
+	err.Detail = "request body is required"
+	err.Instance = urlPath
+
+	return err
 }
 
 func newUnsupportedContentTypeError(

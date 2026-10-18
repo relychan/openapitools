@@ -17,6 +17,7 @@ package internal
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -164,11 +165,10 @@ func (n *Node) insertChildNode(
 		}
 
 		if len(handlers) > 0 {
-			if len(child.handlers) > 0 {
-				return nil, ErrDuplicatedRoutingPattern
+			err := child.mergeHandlers(handlers)
+			if err != nil {
+				return nil, err
 			}
-
-			child.handlers = handlers
 
 			// insert new node
 			if childIndex < 0 {
@@ -260,12 +260,36 @@ func (n *Node) insertChildStaticNode(
 	}
 
 	if len(handlers) > 0 {
-		child.handlers = handlers
+		// Patterns with and without the trailing slash (e.g. /pets and /pets/) share the same node.
+		err := child.mergeHandlers(handlers)
+		if err != nil {
+			return nil, err
+		}
 
 		return child, nil
 	}
 
 	return nil, nil
+}
+
+// mergeHandlers merges method handlers into the node.
+// Returns an error if a method handler of the same method already exists.
+func (n *Node) mergeHandlers(handlers map[string]MethodHandler) error {
+	if len(n.handlers) == 0 {
+		n.handlers = handlers
+
+		return nil
+	}
+
+	for method := range handlers {
+		if _, exists := n.handlers[method]; exists {
+			return fmt.Errorf("%w: method %s", ErrDuplicatedRoutingPattern, method)
+		}
+	}
+
+	maps.Copy(n.handlers, handlers)
+
+	return nil
 }
 
 func (n *Node) insertChildParamNode(
@@ -428,6 +452,37 @@ func (ns nodes) Sort() {
 	})
 }
 
+// scanSegmentDelimiters returns the index of the first ':' after the opening '{'
+// and the index of the matching closing '}'. Returns 0 if not found.
+func scanSegmentDelimiters(pattern string) (regexIndex int, endIndex int) {
+	depth := 0
+
+	for i := 1; i < len(pattern); i++ {
+		switch pattern[i] {
+		case ':':
+			if regexIndex == 0 && depth == 0 {
+				regexIndex = i
+			}
+		case '\\':
+			// skip escaped characters in the regular expression
+			if regexIndex > 0 {
+				i++
+			}
+		case '{':
+			depth++
+		case '}':
+			if depth == 0 {
+				return regexIndex, i
+			}
+
+			depth--
+		default:
+		}
+	}
+
+	return regexIndex, 0
+}
+
 type patNextSegmentResult struct {
 	ParamName string
 	Regexp    string
@@ -435,20 +490,11 @@ type patNextSegmentResult struct {
 }
 
 // patNextSegment returns the next segment details from a pattern.
+// The regexp delimiter is the first ':' after the opening '{' and the closing '}'
+// is the brace that matches the opening one, so regular expressions may contain ':' and '{...}',
+// e.g. {id:(?:a|b)} or {id:[0-9]{2,3}}.
 func patNextSegment(pattern string) (*patNextSegmentResult, error) {
-	var endIndex, regexIndex int
-
-	for i := 1; i < len(pattern); i++ {
-		c := pattern[i]
-
-		switch c {
-		case ':':
-			regexIndex = i
-		case '}':
-			endIndex = i
-		default:
-		}
-	}
+	regexIndex, endIndex := scanSegmentDelimiters(pattern)
 
 	if endIndex == 0 {
 		return nil, ErrMissingClosingBracket
@@ -470,6 +516,10 @@ func patNextSegment(pattern string) (*patNextSegmentResult, error) {
 
 		paramName = pattern[1:regexIndex]
 		rePattern = pattern[regexIndex+1 : endIndex]
+
+		if rePattern == "" {
+			return nil, ErrInvalidRegexpPatternParamInRoute
+		}
 
 		// make sure that the regular expression evaluates the exact match.
 		if rePattern[0] != '^' {

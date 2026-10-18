@@ -18,6 +18,7 @@ package proxyhandler
 import (
 	"context"
 	"net/http"
+	"slices"
 
 	"github.com/hasura/goenvconf"
 	"github.com/pb33f/go-yaml"
@@ -74,18 +75,40 @@ type ProxyHandleOptions struct {
 }
 
 // ForwardResponseHeaders forward headers from http.Response to http.ResponseWriter.
+// All values of multi-value headers (e.g. Set-Cookie) are copied.
+// Framing headers (Content-Length, Content-Encoding, Transfer-Encoding) are never forwarded
+// because the response body may be decompressed or transformed by the proxy.
 func (pho *ProxyHandleOptions) ForwardResponseHeaders(
 	writer http.ResponseWriter,
 	response *http.Response,
 ) {
-	if pho.Settings == nil || pho.Settings.ForwardHeaders == nil {
+	if pho == nil || pho.Settings == nil || pho.Settings.ForwardHeaders == nil || response == nil {
 		return
 	}
 
+	writerHeader := writer.Header()
+
 	for _, header := range pho.Settings.ForwardHeaders.Response {
-		value := response.Header.Get(header)
-		if value != "" {
-			writer.Header().Set(header, value)
+		key := http.CanonicalHeaderKey(header)
+
+		if isNonForwardableResponseHeader(key) {
+			continue
 		}
+
+		values := response.Header.Values(key)
+		if len(values) == 0 {
+			continue
+		}
+
+		writerHeader[key] = slices.Clone(values)
+	}
+}
+
+func isNonForwardableResponseHeader(canonicalKey string) bool {
+	switch canonicalKey {
+	case "Content-Length", "Content-Encoding", "Transfer-Encoding", "Connection", "Trailer":
+		return true
+	default:
+		return false
 	}
 }

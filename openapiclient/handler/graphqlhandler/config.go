@@ -15,6 +15,7 @@
 package graphqlhandler
 
 import (
+	"net/http"
 	"slices"
 	"strconv"
 
@@ -119,6 +120,15 @@ func newProxyCustomGraphQLResponse(
 		HTTPErrorCode: config.HTTPErrorCode,
 	}
 
+	if config.HTTPErrorCode != nil && !isHTTPErrorStatus(*config.HTTPErrorCode) {
+		return nil, &httperror.ValidationError{
+			Detail: "httpErrorCode must be in range 400-599, got " + strconv.Itoa(
+				*config.HTTPErrorCode,
+			),
+			Pointer: "/response/httpErrorCode",
+		}
+	}
+
 	if config.ContentType != "" && config.ContentType != httpheader.ContentTypeJSON &&
 		!httpheader.IsContentTypeText(config.ContentType) {
 		return nil, &httperror.ValidationError{
@@ -146,6 +156,13 @@ func newProxyCustomGraphQLResponse(
 			if err != nil {
 				return nil, &httperror.ValidationError{
 					Detail:  err.Error(),
+					Pointer: "/response/httpErrors/" + key,
+				}
+			}
+
+			if !isHTTPErrorStatus(status) {
+				return nil, &httperror.ValidationError{
+					Detail:  "http error status must be in range 400-599, got " + key,
 					Pointer: "/response/httpErrors/" + key,
 				}
 			}
@@ -189,4 +206,9 @@ func (conf proxyCustomGraphQLResponse) IsZero() bool {
 	return conf.HTTPErrorCode == nil &&
 		len(conf.HTTPErrors) == 0 &&
 		(conf.Body == nil || conf.Body.IsZero())
+}
+
+// isHTTPErrorStatus checks if the status code is a valid HTTP error status (4xx or 5xx).
+func isHTTPErrorStatus(status int) bool {
+	return status >= http.StatusBadRequest && status <= 599
 }

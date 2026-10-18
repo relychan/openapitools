@@ -361,7 +361,7 @@ func TestGetAuthenticator_WithSecurityRequirements(t *testing.T) {
 		assert.True(t, result == nil)
 	})
 
-	t.Run("with_default_authenticator", func(t *testing.T) {
+	t.Run("no_fallback_to_unmatched_scheme", func(t *testing.T) {
 		apiKeyValue := goenvconf.NewEnvStringValue("test-key")
 		creds := APIKeyCredentials{
 			APIKey: &apiKeyValue,
@@ -401,7 +401,7 @@ func TestGetAuthenticator_WithSecurityRequirements(t *testing.T) {
 		}
 
 		result := auth.GetAuthenticator(security)
-		assert.True(t, result != nil) // Should return default authenticator
+		assert.True(t, result == nil) // must not fallback to a random configured scheme
 	})
 }
 

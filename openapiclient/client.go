@@ -22,6 +22,7 @@ import (
 
 	"github.com/hasura/goenvconf"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/relychan/gohttpc"
 	"github.com/relychan/gohttpc/httpconfig"
 	"github.com/relychan/gohttpc/loadbalancer"
 	"github.com/relychan/gohttpc/loadbalancer/roundrobin"
@@ -284,7 +285,21 @@ func (pc *ProxyClient) initOptions(options []ClientOption) error {
 		httpConfig = pc.settings.HTTP
 	}
 
-	baseClientOptions, err := httpconfig.NewClientOptionsFromConfig(httpConfig)
+	// Resolve the GetEnv function from client options first so that it is applied
+	// when loading the HTTP settings (e.g. authentication credentials from environment variables).
+	probeOptions := clientOptions{
+		ClientOptions: gohttpc.NewClientOptions(),
+	}
+
+	applyClientOptions(&probeOptions, options)
+
+	var baseOptions []gohttpc.ClientOption
+
+	if probeOptions.ClientOptions != nil && probeOptions.GetEnv != nil {
+		baseOptions = append(baseOptions, gohttpc.WithGetEnvFunc(probeOptions.GetEnv))
+	}
+
+	baseClientOptions, err := httpconfig.NewClientOptionsFromConfig(httpConfig, baseOptions...)
 	if err != nil {
 		return err
 	}
@@ -293,13 +308,8 @@ func (pc *ProxyClient) initOptions(options []ClientOption) error {
 		ClientOptions: baseClientOptions,
 	}
 
-	for _, opt := range options {
-		if opt == nil {
-			continue
-		}
-
-		opt(&clientOpts)
-	}
+	// Client options take precedence over the HTTP settings.
+	applyClientOptions(&clientOpts, options)
 
 	if clientOpts.HTTPClient == nil {
 		clientOpts.HTTPClient, err = httpconfig.NewHTTPClientFromConfig(
@@ -314,4 +324,14 @@ func (pc *ProxyClient) initOptions(options []ClientOption) error {
 	pc.clientOptions = clientOpts
 
 	return nil
+}
+
+func applyClientOptions(clientOpts *clientOptions, options []ClientOption) {
+	for _, opt := range options {
+		if opt == nil {
+			continue
+		}
+
+		opt(clientOpts)
+	}
 }

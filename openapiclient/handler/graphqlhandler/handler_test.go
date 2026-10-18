@@ -28,6 +28,7 @@ import (
 	"github.com/jmespath-community/go-jmespath"
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/gotransform/jmes"
+	"github.com/relychan/gotransform/transformtypes"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"github.com/stretchr/testify/assert"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -411,7 +412,7 @@ func TestTransformResponse_WithHTTPStatusMapping(t *testing.T) {
 				{
 					Status: 404,
 					Expressions: []jmespath.JMESPath{
-						jmespath.MustCompile(`errors[0].extensions.code == "NOT_FOUND"`),
+						jmespath.MustCompile(`errors[0].extensions.code == 'NOT_FOUND'`),
 					},
 				},
 			},
@@ -583,4 +584,110 @@ func TestHandle_WithExtensions(t *testing.T) {
 	_, _, err = handler.Handle(context.TODO(), newTestRequest(), opts)
 	assert.NoError(t, err)
 	assert.Equal(t, "hash-abc", receivedBody.Extensions["persistedQuery"])
+}
+
+// TestTransformResponse_HTTPStatusMappingNoMatch verifies that a non-matching rule does not fire.
+func TestTransformResponse_HTTPStatusMappingNoMatch(t *testing.T) {
+	responseBody := []byte(
+		`{"data":null,"errors":[{"message":"boom","extensions":{"code":"INTERNAL"}}]}`,
+	)
+
+	handler := &GraphQLHandler{
+		method: "POST",
+		customResponse: &proxyCustomGraphQLResponse{
+			HTTPErrors: []proxyHTTPErrorMapping{
+				{
+					Status: 404,
+					Expressions: []jmespath.JMESPath{
+						jmespath.MustCompile(`errors[0].extensions.code == 'NOT_FOUND'`),
+					},
+				},
+			},
+		},
+	}
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader(responseBody)),
+		Header:     http.Header{},
+	}
+
+	result, err := handler.handleTransformResponse(context.TODO(), resp)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.NotNil(t, result)
+
+	// A matching second rule fires in ascending status order.
+	handler.customResponse.HTTPErrors = append(
+		handler.customResponse.HTTPErrors,
+		proxyHTTPErrorMapping{
+			Status: 500,
+			Expressions: []jmespath.JMESPath{
+				jmespath.MustCompile(
+					`errors[?extensions.code == 'INTERNAL'] | length(@) > ` + "`0`",
+				),
+			},
+		},
+	)
+
+	resp = &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader(responseBody)),
+		Header:     http.Header{},
+	}
+
+	_, err = handler.handleTransformResponse(context.TODO(), resp)
+	assert.Error(t, err)
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+}
+
+// TestWriteTransformResponse_EncodeErrorBeforeHeader verifies that encoding errors are returned
+// before the response header is written.
+func TestWriteTransformResponse_EncodeErrorBeforeHeader(t *testing.T) {
+	handler := &GraphQLHandler{
+		method: "POST",
+		customResponse: &proxyCustomGraphQLResponse{
+			ContentType: "application/json",
+			Body:        chanTransformer{},
+		},
+	}
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader([]byte(`{"data":{"ok":true}}`))),
+		Header:     http.Header{},
+	}
+
+	w := &headerTrackingWriter{ResponseRecorder: httptest.NewRecorder()}
+
+	_, err := handler.writeTransformResponse(context.TODO(), resp, w)
+	assert.Error(t, err)
+	assert.False(t, w.wroteHeader)
+}
+
+type chanTransformer struct{}
+
+func (chanTransformer) IsZero() bool { return false }
+
+func (chanTransformer) Type() transformtypes.TransformTemplateType { return "chan" }
+
+func (chanTransformer) Transform(any) (any, error) {
+	return map[string]any{"c": make(chan int)}, nil
+}
+
+type headerTrackingWriter struct {
+	*httptest.ResponseRecorder
+
+	wroteHeader bool
+}
+
+func (w *headerTrackingWriter) WriteHeader(status int) {
+	w.wroteHeader = true
+	w.ResponseRecorder.WriteHeader(status)
+}
+
+func (w *headerTrackingWriter) Write(b []byte) (int, error) {
+	w.wroteHeader = true
+
+	return w.ResponseRecorder.Write(b)
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v2high "github.com/pb33f/libopenapi/datamodel/high/v2"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/pb33f/libopenapi/datamodel/low"
 	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/pb33f/libopenapi/utils"
 )
@@ -51,25 +52,7 @@ func (sto *swaggerToOpenAPIv3Converter) Convert() (*v3high.Document, error) {
 		Components:   &v3high.Components{},
 	}
 
-	if sto.swagger.Host != "" {
-		scheme := "https"
-
-		if len(sto.swagger.Schemes) > 0 && !slices.Contains(sto.swagger.Schemes, scheme) {
-			scheme = sto.swagger.Schemes[0]
-		}
-
-		serverURL := scheme + "://" + sto.swagger.Host
-
-		if sto.swagger.BasePath != "" && sto.swagger.BasePath != "/" {
-			serverURL += sto.swagger.BasePath
-		}
-
-		newDoc.Servers = []*v3high.Server{
-			{
-				URL: serverURL,
-			},
-		}
-	}
+	newDoc.Servers = sto.convertServers()
 
 	newDoc.Components.SecuritySchemes = sto.convertSecurityDefinitions()
 
@@ -177,7 +160,7 @@ func (sto *swaggerToOpenAPIv3Converter) convertOperation(
 	formDataProps := orderedmap.New[string, *base.SchemaProxy]()
 
 	consumes := sto.swagger.Consumes
-	if len(operation.Produces) > 0 {
+	if len(operation.Consumes) > 0 {
 		consumes = operation.Consumes
 	}
 
@@ -383,7 +366,6 @@ func (*swaggerToOpenAPIv3Converter) convertSecurityScheme(
 		flow := &v3high.OAuthFlow{
 			AuthorizationUrl: value.AuthorizationUrl,
 			TokenUrl:         value.TokenUrl,
-			Scopes:           value.Scopes.Values,
 		}
 
 		if value.Scopes != nil && value.Scopes.Values != nil {
@@ -486,22 +468,22 @@ func (sto *swaggerToOpenAPIv3Converter) schemaFromParameter(
 		}
 	}
 
-	if parameter.MaxLength != nil && *parameter.MaxLength > 0 {
+	if parameter.MaxLength != nil {
 		maxLength := int64(*parameter.MaxLength)
 		baseSchema.MaxLength = &maxLength
 	}
 
-	if parameter.MinLength != nil && *parameter.MinLength > 0 {
+	if parameter.MinLength != nil {
 		minLength := int64(*parameter.MinLength)
-		baseSchema.MaxLength = &minLength
+		baseSchema.MinLength = &minLength
 	}
 
-	if parameter.MaxItems != nil && *parameter.MaxItems > 0 {
+	if parameter.MaxItems != nil {
 		maxItems := int64(*parameter.MaxItems)
 		baseSchema.MaxItems = &maxItems
 	}
 
-	if parameter.MinItems != nil && *parameter.MaxItems > 0 {
+	if parameter.MinItems != nil {
 		minItems := int64(*parameter.MinItems)
 		baseSchema.MinItems = &minItems
 	}
@@ -536,9 +518,8 @@ func (sto *swaggerToOpenAPIv3Converter) convertHeaders(
 
 func (sto *swaggerToOpenAPIv3Converter) convertHeader(value *v2high.Header) *v3high.Header {
 	baseSchema := &base.Schema{
-		Format:      value.Format,
-		Pattern:     value.Pattern,
-		UniqueItems: &value.UniqueItems,
+		Format:  value.Format,
+		Pattern: value.Pattern,
 	}
 
 	if value.Default != nil {
@@ -557,39 +538,7 @@ func (sto *swaggerToOpenAPIv3Converter) convertHeader(value *v2high.Header) *v3h
 		}
 	}
 
-	maximum := float64(value.Maximum)
-	baseSchema.Maximum = &maximum
-	minimum := float64(value.Minimum)
-	baseSchema.Minimum = &minimum
-	multipleOf := float64(value.MultipleOf)
-	baseSchema.MultipleOf = &multipleOf
-	baseSchema.ExclusiveMinimum = &base.DynamicValue[bool, float64]{
-		A: value.ExclusiveMinimum,
-	}
-
-	baseSchema.ExclusiveMaximum = &base.DynamicValue[bool, float64]{
-		A: value.ExclusiveMaximum,
-	}
-
-	if value.MaxLength > 0 {
-		maxLength := int64(value.MaxLength)
-		baseSchema.MaxLength = &maxLength
-	}
-
-	if value.MinLength > 0 {
-		minLength := int64(value.MinLength)
-		baseSchema.MaxLength = &minLength
-	}
-
-	if value.MaxItems > 0 {
-		maxItems := int64(value.MaxItems)
-		baseSchema.MaxItems = &maxItems
-	}
-
-	if value.MinItems > 0 {
-		minItems := int64(value.MinItems)
-		baseSchema.MinItems = &minItems
-	}
+	applyV2SchemaConstraints(baseSchema, headerConstraints(value))
 
 	if value.Items != nil {
 		baseSchema.Items = sto.convertItems(value.Items)
@@ -609,50 +558,17 @@ func (sto *swaggerToOpenAPIv3Converter) convertItems(
 	items *v2high.Items,
 ) *base.DynamicValue[*base.SchemaProxy, bool] {
 	baseSchema := &base.Schema{
-		Format:      items.Format,
-		Pattern:     items.Pattern,
-		Default:     items.Default,
-		UniqueItems: &items.UniqueItems,
-		Enum:        items.Enum,
+		Format:  items.Format,
+		Pattern: items.Pattern,
+		Default: items.Default,
+		Enum:    items.Enum,
 	}
 
 	if items.Type != "" {
 		baseSchema.Type = []string{items.Type}
 	}
 
-	maximum := float64(items.Maximum)
-	baseSchema.Maximum = &maximum
-	minimum := float64(items.Minimum)
-	baseSchema.Minimum = &minimum
-	multipleOf := float64(items.MultipleOf)
-	baseSchema.MultipleOf = &multipleOf
-	baseSchema.ExclusiveMinimum = &base.DynamicValue[bool, float64]{
-		A: items.ExclusiveMinimum,
-	}
-
-	baseSchema.ExclusiveMaximum = &base.DynamicValue[bool, float64]{
-		A: items.ExclusiveMaximum,
-	}
-
-	if items.MaxLength > 0 {
-		maxLength := int64(items.MaxLength)
-		baseSchema.MaxLength = &maxLength
-	}
-
-	if items.MinLength > 0 {
-		minLength := int64(items.MinLength)
-		baseSchema.MaxLength = &minLength
-	}
-
-	if items.MaxItems > 0 {
-		maxItems := int64(items.MaxItems)
-		baseSchema.MaxItems = &maxItems
-	}
-
-	if items.MinItems > 0 {
-		minItems := int64(items.MinItems)
-		baseSchema.MinItems = &minItems
-	}
+	applyV2SchemaConstraints(baseSchema, itemsConstraints(items))
 
 	if items.Items != nil {
 		baseSchema.Items = sto.convertItems(items.Items)
@@ -690,4 +606,200 @@ func getStyleFromCollectionFormat(
 	default:
 		return "", false
 	}
+}
+
+func (sto *swaggerToOpenAPIv3Converter) convertServers() []*v3high.Server {
+	basePath := sto.swagger.BasePath
+	if basePath == "/" {
+		basePath = ""
+	}
+
+	if sto.swagger.Host == "" {
+		if basePath == "" {
+			return nil
+		}
+
+		// The host is unknown. Use a relative server URL so the base path is preserved.
+		if !strings.HasPrefix(basePath, "/") {
+			basePath = "/" + basePath
+		}
+
+		return []*v3high.Server{
+			{
+				URL: basePath,
+			},
+		}
+	}
+
+	scheme := "https"
+
+	if len(sto.swagger.Schemes) > 0 && !slices.Contains(sto.swagger.Schemes, scheme) {
+		scheme = sto.swagger.Schemes[0]
+	}
+
+	return []*v3high.Server{
+		{
+			URL: scheme + "://" + sto.swagger.Host + basePath,
+		},
+	}
+}
+
+// v2SchemaConstraints holds validation keywords of a Swagger 2.0 header or items object.
+// Nil fields are absent from the source document.
+type v2SchemaConstraints struct {
+	Maximum          *int
+	Minimum          *int
+	MultipleOf       *int
+	MaxLength        *int
+	MinLength        *int
+	MaxItems         *int
+	MinItems         *int
+	ExclusiveMaximum *bool
+	ExclusiveMinimum *bool
+	UniqueItems      *bool
+}
+
+// v2LowConstraintsGetter is implemented by low-level Swagger 2.0 header and items objects.
+type v2LowConstraintsGetter interface {
+	GetMaximum() *low.NodeReference[int]
+	GetExclusiveMaximum() *low.NodeReference[bool]
+	GetMinimum() *low.NodeReference[int]
+	GetExclusiveMinimum() *low.NodeReference[bool]
+	GetMaxLength() *low.NodeReference[int]
+	GetMinLength() *low.NodeReference[int]
+	GetMaxItems() *low.NodeReference[int]
+	GetMinItems() *low.NodeReference[int]
+	GetUniqueItems() *low.NodeReference[bool]
+	GetMultipleOf() *low.NodeReference[int]
+}
+
+func headerConstraints(value *v2high.Header) v2SchemaConstraints {
+	if lowValue := value.GoLow(); lowValue != nil {
+		return lowConstraints(lowValue)
+	}
+
+	return highConstraints(
+		value.Maximum, value.Minimum, value.MultipleOf,
+		value.MaxLength, value.MinLength, value.MaxItems, value.MinItems,
+		value.ExclusiveMaximum, value.ExclusiveMinimum, value.UniqueItems,
+	)
+}
+
+func itemsConstraints(value *v2high.Items) v2SchemaConstraints {
+	if lowValue := value.GoLow(); lowValue != nil {
+		return lowConstraints(lowValue)
+	}
+
+	return highConstraints(
+		value.Maximum, value.Minimum, value.MultipleOf,
+		value.MaxLength, value.MinLength, value.MaxItems, value.MinItems,
+		value.ExclusiveMaximum, value.ExclusiveMinimum, value.UniqueItems,
+	)
+}
+
+// lowConstraints reads constraints from the low-level model, which tracks the presence of each keyword.
+func lowConstraints(value v2LowConstraintsGetter) v2SchemaConstraints {
+	return v2SchemaConstraints{
+		Maximum:          lowNodeValue(value.GetMaximum()),
+		Minimum:          lowNodeValue(value.GetMinimum()),
+		MultipleOf:       lowNodeValue(value.GetMultipleOf()),
+		MaxLength:        lowNodeValue(value.GetMaxLength()),
+		MinLength:        lowNodeValue(value.GetMinLength()),
+		MaxItems:         lowNodeValue(value.GetMaxItems()),
+		MinItems:         lowNodeValue(value.GetMinItems()),
+		ExclusiveMaximum: lowNodeValue(value.GetExclusiveMaximum()),
+		ExclusiveMinimum: lowNodeValue(value.GetExclusiveMinimum()),
+		UniqueItems:      lowNodeValue(value.GetUniqueItems()),
+	}
+}
+
+// highConstraints is the fallback for high-level objects built without a low-level model.
+// Presence cannot be detected, so zero values are treated as absent.
+func highConstraints( //nolint:revive
+	maximum, minimum, multipleOf, maxLength, minLength, maxItems, minItems int,
+	exclusiveMaximum, exclusiveMinimum, uniqueItems bool,
+) v2SchemaConstraints {
+	return v2SchemaConstraints{
+		Maximum:          nonZeroPtr(maximum),
+		Minimum:          nonZeroPtr(minimum),
+		MultipleOf:       nonZeroPtr(multipleOf),
+		MaxLength:        nonZeroPtr(maxLength),
+		MinLength:        nonZeroPtr(minLength),
+		MaxItems:         nonZeroPtr(maxItems),
+		MinItems:         nonZeroPtr(minItems),
+		ExclusiveMaximum: nonZeroPtr(exclusiveMaximum),
+		ExclusiveMinimum: nonZeroPtr(exclusiveMinimum),
+		UniqueItems:      nonZeroPtr(uniqueItems),
+	}
+}
+
+func lowNodeValue[T any](ref *low.NodeReference[T]) *T {
+	if ref == nil || ref.IsEmpty() {
+		return nil
+	}
+
+	value := ref.Value
+
+	return &value
+}
+
+func nonZeroPtr[T comparable](value T) *T {
+	var zero T
+
+	if value == zero {
+		return nil
+	}
+
+	return &value
+}
+
+func applyV2SchemaConstraints(baseSchema *base.Schema, constraints v2SchemaConstraints) {
+	if constraints.Maximum != nil {
+		maximum := float64(*constraints.Maximum)
+		baseSchema.Maximum = &maximum
+	}
+
+	if constraints.Minimum != nil {
+		minimum := float64(*constraints.Minimum)
+		baseSchema.Minimum = &minimum
+	}
+
+	if constraints.MultipleOf != nil {
+		multipleOf := float64(*constraints.MultipleOf)
+		baseSchema.MultipleOf = &multipleOf
+	}
+
+	if constraints.ExclusiveMaximum != nil {
+		baseSchema.ExclusiveMaximum = &base.DynamicValue[bool, float64]{
+			A: *constraints.ExclusiveMaximum,
+		}
+	}
+
+	if constraints.ExclusiveMinimum != nil {
+		baseSchema.ExclusiveMinimum = &base.DynamicValue[bool, float64]{
+			A: *constraints.ExclusiveMinimum,
+		}
+	}
+
+	if constraints.MaxLength != nil {
+		maxLength := int64(*constraints.MaxLength)
+		baseSchema.MaxLength = &maxLength
+	}
+
+	if constraints.MinLength != nil {
+		minLength := int64(*constraints.MinLength)
+		baseSchema.MinLength = &minLength
+	}
+
+	if constraints.MaxItems != nil {
+		maxItems := int64(*constraints.MaxItems)
+		baseSchema.MaxItems = &maxItems
+	}
+
+	if constraints.MinItems != nil {
+		minItems := int64(*constraints.MinItems)
+		baseSchema.MinItems = &minItems
+	}
+
+	baseSchema.UniqueItems = constraints.UniqueItems
 }

@@ -21,6 +21,9 @@ import (
 )
 
 // ReplaceURLTemplate finds and replace variables in the template string.
+// Values returned by the get function are inserted verbatim. Callers that build URL paths
+// from untrusted values must escape them first (e.g. with [net/url.PathEscape]) to prevent
+// path traversal or query injection.
 func ReplaceURLTemplate(input string, get goenvconf.GetEnvFunc) (string, error) {
 	if input == "" {
 		return "", nil

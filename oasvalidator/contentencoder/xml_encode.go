@@ -20,6 +20,7 @@ import (
 	"io"
 	"reflect"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
@@ -162,6 +163,10 @@ func (enc *xmlEncoder) encodeStringMap(
 				continue
 			}
 
+			if !isValidXMLName(k) {
+				return newXMLInvalidNameError(k, pointer)
+			}
+
 			err := enc.encodeField(xml.StartElement{
 				Name: xml.Name{Local: k},
 			}, v, pointer+"/"+k)
@@ -192,6 +197,10 @@ func (enc *xmlEncoder) encodeAnyMap(
 
 			if keyStr == "" || keyStr == goutils.NullStr {
 				continue
+			}
+
+			if !isValidXMLName(keyStr) {
+				return newXMLInvalidNameError(keyStr, pointer)
 			}
 
 			err := enc.encodeField(xml.StartElement{
@@ -264,6 +273,10 @@ func (enc *xmlEncoder) encodeReflectionMap(
 
 			if key == "" {
 				continue
+			}
+
+			if !isValidXMLName(key) {
+				return newXMLInvalidNameError(key, pointer)
 			}
 
 			value := valueMap.MapIndex(mapKey)
@@ -341,6 +354,76 @@ func newXMLInvalidKeyStringError(kind reflect.Kind, pointer string) *httperror.V
 		Pointer: pointer,
 		Code:    oasvalidator.ErrCodeXMLEncodeError,
 	}
+}
+
+func newXMLInvalidNameError(name string, pointer string) *httperror.ValidationError {
+	return &httperror.ValidationError{
+		Detail:  "invalid XML element name: " + strconv.Quote(name),
+		Pointer: pointer,
+		Code:    oasvalidator.ErrCodeXMLEncodeError,
+	}
+}
+
+// isValidXMLName checks if the input string is a valid XML element name.
+// See https://www.w3.org/TR/xml/#NT-Name.
+func isValidXMLName(name string) bool {
+	if name == "" {
+		return false
+	}
+
+	for i, r := range name {
+		if r == utf8.RuneError {
+			return false
+		}
+
+		if isXMLNameStartChar(r) {
+			continue
+		}
+
+		if i == 0 || !isXMLNameChar(r) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// xmlNameStartCharRanges holds the non-ASCII NameStartChar ranges of the XML specification.
+var xmlNameStartCharRanges = [][2]rune{
+	{0xC0, 0xD6},
+	{0xD8, 0xF6},
+	{0xF8, 0x2FF},
+	{0x370, 0x37D},
+	{0x37F, 0x1FFF},
+	{0x200C, 0x200D},
+	{0x2070, 0x218F},
+	{0x2C00, 0x2FEF},
+	{0x3001, 0xD7FF},
+	{0xF900, 0xFDCF},
+	{0xFDF0, 0xFFFD},
+	{0x10000, 0xEFFFF},
+}
+
+func isXMLNameStartChar(r rune) bool {
+	if r == ':' || r == '_' || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+		return true
+	}
+
+	for _, rng := range xmlNameStartCharRanges {
+		if r >= rng[0] && r <= rng[1] {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isXMLNameChar(r rune) bool {
+	return r == '-' || r == '.' ||
+		(r >= '0' && r <= '9') ||
+		r == 0xB7 ||
+		(r >= 0x0300 && r <= 0x036F) ||
+		(r >= 0x203F && r <= 0x2040)
 }
 
 func newXMLEncodeError(err error, pointer string) *httperror.ValidationError {

@@ -17,7 +17,6 @@ package resthandler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -28,7 +27,6 @@ import (
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
-	"github.com/relychan/openapitools/oasvalidator/contentencoder"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
 	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
@@ -229,24 +227,33 @@ func (re *RESTfulHandler) handleRequest(
 	// encode the body back to the response stream.
 	options.ForwardResponseHeaders(writer, resp)
 
-	if re.customResponse.ContentType != "" {
-		writer.Header()[httpheader.ContentType] = []string{re.customResponse.ContentType}
-		writer.WriteHeader(resp.StatusCode)
-
-		_, err = contentencoder.Write(writer, re.customResponse.ContentType, transformedBody, nil)
-	} else {
+	// Encode the body before writing the response header,
+	// so encoding errors can still be returned as an error response.
+	switch {
+	case re.customResponse.ContentType != "":
+		err = writeEncodedResponse(
+			writer,
+			resp.StatusCode,
+			re.customResponse.ContentType,
+			transformedBody,
+		)
+	default:
 		// auto-detect the response content type by the transformed body's type.
 		str, ok := transformedBody.(string)
 		if ok {
-			writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeTextPlain}
-			writer.WriteHeader(resp.StatusCode)
-
-			_, err = writer.Write([]byte(str))
+			err = writeResponseBytes(
+				writer,
+				resp.StatusCode,
+				httpheader.ContentTypeTextPlain,
+				[]byte(str),
+			)
 		} else {
-			writer.Header()[httpheader.ContentType] = []string{httpheader.ContentTypeJSON}
-			writer.WriteHeader(resp.StatusCode)
-
-			err = json.NewEncoder(writer).Encode(transformedBody)
+			err = writeEncodedResponse(
+				writer,
+				resp.StatusCode,
+				httpheader.ContentTypeJSON,
+				transformedBody,
+			)
 		}
 	}
 
@@ -328,6 +335,7 @@ func (*RESTfulHandler) printRequestLog(
 	logLevel := slog.LevelDebug
 
 	if err != nil {
+		logLevel = slog.LevelError
 		message = err.Error()
 	}
 

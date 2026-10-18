@@ -15,6 +15,7 @@
 package oaschema
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/relychan/goutils"
@@ -60,7 +61,7 @@ var enumSecuritySchemes = []string{
 
 // IsValid checks if the style enum is valid.
 func (j SecuritySchemeType) IsValid() bool {
-	return j <= 7
+	return int(j) < len(enumSecuritySchemes)
 }
 
 // String implements fmt.Stringer interface.
@@ -96,9 +97,14 @@ func (j SecuritySchemeType) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON unmarshals a JSON description of themselves.
 func (j *SecuritySchemeType) UnmarshalJSON(input []byte) error {
-	value := input[1 : len(input)-1]
+	var value string
 
-	return j.UnmarshalText(value)
+	err := json.Unmarshal(input, &value)
+	if err != nil {
+		return err
+	}
+
+	return j.UnmarshalText([]byte(value))
 }
 
 // SupportedSecuritySchemeTypes return all supported security scheme types.
@@ -163,7 +169,7 @@ var enumValueParameterLocations = []string{
 
 // IsValid checks if the style enum is valid.
 func (j ParameterLocation) IsValid() bool {
-	return j <= 5
+	return int(j) < len(enumValueParameterLocations)
 }
 
 // String implements fmt.Stringer interface.
@@ -199,9 +205,14 @@ func (j ParameterLocation) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON unmarshals a JSON description of themselves.
 func (j *ParameterLocation) UnmarshalJSON(input []byte) error {
-	value := input[1 : len(input)-1]
+	var value string
 
-	result, err := ParseParameterLocation(string(value))
+	err := json.Unmarshal(input, &value)
+	if err != nil {
+		return err
+	}
+
+	result, err := ParseParameterLocation(value)
 	if err != nil {
 		return err
 	}
@@ -278,7 +289,7 @@ var enumValueEncodingStyles = []string{
 
 // IsValid checks if the style enum is valid.
 func (j ParameterEncodingStyle) IsValid() bool {
-	return j < 8
+	return int(j) < len(enumValueEncodingStyles)
 }
 
 // String implements fmt.Stringer interface.
@@ -314,9 +325,14 @@ func (j ParameterEncodingStyle) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON unmarshals a JSON description of themselves.
 func (j *ParameterEncodingStyle) UnmarshalJSON(input []byte) error {
-	value := input[1 : len(input)-1]
+	var value string
 
-	result, err := ParseParameterEncodingStyle(string(value))
+	err := json.Unmarshal(input, &value)
+	if err != nil {
+		return err
+	}
+
+	result, err := ParseParameterEncodingStyle(value)
 	if err != nil {
 		return err
 	}

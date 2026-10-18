@@ -64,11 +64,12 @@ func TestExtractCommonParametersOfOperation(t *testing.T) {
 					{Name: "filter", In: InQuery.String()},
 				},
 			},
-			expectedPathParams: []*highv3.Parameter{
-				{Name: "id", In: InPath.String()},
+			// operation-level path params must not be hoisted into the shared path-level list.
+			expectedPathParams: []*highv3.Parameter{{Name: "id", In: InPath.String()}},
+			expectedOpParams: []*highv3.Parameter{
 				{Name: "commentId", In: InPath.String()},
+				{Name: "filter", In: InQuery.String()},
 			},
-			expectedOpParams: []*highv3.Parameter{{Name: "filter", In: InQuery.String()}},
 		},
 		{
 			name:       "operation with query and header parameters",
@@ -112,4 +113,67 @@ func TestExtractCommonParametersOfOperation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExtractCommonParametersOfOperation_NoHoisting(t *testing.T) {
+	pathParams := []*highv3.Parameter{{Name: "id", In: InPath.String()}}
+	get := &highv3.Operation{
+		Parameters: []*highv3.Parameter{{Name: "commentId", In: InPath.String()}},
+	}
+	post := &highv3.Operation{}
+
+	params := ExtractCommonParametersOfOperation(pathParams, get)
+	params = ExtractCommonParametersOfOperation(params, post)
+
+	assert.Equal(t, []*highv3.Parameter{{Name: "id", In: InPath.String()}}, params)
+	assert.Len(t, pathParams, 1)
+	assert.Equal(t, []*highv3.Parameter{{Name: "commentId", In: InPath.String()}}, get.Parameters)
+}
+
+func TestInheritedPathItemParameters(t *testing.T) {
+	pathID := &highv3.Parameter{Name: "id", In: InPath.String(), Description: "path-level"}
+	pathLimit := &highv3.Parameter{Name: "limit", In: InQuery.String()}
+	opID := &highv3.Parameter{Name: "id", In: InPath.String(), Description: "operation-level"}
+	opFilter := &highv3.Parameter{Name: "filter", In: InQuery.String()}
+
+	pathParams := []*highv3.Parameter{pathID, pathLimit}
+	operation := &highv3.Operation{Parameters: []*highv3.Parameter{opID, opFilter}}
+
+	t.Run("operation_level_overrides_path_level", func(t *testing.T) {
+		inherited := InheritedPathItemParameters(pathParams, operation)
+		assert.Equal(t, []*highv3.Parameter{pathLimit}, inherited)
+
+		merged := MergeOperationParameters(pathParams, operation)
+		assert.Equal(t, []*highv3.Parameter{opID, opFilter, pathLimit}, merged)
+	})
+
+	t.Run("inputs_are_not_mutated", func(t *testing.T) {
+		_ = MergeOperationParameters(pathParams, operation)
+
+		assert.Equal(t, []*highv3.Parameter{pathID, pathLimit}, pathParams)
+		assert.Equal(t, []*highv3.Parameter{opID, opFilter}, operation.Parameters)
+	})
+
+	t.Run("nil_operation", func(t *testing.T) {
+		assert.Equal(
+			t,
+			[]*highv3.Parameter{pathID, pathLimit},
+			MergeOperationParameters(pathParams, nil),
+		)
+		assert.Nil(t, InheritedPathItemParameters(nil, operation))
+	})
+
+	t.Run("operation_path_params_do_not_leak", func(t *testing.T) {
+		other := &highv3.Operation{}
+
+		_ = MergeOperationParameters(pathParams, &highv3.Operation{
+			Parameters: []*highv3.Parameter{{Name: "commentId", In: InPath.String()}},
+		})
+
+		assert.Equal(
+			t,
+			[]*highv3.Parameter{pathID, pathLimit},
+			MergeOperationParameters(pathParams, other),
+		)
+	})
 }

@@ -16,6 +16,7 @@ package openapiclient
 
 import (
 	"errors"
+	"net/http"
 
 	"github.com/hasura/gotel"
 )
@@ -33,4 +34,83 @@ var (
 type tracingResponseWriter interface {
 	// BytesWritten returns the total number of bytes sent to the client.
 	BytesWritten() int
+}
+
+type headerTrackingResponseWriter interface {
+	// HeaderWritten checks if the response header was written to the client.
+	HeaderWritten() bool
+}
+
+// trackingResponseWriter wraps an [http.ResponseWriter] to track whether
+// the response header and body were written.
+type trackingResponseWriter struct {
+	http.ResponseWriter
+
+	bytesWritten  int
+	headerWritten bool
+}
+
+var (
+	_ tracingResponseWriter        = (*trackingResponseWriter)(nil)
+	_ headerTrackingResponseWriter = (*trackingResponseWriter)(nil)
+	_ http.Flusher                 = (*trackingResponseWriter)(nil)
+)
+
+// newTrackingResponseWriter wraps the response writer if it is not a [trackingResponseWriter] yet.
+func newTrackingResponseWriter(writer http.ResponseWriter) *trackingResponseWriter {
+	if tw, ok := writer.(*trackingResponseWriter); ok {
+		return tw
+	}
+
+	return &trackingResponseWriter{ResponseWriter: writer}
+}
+
+// WriteHeader sends an HTTP response header with the provided status code.
+func (w *trackingResponseWriter) WriteHeader(statusCode int) {
+	if w.headerWritten {
+		return
+	}
+
+	// Informational headers (1xx) except 101 Switching Protocols do not commit the response.
+	if statusCode >= 100 && statusCode < 200 && statusCode != http.StatusSwitchingProtocols {
+		w.ResponseWriter.WriteHeader(statusCode)
+
+		return
+	}
+
+	w.headerWritten = true
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+// Write writes the data to the connection as part of an HTTP reply.
+func (w *trackingResponseWriter) Write(data []byte) (int, error) {
+	w.headerWritten = true
+
+	n, err := w.ResponseWriter.Write(data)
+	w.bytesWritten += n
+
+	return n, err
+}
+
+// Flush sends any buffered data to the client.
+func (w *trackingResponseWriter) Flush() {
+	// Flushing commits the response header.
+	w.headerWritten = true
+
+	_ = http.NewResponseController(w.ResponseWriter).Flush()
+}
+
+// Unwrap returns the inner response writer. It is used by [http.ResponseController].
+func (w *trackingResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+// BytesWritten returns the total number of bytes sent to the client.
+func (w *trackingResponseWriter) BytesWritten() int {
+	return w.bytesWritten
+}
+
+// HeaderWritten checks if the response header was written to the client.
+func (w *trackingResponseWriter) HeaderWritten() bool {
+	return w.headerWritten
 }

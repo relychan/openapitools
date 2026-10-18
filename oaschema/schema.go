@@ -70,6 +70,12 @@ func ExtractSchemaTypes(schema *base.Schema) ( //nolint:revive,nonamedreturns,cy
 	evalSchema := func(item *base.Schema) {
 		for _, schemaType := range item.Type {
 			normalizedType, _ := NormalizeType(schemaType)
+			if normalizedType == "" {
+				// the null type (JSON Schema / OpenAPI 3.1) marks the schema as nullable.
+				isNullable = isNullable || strings.EqualFold(schemaType, "null")
+
+				continue
+			}
 
 			if !slices.Contains(types, normalizedType) {
 				types = append(types, normalizedType)

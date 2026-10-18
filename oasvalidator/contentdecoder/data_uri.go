@@ -75,7 +75,12 @@ func DecodeDataURI(input string) (*DataURI, error) {
 
 		dataURI.Data = rawDecodedBytes
 	default:
-		dataURI.Data = []byte(url.PathEscape(content))
+		unescaped, err := url.PathUnescape(content)
+		if err != nil {
+			return nil, err
+		}
+
+		dataURI.Data = []byte(unescaped)
 	}
 
 	return dataURI, nil

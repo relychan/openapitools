@@ -150,7 +150,10 @@ func TestTransformRequest(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			result, err := tc.Handler.resolveRequestVariables(tc.TemplateData, tc.TemplateData.ToMap())
+			result, err := tc.Handler.resolveRequestVariables(
+				tc.TemplateData,
+				tc.TemplateData.ToMap(),
+			)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.Expected, result)
 		})
@@ -211,7 +214,10 @@ func TestResolveRequestExtensions(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			headerParams, errs := parameter.DecodeHeaderParameters([]*oaschema.Parameter{}, tc.templateData.Header())
+			headerParams, errs := parameter.DecodeHeaderParameters(
+				[]*oaschema.Parameter{},
+				tc.templateData.Header(),
+			)
 			assert.Len(t, errs, 0)
 			tc.templateData.SetHeaderParams(headerParams)
 

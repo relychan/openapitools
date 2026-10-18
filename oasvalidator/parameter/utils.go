@@ -128,7 +128,7 @@ func EvaluateParameterValue(value any, parentKeys ParamKeys) ParameterItems {
 		for i, item := range v {
 			if item != "" {
 				results = append(results, NewParameterItem(
-					ParamKeys{ParamIndex(i)},
+					slices.Concat(parentKeys, ParamKeys{ParamIndex(i)}),
 					item,
 				))
 			}
@@ -139,7 +139,10 @@ func EvaluateParameterValue(value any, parentKeys ParamKeys) ParameterItems {
 		results := make(ParameterItems, 0, len(v))
 
 		for i, item := range v {
-			params := EvaluateParameterValue(item, append(parentKeys, ParamIndex(i)))
+			params := EvaluateParameterValue(
+				item,
+				slices.Concat(parentKeys, ParamKeys{ParamIndex(i)}),
+			)
 			if len(params) > 0 {
 				results = append(results, params...)
 			}
@@ -150,7 +153,10 @@ func EvaluateParameterValue(value any, parentKeys ParamKeys) ParameterItems {
 		results := make(ParameterItems, 0, len(v))
 
 		for key, item := range v {
-			params := EvaluateParameterValue(item, append(parentKeys, ParamKey(key)))
+			params := EvaluateParameterValue(
+				item,
+				slices.Concat(parentKeys, ParamKeys{ParamKey(key)}),
+			)
 			if len(params) > 0 {
 				results = append(results, params...)
 			}
@@ -166,7 +172,10 @@ func EvaluateParameterValue(value any, parentKeys ParamKeys) ParameterItems {
 				continue
 			}
 
-			params := EvaluateParameterValue(item, append(parentKeys, ParamKey(key)))
+			params := EvaluateParameterValue(
+				item,
+				slices.Concat(parentKeys, ParamKeys{ParamKey(key)}),
+			)
 			if len(params) > 0 {
 				results = append(results, params...)
 			}
@@ -241,7 +250,10 @@ func evaluateParameterValueReflection(
 		for i := range valueLength {
 			elem := reflectValue.Index(i)
 
-			params := evaluateParameterValueReflection(elem, append(parentKeys, ParamIndex(i)))
+			params := evaluateParameterValueReflection(
+				elem,
+				slices.Concat(parentKeys, ParamKeys{ParamIndex(i)}),
+			)
 			if len(params) > 0 {
 				results = append(results, params...)
 			}
@@ -261,7 +273,10 @@ func evaluateParameterValueReflection(
 			keyStr := key.String()
 			elem := reflectValue.MapIndex(key)
 
-			params := evaluateParameterValueReflection(elem, append(parentKeys, ParamKey(keyStr)))
+			params := evaluateParameterValueReflection(
+				elem,
+				slices.Concat(parentKeys, ParamKeys{ParamKey(keyStr)}),
+			)
 			if len(params) > 0 {
 				results = append(results, params...)
 			}

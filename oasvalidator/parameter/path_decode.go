@@ -71,12 +71,7 @@ func DecodePathValue(
 	schemaTypes, _ := oaschema.GetSchemaTypes(definition.Schema)
 
 	if slices.Contains(schemaTypes, oaschema.String) {
-		errs := oasvalidator.ValidateValue(definition.Schema, value)
-		if len(errs) > 0 {
-			return nil, enrichPathParamErrors(errs, definition.Name)
-		}
-
-		return value, nil
+		return decodePathStringParam(definition, value, style)
 	}
 
 	if slices.Contains(schemaTypes, oaschema.Object) {
@@ -197,6 +192,50 @@ func trimPathValueByStyle(
 	default:
 		return rawValue, nil
 	}
+}
+
+// decodePathStringParam validates a path value whose schema accepts strings.
+func decodePathStringParam(
+	definition *oaschema.Parameter,
+	value string,
+	style oaschema.ParameterEncodingStyle,
+) (any, []httperror.ValidationError) {
+	if style == oaschema.EncodingStyleMatrix {
+		// Primitive values are serialized as ;name=value (or ;name for empty values)
+		// in both exploded and non-exploded matrix styles.
+		var err *httperror.ValidationError
+
+		value, err = trimMatrixPrimitiveValue(definition.Name, value)
+		if err != nil {
+			return nil, []httperror.ValidationError{*err}
+		}
+	}
+
+	errs := oasvalidator.ValidateValue(definition.Schema, value)
+	if len(errs) > 0 {
+		return nil, enrichPathParamErrors(errs, definition.Name)
+	}
+
+	return value, nil
+}
+
+// trimMatrixPrimitiveValue strips the "name=" prefix of a matrix-style primitive value.
+// The leading semicolon has already been removed by trimPathValueByStyle.
+func trimMatrixPrimitiveValue(name string, rawValue string) (string, *httperror.ValidationError) {
+	if rawValue == name {
+		// ;color
+		return "", nil
+	}
+
+	value, found := strings.CutPrefix(rawValue, name+oaschema.Equals)
+	if !found {
+		return "", newInvalidPathParamError(
+			name,
+			"Invalid matrix style in parameter value. The primitive value must follow this format: ;key=value",
+		)
+	}
+
+	return value, nil
 }
 
 // Splits RawValue into individual array elements according to the serialization style.

@@ -96,9 +96,9 @@ func encodeParamMatrixExplode(name string, params ParameterItems) string {
 			key := param.keys.Format("", false)
 
 			sb.WriteByte(oaschema.SemiColon[0])
-			sb.WriteString(key)
+			sb.WriteString(url.PathEscape(key))
 			sb.WriteByte(oaschema.Equals[0])
-			sb.WriteString(param.value)
+			sb.WriteString(url.PathEscape(param.value))
 
 			continue
 		}
@@ -108,7 +108,7 @@ func encodeParamMatrixExplode(name string, params ParameterItems) string {
 		sb.WriteByte(';')
 		sb.WriteString(name)
 		sb.WriteByte('=')
-		sb.WriteString(param.value)
+		sb.WriteString(url.PathEscape(param.value))
 	}
 
 	return sb.String()

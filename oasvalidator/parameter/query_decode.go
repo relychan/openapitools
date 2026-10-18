@@ -16,6 +16,7 @@ package parameter
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
@@ -296,7 +297,7 @@ func decodeQueryDeepObjectFromParameters(
 	queryValues map[string][]string,
 	results map[string]any,
 ) []httperror.ValidationError {
-	rawNodes, errs := parseDeepObjectNodes(queryValues)
+	rawNodes, errs := parseDeepObjectNodes(definitions, queryValues)
 	if len(errs) > 0 {
 		return errs
 	}
@@ -348,7 +349,11 @@ func decodeQueryDeepObjectFromParameter(
 // parseDeepObjectNodes converts the flat map[string][]string from net/url into a
 // ParameterNodes tree by parsing bracket-notation keys (e.g. "user[name]") and then
 // calling Normalize to resolve any index/key ambiguities.
+// When definitions is not empty, only keys that belong to one of the deepObject parameters
+// (the parameter name itself or name + "[") are parsed so that unrelated, possibly
+// malformed query keys do not fail the request.
 func parseDeepObjectNodes(
+	definitions []*oaschema.Parameter,
 	queryValues map[string][]string,
 ) (ParameterNodes, []httperror.ValidationError) {
 	var (
@@ -357,7 +362,7 @@ func parseDeepObjectNodes(
 	)
 
 	for key, values := range queryValues {
-		if key == "" {
+		if key == "" || (len(definitions) > 0 && !isDeepObjectParameterKey(definitions, key)) {
 			continue
 		}
 
@@ -389,6 +394,18 @@ func parseDeepObjectNodes(
 	}
 
 	return slices.Clip(rawNodes), nil
+}
+
+// isDeepObjectParameterKey checks if the query key belongs to one of the deepObject parameters.
+func isDeepObjectParameterKey(definitions []*oaschema.Parameter, key string) bool {
+	for _, def := range definitions {
+		rest, found := strings.CutPrefix(key, def.Name)
+		if found && (rest == "" || rest[0] == '[') {
+			return true
+		}
+	}
+
+	return false
 }
 
 // decodePrimitiveQueryValuesFromSchemaType decodes the first non-empty string in values

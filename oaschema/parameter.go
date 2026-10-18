@@ -106,7 +106,7 @@ func (param Parameter) GetStyleAndExplode() (ParameterEncodingStyle, bool) {
 
 // GetParameterStyleAndExplode applies the OpenAPI defaults for style and explode per location:
 //   - path / header: default style=simple, default explode=false
-//   - query / cookie: default style=form,  default explode=true
+//   - query / cookie: default style=form. explode defaults to true only when the style is form (or cookie), false otherwise.
 func GetParameterStyleAndExplode(
 	location ParameterLocation,
 	style *ParameterEncodingStyle,
@@ -122,13 +122,16 @@ func GetParameterStyleAndExplode(
 
 		return *style, explodeValue
 	case InQuery, InCookie:
-		explodeValue := explode == nil || *explode
-
-		if style == nil {
-			return EncodingStyleForm, explodeValue
+		styleValue := EncodingStyleForm
+		if style != nil {
+			styleValue = *style
 		}
 
-		return *style, explodeValue
+		if explode != nil {
+			return styleValue, *explode
+		}
+
+		return styleValue, styleValue == EncodingStyleForm || styleValue == EncodingStyleCookie
 	default:
 		return 255, false
 	}
