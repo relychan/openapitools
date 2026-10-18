@@ -27,6 +27,8 @@ func (pc *ProxyClient) ServeHTTP(
 	writer http.ResponseWriter,
 	request *http.Request,
 ) {
+	writer = newTrackingResponseWriter(writer)
+
 	spanName := pc.buildSpanName("Stream", request.URL.Path)
 
 	ctx, span := tracer.Start(request.Context(), spanName)
@@ -41,7 +43,7 @@ func (pc *ProxyClient) ServeHTTP(
 
 	route, notFoundErr := pc.findRoute(span, req)
 	if notFoundErr != nil {
-		writeErrorResponse(writer, notFoundErr.Status, notFoundErr)
+		writeErrorResponse(ctx, writer, notFoundErr.Status, notFoundErr)
 
 		return
 	}
@@ -61,7 +63,7 @@ func (pc *ProxyClient) ServeHTTP(
 		span.SetStatus(codes.Error, "Failed to validate request")
 		span.RecordError(validationErr)
 
-		writeErrorResponse(writer, validationErr.Status, validationErr)
+		writeErrorResponse(ctx, writer, validationErr.Status, validationErr)
 
 		return
 	}
@@ -73,9 +75,9 @@ func (pc *ProxyClient) ServeHTTP(
 
 	_, streamErr := route.Method.Handler.Stream(ctx, req, writer, options) //nolint:bodyclose
 	if streamErr != nil {
-		status, respErr := pc.handleError(span, streamErr, request.URL.Path)
+		status, respErr := pc.handleError(ctx, span, streamErr, request.URL.Path)
 
-		writeErrorResponse(writer, status, respErr)
+		writeErrorResponse(ctx, writer, status, respErr)
 
 		return
 	}
@@ -89,6 +91,8 @@ func (pc *ProxyClient) Stream(
 	writer http.ResponseWriter,
 	request *proxyhandler.Request,
 ) (*http.Response, error) {
+	writer = newTrackingResponseWriter(writer)
+
 	spanName := pc.buildSpanName("Stream", request.Path())
 
 	ctx, span := tracer.Start(ctx, spanName)
@@ -101,7 +105,7 @@ func (pc *ProxyClient) Stream(
 
 	route, notFoundErr := pc.findRoute(span, request)
 	if notFoundErr != nil {
-		writeErrorResponse(writer, notFoundErr.Status, notFoundErr)
+		writeErrorResponse(ctx, writer, notFoundErr.Status, notFoundErr)
 
 		return nil, notFoundErr
 	}
@@ -111,7 +115,7 @@ func (pc *ProxyClient) Stream(
 		span.SetStatus(codes.Error, "Failed to validate request")
 		span.RecordError(validationErr)
 
-		writeErrorResponse(writer, validationErr.Status, validationErr)
+		writeErrorResponse(ctx, writer, validationErr.Status, validationErr)
 
 		return nil, validationErr
 	}
@@ -123,9 +127,9 @@ func (pc *ProxyClient) Stream(
 
 	response, err := route.Method.Handler.Stream(ctx, request, writer, options)
 	if err != nil {
-		status, respErr := pc.handleError(span, err, request.Path())
+		status, respErr := pc.handleError(ctx, span, err, request.Path())
 
-		writeErrorResponse(writer, status, respErr)
+		writeErrorResponse(ctx, writer, status, respErr)
 
 		return response, respErr
 	}

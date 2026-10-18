@@ -19,6 +19,7 @@ import (
 	"errors"
 	"io"
 	"net/url"
+	"strings"
 
 	"github.com/relychan/gohttpc"
 	"github.com/relychan/goutils"
@@ -38,10 +39,24 @@ func (re *RESTfulHandler) prepareRequest(
 	if re.customRequest == nil || re.customRequest.IsZero() {
 		req := options.NewRequest(request.Method(), request.URL())
 
+		body := request.Body()
+		if body == nil {
+			return req, nil
+		}
+
 		// Proxies the raw request to the remote service if the body is a reader.
-		reader, ok := request.Body().(io.Reader)
+		reader, ok := body.(io.Reader)
 		if ok && reader != nil {
 			req.SetBody(reader)
+
+			return req, nil
+		}
+
+		// The body was decoded (e.g. by ServeHTTP or Execute). Encode it back
+		// with the operation's request content type.
+		err := re.setEncodedRequestBody(req, request, body)
+		if err != nil {
+			return nil, err
 		}
 
 		return req, nil
@@ -50,7 +65,7 @@ func (re *RESTfulHandler) prepareRequest(
 	return re.transformRequest(request, options)
 }
 
-func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
+func (re *RESTfulHandler) transformRequest( //nolint:cyclop,funlen
 	request *proxyhandler.Request,
 	options *proxyhandler.ProxyHandleOptions,
 ) (*gohttpc.RequestWithClient, error) {
@@ -169,33 +184,60 @@ func (re *RESTfulHandler) transformRequest( //nolint:gocognit,cyclop,funlen
 		}
 	}
 
-	contentType := re.getDestinedContentType(request)
-	req.Header()[httpheader.ContentType] = []string{contentType}
-
-	reader, ok := newBody.(io.Reader)
-	if ok && reader != nil {
-		req.SetBody(reader)
-	} else {
-		newBodyBytes, err := contentencoder.Encode(contentType, newBody, re.request)
-		if err != nil {
-			errDetail, ok := errors.AsType[*httperror.ValidationError](err)
-			if !ok {
-				errDetail = &httperror.ValidationError{
-					Detail: err.Error(),
-					Code:   oasvalidator.ErrCodeRequestTransformError,
-				}
-			}
-
-			respErr := httperror.NewBadRequestError(*errDetail)
-			respErr.Detail = "failed to encode transformed request body"
-
-			return nil, respErr
-		}
-
-		req.SetBody(bytes.NewReader(newBodyBytes))
+	err = re.setEncodedRequestBody(req, request, newBody)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
+}
+
+// setEncodedRequestBody sets the content type header and the encoded body to the request.
+func (re *RESTfulHandler) setEncodedRequestBody(
+	req *gohttpc.RequestWithClient,
+	request *proxyhandler.Request,
+	body any,
+) error {
+	contentType := re.getDestinedContentType(request)
+	req.Header()[httpheader.ContentType] = []string{contentType}
+
+	switch typedBody := body.(type) {
+	case io.Reader:
+		req.SetBody(typedBody)
+
+		return nil
+	case []byte:
+		req.SetBody(bytes.NewReader(typedBody))
+
+		return nil
+	default:
+	}
+
+	newBodyBytes, finalContentType, err := contentencoder.Encode(
+		contentType,
+		body,
+		re.request,
+		request.Header(),
+	)
+	if err != nil {
+		errDetail, ok := errors.AsType[*httperror.ValidationError](err)
+		if !ok {
+			errDetail = &httperror.ValidationError{
+				Detail: err.Error(),
+				Code:   oasvalidator.ErrCodeRequestTransformError,
+			}
+		}
+
+		respErr := httperror.NewBadRequestError(*errDetail)
+		respErr.Detail = "failed to encode request body"
+
+		return respErr
+	}
+
+	req.Header()[httpheader.ContentType] = []string{finalContentType}
+	req.SetBody(bytes.NewReader(newBodyBytes))
+
+	return nil
 }
 
 // Get the destined content type, fallback to application/json if it does not exist.
@@ -238,13 +280,13 @@ func (re *RESTfulHandler) evaluateRequestPath(
 					return "", respErr
 				}
 
-				return goutils.ToString(value), nil
+				return toPathParamValue(key, value)
 			}
 
 			// fallback to get the parameter from the original request path.
 			value, ok := request.URLParams()[key]
 			if ok {
-				return goutils.ToString(value), nil
+				return toPathParamValue(key, value)
 			}
 
 			respErr := httperror.NewBadRequestError(httperror.ValidationError{
@@ -256,4 +298,26 @@ func (re *RESTfulHandler) evaluateRequestPath(
 
 			return "", respErr
 		})
+}
+
+// toPathParamValue converts a decoded path parameter value to string.
+// The value is not escaped because the upstream URL builder (goutils.AppendURL) stores the path
+// in url.URL.Path, which is escaped once when the request is sent. Values containing '?' or '#'
+// are rejected because AppendURL splits the query and fragment from the raw string,
+// which would allow injecting query parameters or truncating the upstream URL.
+func toPathParamValue(key string, value any) (string, error) {
+	result := goutils.ToString(value)
+
+	if strings.ContainsAny(result, "?#") {
+		respErr := httperror.NewBadRequestError(httperror.ValidationError{
+			Detail:    "the path parameter must not contain '?' or '#' characters",
+			Parameter: key,
+			Code:      oasvalidator.ErrCodeInvalidURLParam,
+		})
+		respErr.Detail = "failed to evaluate request path"
+
+		return "", respErr
+	}
+
+	return result, nil
 }

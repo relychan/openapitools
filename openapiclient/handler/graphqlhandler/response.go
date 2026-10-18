@@ -231,11 +231,30 @@ func (ge *GraphQLHandler) writeTransformResponse( //nolint:funlen
 		)
 	}
 
-	writer.Header()[httpheader.ContentType] = []string{contentType}
+	// Encode the body before writing the response header,
+	// so encoding errors can still be returned as an error response.
+	encodedBody, encodedContentType, err := contentencoder.Encode(
+		contentType,
+		transformedBody,
+		nil,
+		nil,
+	)
+	if err != nil {
+		span.SetStatus(codes.Error, "failed to encode response body")
+		span.RecordError(err)
+
+		return transformedBody, newGraphQLResponseEncodeError(
+			oasvalidator.ErrCodeResponseEncodeBodyError,
+			err,
+		)
+	}
+
+	writer.Header()[httpheader.ContentType] = []string{encodedContentType}
 	writer.WriteHeader(resp.StatusCode)
 
-	_, err = contentencoder.Write(writer, contentType, transformedBody, nil)
+	_, err = writer.Write(encodedBody)
 	if err != nil {
+		// The response header was written. The error can't be sent to the client anymore.
 		span.SetStatus(codes.Error, "failed to write response body")
 		span.RecordError(err)
 
@@ -307,9 +326,10 @@ func (ge *GraphQLHandler) evaluateGraphQLError(
 		return statusCode, rawBytes, nil
 	}
 
-	var gqlErrors any
+	// Evaluate rules against the whole GraphQL response object, e.g. errors[0].extensions.code == 'NOT_FOUND'.
+	var gqlResponse any
 
-	err = json.Unmarshal(rawErrors, &gqlErrors)
+	err = json.Unmarshal(rawBytes, &gqlResponse)
 	if err != nil {
 		respErr := &httperror.ValidationError{
 			Detail: err.Error(),
@@ -322,7 +342,7 @@ func (ge *GraphQLHandler) evaluateGraphQLError(
 L:
 	for _, rule := range ge.customResponse.HTTPErrors {
 		for _, expr := range rule.Expressions {
-			result, err := expr.Search(gqlErrors)
+			result, err := expr.Search(gqlResponse)
 			if err != nil {
 				continue
 			}

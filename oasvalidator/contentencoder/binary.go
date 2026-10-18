@@ -73,7 +73,7 @@ func WriteBinary(writer io.Writer, body any) (int, error) {
 			return 0, err
 		}
 
-		err = dumper.Dump(dumper)
+		err = dumper.Dump(value)
 		if err != nil {
 			return 0, err
 		}

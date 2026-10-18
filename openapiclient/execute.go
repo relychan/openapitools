@@ -17,9 +17,12 @@ package openapiclient
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
+	"github.com/hasura/gotel"
 	"github.com/relychan/goutils"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
@@ -48,6 +51,19 @@ func (pc *ProxyClient) Execute(
 		} else {
 			respErr.Detail = err.Error()
 		}
+
+		return nil, nil, respErr
+	}
+
+	// Decode the URL path the same way as the HTTP server does for ServeHTTP.
+	// The upstream request builder escapes the path again, so it must not be escaped twice.
+	decodeErr := decodeURLPath(requestURL)
+	if decodeErr != nil {
+		respErr := httperror.NewBadRequestError(httperror.ValidationError{
+			Code:   goutils.ErrCodeInvalidPath,
+			Detail: "Invalid URL path encoding",
+		})
+		respErr.Instance = requestURL.Path
 
 		return nil, nil, respErr
 	}
@@ -82,7 +98,7 @@ func (pc *ProxyClient) Execute(
 
 	response, responseBody, err := route.Method.Handler.Handle(ctx, request, options)
 	if err != nil {
-		_, respError := pc.handleError(span, err, requestURL.Path)
+		_, respError := pc.handleError(ctx, span, err, requestURL.Path)
 
 		return nil, nil, respError
 	}
@@ -102,12 +118,30 @@ func (pc *ProxyClient) findRoute(
 
 	requestPath := request.Path()
 
-	if pc.settings != nil &&
-		pc.settings.BasePath != "" &&
-		pc.settings.BasePath != "/" &&
-		requestPath != "" {
-		// The URL path may omit the slash character
-		requestPath = strings.TrimPrefix(requestPath, pc.settings.BasePath)
+	pathErr := goutils.ValidateURLPath(requestPath)
+	if pathErr != nil {
+		respErr := httperror.NewBadRequestError(*pathErr)
+		respErr.Instance = requestPath
+
+		span.SetStatus(codes.Error, "invalid request path")
+		span.RecordError(respErr)
+
+		return nil, respErr
+	}
+
+	if pc.settings != nil {
+		var ok bool
+
+		requestPath, ok = trimBasePath(requestPath, pc.settings.BasePath)
+		if !ok {
+			respErr := httperror.NewNotFoundError()
+			respErr.Instance = request.Path()
+
+			span.SetStatus(codes.Error, respErr.Detail)
+			span.RecordError(respErr)
+
+			return nil, respErr
+		}
 	}
 
 	route, routeError := pc.node.FindRoute(requestPath, request.Method())
@@ -131,6 +165,7 @@ func (pc *ProxyClient) findRoute(
 }
 
 func (*ProxyClient) handleError(
+	ctx context.Context,
 	span trace.Span,
 	err error,
 	requestPath string,
@@ -145,6 +180,13 @@ func (*ProxyClient) handleError(
 		return rfc9457Error.Status, rfc9457Error
 	}
 
+	httpError, ok := errors.AsType[httperror.HTTPError](err)
+	if ok {
+		httpError.Instance = requestPath
+
+		return httpError.Status, &httpError
+	}
+
 	exError, ok := errors.AsType[*goutils.HTTPErrorWithExtensions](err)
 	if ok {
 		exError.Instance = requestPath
@@ -152,11 +194,78 @@ func (*ProxyClient) handleError(
 		return exError.Status, exError
 	}
 
+	validationErr, ok := errors.AsType[*httperror.ValidationError](err)
+	if ok && validationErr != nil {
+		respError := httperror.NewBadRequestError(*validationErr)
+		respError.Instance = requestPath
+
+		return respError.Status, respError
+	}
+
+	validationErrValue, ok := errors.AsType[httperror.ValidationError](err)
+	if ok {
+		respError := httperror.NewBadRequestError(validationErrValue)
+		respError.Instance = requestPath
+
+		return respError.Status, respError
+	}
+
+	// Do not leak internal error details to the client.
+	gotel.GetLogger(ctx).ErrorContext(
+		ctx,
+		"failed to proxy the request",
+		slog.String("error", err.Error()),
+		slog.String("path", requestPath),
+	)
+
 	respError := httperror.NewServerError()
-	respError.Detail = err.Error()
+	respError.Detail = "failed to proxy the request"
 	respError.Instance = requestPath
 
 	return respError.Status, respError
+}
+
+// trimBasePath trims the base path from the request path.
+// The base path must match the whole request path or be followed by a slash.
+// Returns false if the request path is outside the base path.
+func trimBasePath(requestPath string, basePath string) (string, bool) {
+	basePath = strings.TrimRight(basePath, "/")
+	if basePath == "" {
+		return requestPath, true
+	}
+
+	if basePath[0] != '/' {
+		basePath = "/" + basePath
+	}
+
+	if requestPath == basePath {
+		return "/", true
+	}
+
+	if strings.HasPrefix(requestPath, basePath+"/") {
+		return requestPath[len(basePath):], true
+	}
+
+	return "", false
+}
+
+// decodeURLPath decodes the escaped path of the URL into Path and keeps the original one in RawPath.
+func decodeURLPath(uri *url.URL) error {
+	rawPath := uri.Path
+
+	decodedPath, err := url.PathUnescape(rawPath)
+	if err != nil {
+		return err
+	}
+
+	uri.Path = decodedPath
+	uri.RawPath = ""
+
+	if decodedPath != rawPath {
+		uri.RawPath = rawPath
+	}
+
+	return nil
 }
 
 func (pc *ProxyClient) buildSpanName(prefix string, requestPath string) string {

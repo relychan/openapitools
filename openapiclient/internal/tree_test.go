@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pb33f/libopenapi/datamodel/high/base"
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
@@ -1471,4 +1472,162 @@ func BenchmarkTree(b *testing.B) {
 			node.FindRoute("/posts/hello", http.MethodGet)
 		}
 	})
+}
+
+// TestInsertRoute_TrailingSlashMergesMethods tests that /pets and /pets/ coexist with merged methods.
+func TestInsertRoute_TrailingSlashMergesMethods(t *testing.T) {
+	node := new(Node)
+
+	_, err := node.InsertRoute(nil, "/pets", &highv3.PathItem{
+		Post: &highv3.Operation{},
+	}, &proxyhandler.InsertRouteOptions{})
+	assert.NoError(t, err)
+
+	_, err = node.InsertRoute(nil, "/pets/", &highv3.PathItem{
+		Get: &highv3.Operation{},
+	}, &proxyhandler.InsertRouteOptions{})
+	assert.NoError(t, err)
+
+	for _, path := range []string{"/pets", "/pets/"} {
+		for _, method := range []string{http.MethodGet, http.MethodPost} {
+			r, err := node.FindRoute(path, method)
+			assert.Nil(t, err, "%s %s", method, path)
+			assert.NotNil(t, r, "%s %s", method, path)
+		}
+	}
+
+	// the same applies for param leaves.
+	_, err = node.InsertRoute(nil, "/pets/{id}", &highv3.PathItem{
+		Get: &highv3.Operation{},
+	}, &proxyhandler.InsertRouteOptions{})
+	assert.NoError(t, err)
+
+	_, err = node.InsertRoute(nil, "/pets/{id}/", &highv3.PathItem{
+		Delete: &highv3.Operation{},
+	}, &proxyhandler.InsertRouteOptions{})
+	assert.NoError(t, err)
+
+	r, routeErr := node.FindRoute("/pets/1", http.MethodGet)
+	assert.Nil(t, routeErr)
+	assert.NotNil(t, r)
+
+	r, routeErr = node.FindRoute("/pets/1", http.MethodDelete)
+	assert.Nil(t, routeErr)
+	assert.NotNil(t, r)
+}
+
+// TestInsertRoute_DuplicateMethodError tests that duplicated methods on the same node return an error.
+func TestInsertRoute_DuplicateMethodError(t *testing.T) {
+	node := new(Node)
+
+	_, err := node.InsertRoute(nil, "/pets", &highv3.PathItem{
+		Get: &highv3.Operation{},
+	}, &proxyhandler.InsertRouteOptions{})
+	assert.NoError(t, err)
+
+	_, err = node.InsertRoute(nil, "/pets/", &highv3.PathItem{
+		Get: &highv3.Operation{},
+	}, &proxyhandler.InsertRouteOptions{})
+	assert.ErrorIs(t, err, ErrDuplicatedRoutingPattern)
+
+	_, err = node.InsertRoute(nil, "/pets/{id}", &highv3.PathItem{
+		Get: &highv3.Operation{},
+	}, &proxyhandler.InsertRouteOptions{})
+	assert.NoError(t, err)
+
+	_, err = node.InsertRoute(nil, "/pets/{id}/", &highv3.PathItem{
+		Get: &highv3.Operation{},
+	}, &proxyhandler.InsertRouteOptions{})
+	assert.ErrorIs(t, err, ErrDuplicatedRoutingPattern)
+}
+
+// TestPatNextSegment_RegexWithColonAndBraces tests regexp params containing ':' and '{}'.
+func TestPatNextSegment_RegexWithColonAndBraces(t *testing.T) {
+	result, err := patNextSegment("{id:(?:a|b)}")
+	assert.NoError(t, err)
+	assert.Equal(t, ntRegexp, result.NodeType)
+	assert.Equal(t, "id", result.ParamName)
+	assert.Equal(t, "^(?:a|b)$", result.Regexp)
+
+	result, err = patNextSegment("{code:[0-9]{2,3}}")
+	assert.NoError(t, err)
+	assert.Equal(t, ntRegexp, result.NodeType)
+	assert.Equal(t, "code", result.ParamName)
+	assert.Equal(t, "^[0-9]{2,3}$", result.Regexp)
+
+	_, err = patNextSegment("{id:}")
+	assert.ErrorIs(t, err, ErrInvalidRegexpPatternParamInRoute)
+
+	_, err = patNextSegment("{id:[0-9]{2}")
+	assert.ErrorIs(t, err, ErrMissingClosingBracket)
+
+	node := new(Node)
+
+	_, insertErr := node.InsertRoute(nil, "/items/{id:(?:a|b)}", &highv3.PathItem{
+		Get: &highv3.Operation{},
+	}, &proxyhandler.InsertRouteOptions{})
+	assert.NoError(t, insertErr)
+
+	r, routeErr := node.FindRoute("/items/a", http.MethodGet)
+	assert.Nil(t, routeErr)
+	assert.NotNil(t, r)
+	assert.Equal(t, "a", r.ParamValues["id"])
+
+	_, routeErr = node.FindRoute("/items/c", http.MethodGet)
+	assert.NotNil(t, routeErr)
+}
+
+// TestInsertRoute_OperationParameterOverridesPathLevel tests that operation-level parameters
+// override path-level parameters with the same name and location for that operation only.
+func TestInsertRoute_OperationParameterOverridesPathLevel(t *testing.T) {
+	node := new(Node)
+
+	pathItem := &highv3.PathItem{
+		Parameters: []*highv3.Parameter{
+			{
+				Name:     "id",
+				In:       "path",
+				Required: new(true),
+				Schema:   base.CreateSchemaProxy(&base.Schema{Type: []string{"string"}}),
+			},
+		},
+		Get: &highv3.Operation{
+			Parameters: []*highv3.Parameter{
+				{
+					Name:     "id",
+					In:       "path",
+					Required: new(true),
+					Schema:   base.CreateSchemaProxy(&base.Schema{Type: []string{"integer"}}),
+				},
+			},
+		},
+		Delete: &highv3.Operation{},
+	}
+
+	_, err := node.InsertRoute(nil, "/pets/{id}", pathItem, &proxyhandler.InsertRouteOptions{})
+	assert.NoError(t, err)
+
+	// GET uses the operation-level integer schema.
+	r, routeErr := node.FindRoute("/pets/12", http.MethodGet)
+	assert.Nil(t, routeErr)
+	assert.NotNil(t, r)
+	assert.NotEqual(t, "12", r.ParamValues["id"])
+	assert.EqualValues(t, 12, r.ParamValues["id"])
+
+	getParams := r.Method.Operation.Parameters
+	assert.Len(t, getParams, 1)
+
+	_, routeErr = node.FindRoute("/pets/abc", http.MethodGet)
+	assert.NotNil(t, routeErr)
+
+	// DELETE inherits the path-level string schema.
+	r, routeErr = node.FindRoute("/pets/abc", http.MethodDelete)
+	assert.Nil(t, routeErr)
+	assert.NotNil(t, r)
+	assert.Equal(t, "abc", r.ParamValues["id"])
+
+	// the inputs must not be mutated.
+	assert.Len(t, pathItem.Parameters, 1)
+	assert.Len(t, pathItem.Get.Parameters, 1)
+	assert.Empty(t, pathItem.Delete.Parameters)
 }

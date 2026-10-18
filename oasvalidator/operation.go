@@ -45,7 +45,7 @@ func ValidateOperation(
 
 	if len(operation.Parameters)+len(additionalParams) > 0 {
 		result.Parameters, errs = ValidateParameterDefinitions(
-			append(operation.Parameters, additionalParams...),
+			slices.Concat(operation.Parameters, additionalParams),
 		)
 	}
 
@@ -294,7 +294,16 @@ func validateOperationContents(
 			return nil, errs
 		}
 
-		results[contentType] = media
+		// Key responses by the normalized media type so that lookups are consistent.
+		// Keep the first declaration if many keys are normalized to the same media type.
+		key := media.ContentType
+		if key == "" {
+			key = contentType
+		}
+
+		if _, exists := results[key]; !exists {
+			results[key] = media
+		}
 	}
 
 	return results, nil

@@ -22,35 +22,20 @@ import (
 	"github.com/relychan/openapitools/oaschema"
 )
 
+// extractParametersFromOperationV3 returns the path-level parameters of the path item,
+// plus synthetic string path parameters for keys in the route pattern that are not declared at the path level.
+// Operation-level parameters are not included. They override path-level parameters
+// per operation, see [oaschema.InheritedPathItemParameters].
 func extractParametersFromOperationV3(
 	operations *highv3.PathItem,
 	paramKeys []string,
 ) []*highv3.Parameter {
-	params := operations.Parameters
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Get)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Post)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Put)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Patch)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Delete)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Head)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Options)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Query)
-	params = oaschema.ExtractCommonParametersOfOperation(params, operations.Trace)
-
-	if operations.AdditionalOperations != nil {
-		for iter := operations.AdditionalOperations.Oldest(); iter != nil; iter = iter.Next() {
-			if iter.Value == nil {
-				continue
-			}
-
-			params = oaschema.ExtractCommonParametersOfOperation(params, iter.Value)
-		}
-	}
+	params := slices.Clone(operations.Parameters)
 
 	// validates and add unknown parameters from the request pattern
 	for _, key := range paramKeys {
 		if slices.ContainsFunc(params, func(param *highv3.Parameter) bool {
-			return param.In == oaschema.InPath.String() && param.Name == key
+			return param != nil && param.In == oaschema.InPath.String() && param.Name == key
 		}) {
 			continue
 		}

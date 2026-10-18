@@ -15,9 +15,12 @@
 package oasvalidator
 
 import (
+	"reflect"
 	"slices"
 
+	"github.com/pb33f/go-yaml"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
+	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/relychan/goutils/httperror"
 	"github.com/relychan/openapitools/oaschema"
 	"github.com/samber/lo"
@@ -178,13 +181,11 @@ func validateAllOfSchema( //nolint:gocognit,gocyclo,cyclop,funlen,maintidx
 			schema.Default = allOf.Default
 		}
 
-		if allOf.DependentRequired != nil && schema.DependentRequired == nil {
-			oaschema.MergeDefaultOrderedMap(schema.DependentRequired, allOf.DependentRequired)
-		}
-
-		if allOf.DependentSchemas != nil && schema.DependentSchemas == nil {
-			oaschema.MergeDefaultOrderedMap(schema.DependentSchemas, allOf.DependentSchemas)
-		}
+		schema.DependentRequired = mergeOrderedMap(
+			schema.DependentRequired,
+			allOf.DependentRequired,
+		)
+		schema.DependentSchemas = mergeOrderedMap(schema.DependentSchemas, allOf.DependentSchemas)
 
 		if allOf.Discriminator != nil && schema.Discriminator == nil {
 			schema.Discriminator = allOf.Discriminator
@@ -198,9 +199,13 @@ func validateAllOfSchema( //nolint:gocognit,gocyclo,cyclop,funlen,maintidx
 
 		if len(allOf.Enum) > 0 {
 			if len(schema.Enum) == 0 {
-				schema.Enum = allOf.Enum
+				schema.Enum = slices.Clone(allOf.Enum)
 			} else {
-				schema.Enum = append(schema.Enum, allOf.Enum...)
+				// A value must satisfy every allOf schema, so the allowed enums are the intersection.
+				schema.Enum = intersectEnums(schema.Enum, allOf.Enum)
+				if len(schema.Enum) == 0 {
+					return []httperror.ValidationError{*AllOfEnumMismatchedError()}
+				}
 			}
 		}
 
@@ -219,9 +224,7 @@ func validateAllOfSchema( //nolint:gocognit,gocyclo,cyclop,funlen,maintidx
 			schema.Examples = append(schema.Examples, allOf.Examples...)
 		}
 
-		if allOf.Extensions != nil && allOf.Extensions.Len() > 0 {
-			oaschema.MergeDefaultOrderedMap(schema.Extensions, allOf.Extensions)
-		}
+		schema.Extensions = mergeOrderedMap(schema.Extensions, allOf.Extensions)
 
 		if allOf.ExternalDocs != nil && schema.ExternalDocs == nil {
 			schema.ExternalDocs = allOf.ExternalDocs
@@ -248,8 +251,11 @@ func validateAllOfSchema( //nolint:gocognit,gocyclo,cyclop,funlen,maintidx
 			schema.Pattern = allOf.Pattern
 		}
 
-		oaschema.MergeDefaultOrderedMap(schema.Properties, allOf.Properties)
-		oaschema.MergeDefaultOrderedMap(schema.PatternProperties, allOf.PatternProperties)
+		schema.Properties = mergeOrderedMap(schema.Properties, allOf.Properties)
+		schema.PatternProperties = mergeOrderedMap(
+			schema.PatternProperties,
+			allOf.PatternProperties,
+		)
 
 		if len(allOf.PrefixItems) > 0 && len(schema.PrefixItems) == 0 {
 			schema.PrefixItems = allOf.PrefixItems
@@ -280,7 +286,7 @@ func validateAllOfSchema( //nolint:gocognit,gocyclo,cyclop,funlen,maintidx
 			schema.UniqueItems = allOf.UniqueItems
 		}
 
-		oaschema.MergeDefaultOrderedMap(schema.Vocabulary, allOf.Vocabulary)
+		schema.Vocabulary = mergeOrderedMap(schema.Vocabulary, allOf.Vocabulary)
 
 		if allOf.WriteOnly != nil && *allOf.WriteOnly {
 			schema.WriteOnly = allOf.WriteOnly
@@ -294,6 +300,53 @@ func validateAllOfSchema( //nolint:gocognit,gocyclo,cyclop,funlen,maintidx
 	schema.AllOf = nil
 
 	return nil
+}
+
+// mergeOrderedMap merges keys of src that do not exist in dest. Unlike [oaschema.MergeDefaultOrderedMap],
+// it copies src into a new map when dest is nil, so later merges never mutate the source schema,
+// which may be a shared component referenced elsewhere.
+func mergeOrderedMap[K comparable, V any](dest, src *orderedmap.Map[K, V]) *orderedmap.Map[K, V] {
+	if src == nil || src.Len() == 0 {
+		return dest
+	}
+
+	if dest == nil {
+		dest = orderedmap.New[K, V]()
+	}
+
+	return oaschema.MergeDefaultOrderedMap(dest, src)
+}
+
+// intersectEnums returns enum values of dest that also exist in src.
+func intersectEnums(dest, src []*yaml.Node) []*yaml.Node {
+	return slices.DeleteFunc(slices.Clone(dest), func(item *yaml.Node) bool {
+		return !slices.ContainsFunc(src, func(srcItem *yaml.Node) bool {
+			return isEnumNodeEqual(item, srcItem)
+		})
+	})
+}
+
+func isEnumNodeEqual(a, b *yaml.Node) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+
+	if a.Kind != b.Kind || a.ShortTag() != b.ShortTag() {
+		return false
+	}
+
+	if a.Kind == yaml.ScalarNode {
+		return a.Value == b.Value
+	}
+
+	// Compare decoded values of collection nodes.
+	var valueA, valueB any
+
+	if a.Decode(&valueA) != nil || b.Decode(&valueB) != nil {
+		return false
+	}
+
+	return reflect.DeepEqual(valueA, valueB)
 }
 
 // mergeDynamicValue merges two DynamicValue fields, preferring a non-nil schema (A side) over

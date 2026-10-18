@@ -128,3 +128,50 @@ func TestSecuritySchemeType(t *testing.T) {
 		assert.Equal(t, "apiKey\n", string(rawResult))
 	})
 }
+
+func TestEnumUnmarshalJSON_InvalidInput(t *testing.T) {
+	inputs := []string{`0`, `1`, `""`, `"x`, `null`, `{}`, `"apiKey`}
+
+	for _, input := range inputs {
+		t.Run(input, func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				var scheme SecuritySchemeType
+				assert.Error(t, scheme.UnmarshalJSON([]byte(input)))
+
+				var location ParameterLocation
+				assert.Error(t, location.UnmarshalJSON([]byte(input)))
+
+				var style ParameterEncodingStyle
+				assert.Error(t, style.UnmarshalJSON([]byte(input)))
+			})
+		})
+	}
+
+	t.Run("struct_with_non_string_location", func(t *testing.T) {
+		var param Parameter
+
+		assert.NotPanics(t, func() {
+			assert.Error(t, json.Unmarshal([]byte(`{"name":"id","in":0}`), &param))
+		})
+	})
+
+	t.Run("escaped_string", func(t *testing.T) {
+		var location ParameterLocation
+
+		assert.NoError(t, location.UnmarshalJSON([]byte(`"path"`)))
+		assert.Equal(t, InPath, location)
+	})
+}
+
+func TestEnumIsValid_Bounds(t *testing.T) {
+	assert.True(t, MutualTLSScheme.IsValid())
+	assert.Equal(t, "mutualTLS", MutualTLSScheme.String())
+	assert.False(t, SecuritySchemeType(7).IsValid())
+	assert.NotPanics(t, func() {
+		assert.Equal(t, "", SecuritySchemeType(7).String())
+		assert.Equal(t, "", ParameterLocation(6).String())
+		assert.Equal(t, "", ParameterEncodingStyle(8).String())
+	})
+	assert.Equal(t, "formData", InFormData.String())
+	assert.Equal(t, "cookie", EncodingStyleCookie.String())
+}

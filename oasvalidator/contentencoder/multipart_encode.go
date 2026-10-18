@@ -135,7 +135,7 @@ func (mfe *multipartFormEncoder) Encode(rootValue any) error {
 }
 
 func (mfe *multipartFormEncoder) evalRootValueReflection(reflectValue reflect.Value) error {
-	value, notNull := goutils.UnwrapPointerFromReflectValue(reflectValue)
+	value, notNull := unwrapReflectValue(reflectValue)
 	if !notNull {
 		return nil
 	}
@@ -144,19 +144,16 @@ func (mfe *multipartFormEncoder) evalRootValueReflection(reflectValue reflect.Va
 
 	switch valueKind {
 	case reflect.Slice, reflect.Array:
-		valueLength := reflectValue.Len()
+		valueLength := value.Len()
 
 		for i := range valueLength {
-			elem := reflectValue.Index(i)
-			k := buildIndexKey(i)
-
-			err := mfe.evalValueReflectionWithDefaultContentType(k, elem, http.Header{})
+			err := mfe.evalValue(buildIndexKey(i), value.Index(i).Interface())
 			if err != nil {
 				return err
 			}
 		}
 	case reflect.Map:
-		keys := reflectValue.MapKeys()
+		keys := value.MapKeys()
 
 		for _, key := range keys {
 			keyStr, ok := goutils.FormatScalarReflection(key)
@@ -169,22 +166,7 @@ func (mfe *multipartFormEncoder) evalRootValueReflection(reflectValue reflect.Va
 				}
 			}
 
-			contentType, headers := mfe.evalEncoding(keyStr)
-			mapValue := reflectValue.MapIndex(key)
-
-			var err error
-
-			switch {
-			case httpheader.IsContentTypeJSON(contentType):
-				err = mfe.writer.WriteJSON(keyStr, mapValue.Interface(), headers)
-			case httpheader.IsContentTypeXML(contentType):
-				err = mfe.writer.WriteXML(keyStr, mapValue.Interface(), headers)
-			case contentType == "" || httpheader.IsContentTypeText(contentType):
-				err = mfe.evalValueReflectionWithDefaultContentType(keyStr, mapValue, headers)
-			default:
-				err = mfe.evalValueReflection(keyStr, mapValue, contentType, headers)
-			}
-
+			err := mfe.evalValue(keyStr, value.MapIndex(key).Interface())
 			if err != nil {
 				return err
 			}
@@ -210,6 +192,16 @@ func (mfe *multipartFormEncoder) evalValue(key string, value any) error {
 		return mfe.evalValueWithDefaultContentType(key, value, headers)
 	}
 
+	return mfe.evalValueWithContentType(key, value, contentType, headers)
+}
+
+// evalValueWithContentType encodes a value whose part content type is a non-text, non-structured type, e.g. a file.
+func (mfe *multipartFormEncoder) evalValueWithContentType(
+	key string,
+	value any,
+	contentType string,
+	headers http.Header,
+) error {
 	switch val := value.(type) {
 	case string:
 		err := mfe.writer.WriteDataURI(key, val, contentType, headers)
@@ -288,7 +280,7 @@ func (mfe *multipartFormEncoder) evalValueReflection(
 	contentType string,
 	headers http.Header,
 ) error {
-	value, notNull := goutils.UnwrapPointerFromReflectValue(reflectValue)
+	value, notNull := unwrapReflectValue(reflectValue)
 	if !notNull {
 		return nil
 	}
@@ -305,15 +297,27 @@ func (mfe *multipartFormEncoder) evalValueReflection(
 
 		return nil
 	case reflect.Slice, reflect.Array:
-		if value.Elem().Kind() == reflect.Uint8 {
-			return mfe.writer.WriteBinary(key, reflectValue.Bytes(), contentType, headers)
+		if value.Type().Elem().Kind() == reflect.Uint8 {
+			return mfe.writer.WriteBinary(key, reflectBytes(value), contentType, headers)
 		}
 
-		// fallback to encode arbitrary value.
-		return mfe.evalValueReflectionWithDefaultContentType(key, value, headers)
+		// encode each element as a separate file part.
+		for i := range value.Len() {
+			err := mfe.evalValueWithContentType(
+				buildArrayIndexKey(key, i),
+				value.Index(i).Interface(),
+				contentType,
+				headers,
+			)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
 	case reflect.Map:
 		// Encode application/json content type for complex value or array of complex values.
-		return mfe.writer.WriteJSON(key, value, headers)
+		return mfe.writer.WriteJSON(key, value.Interface(), headers)
 	default:
 		return mfe.evalValueReflectionWithDefaultContentType(key, value, headers)
 	}
@@ -324,7 +328,7 @@ func (mfe *multipartFormEncoder) evalValueReflectionWithDefaultContentType(
 	reflectValue reflect.Value,
 	headers http.Header,
 ) error {
-	value, notNull := goutils.UnwrapPointerFromReflectValue(reflectValue)
+	value, notNull := unwrapReflectValue(reflectValue)
 	if !notNull {
 		return nil
 	}
@@ -338,10 +342,10 @@ func (mfe *multipartFormEncoder) evalValueReflectionWithDefaultContentType(
 
 	switch valueKind {
 	case reflect.Slice, reflect.Array:
-		valueLength := reflectValue.Len()
+		valueLength := value.Len()
 
 		for i := range valueLength {
-			elem := reflectValue.Index(i)
+			elem := value.Index(i)
 			k := buildArrayIndexKey(key, i)
 
 			err := mfe.evalChildValueReflection(k, elem, headers)
@@ -351,7 +355,7 @@ func (mfe *multipartFormEncoder) evalValueReflectionWithDefaultContentType(
 		}
 	case reflect.Map:
 		// Encode application/json content type for complex value or array of complex values.
-		return mfe.writer.WriteJSON(key, value, headers)
+		return mfe.writer.WriteJSON(key, value.Interface(), headers)
 	default:
 	}
 
@@ -363,7 +367,7 @@ func (mfe *multipartFormEncoder) evalChildValueReflection(
 	reflectValue reflect.Value,
 	headers http.Header,
 ) error {
-	value, notNull := goutils.UnwrapPointerFromReflectValue(reflectValue)
+	value, notNull := unwrapReflectValue(reflectValue)
 	if !notNull {
 		return nil
 	}
@@ -399,7 +403,7 @@ func (mfe *multipartFormEncoder) evalChildValue(key string, value any, headers h
 func (mfe *multipartFormEncoder) evalEncoding(key string) (string, http.Header) {
 	var encoding *highv3.Encoding
 
-	if mfe.media.Encoding != nil {
+	if mfe.media != nil && mfe.media.Encoding != nil {
 		encoding, _ = mfe.media.Encoding.Get(key)
 	}
 
@@ -417,6 +421,30 @@ func (mfe *multipartFormEncoder) evalEncoding(key string) (string, http.Header) 
 	}
 
 	return contentType, headers
+}
+
+// unwrapReflectValue unwraps pointers and interfaces from the reflection value.
+func unwrapReflectValue(reflectValue reflect.Value) (reflect.Value, bool) {
+	for {
+		value, notNull := goutils.UnwrapPointerFromReflectValue(reflectValue)
+		if !notNull || value.Kind() != reflect.Interface {
+			return value, notNull
+		}
+
+		reflectValue = value.Elem()
+	}
+}
+
+// reflectBytes returns the bytes of a byte slice or array reflection value.
+func reflectBytes(value reflect.Value) []byte {
+	if value.Kind() == reflect.Slice {
+		return value.Bytes()
+	}
+
+	result := make([]byte, value.Len())
+	reflect.Copy(reflect.ValueOf(result), value)
+
+	return result
 }
 
 func buildIndexKey(index int) string {

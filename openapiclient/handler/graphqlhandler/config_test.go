@@ -15,6 +15,7 @@
 package graphqlhandler
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/jmespath-community/go-jmespath"
@@ -40,8 +41,10 @@ func TestProxyCustomGraphQLResponseConfigIsZero(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "with_http_errors",
-			config:   ProxyCustomGraphQLResponseConfig{HTTPErrors: map[string][]string{"400": {"errors[0].message == 'bad'"}}},
+			name: "with_http_errors",
+			config: ProxyCustomGraphQLResponseConfig{
+				HTTPErrors: map[string][]string{"400": {"errors[0].message == 'bad'"}},
+			},
 			expected: false,
 		},
 		{
@@ -95,7 +98,10 @@ func TestNewProxyCustomGraphQLResponse(t *testing.T) {
 			HTTPErrorCode: new(400),
 			HTTPErrors: map[string][]string{
 				"404": {"errors[0].extensions.code == 'NOT_FOUND'"},
-				"500": {"errors[0].extensions.code == 'INTERNAL'", "errors[0].message == 'server error'"},
+				"500": {
+					"errors[0].extensions.code == 'INTERNAL'",
+					"errors[0].message == 'server error'",
+				},
 			},
 		}
 		result, err := newProxyCustomGraphQLResponse(config, nil)
@@ -228,5 +234,30 @@ func TestProxyCustomGraphQLResponseIsZero(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.expected, tc.response.IsZero())
 		})
+	}
+}
+
+func TestNewProxyCustomGraphQLResponse_StatusRange(t *testing.T) {
+	for _, code := range []int{200, 399, 600, 1000} {
+		_, err := newProxyCustomGraphQLResponse(
+			&ProxyCustomGraphQLResponseConfig{HTTPErrorCode: new(code)},
+			nil,
+		)
+		assert.ErrorContains(t, err, "/response/httpErrorCode")
+	}
+
+	for _, key := range []string{"200", "399", "600", "1000"} {
+		_, err := newProxyCustomGraphQLResponse(&ProxyCustomGraphQLResponseConfig{
+			HTTPErrors: map[string][]string{key: {"errors[0].message == 'x'"}},
+		}, nil)
+		assert.ErrorContains(t, err, "/response/httpErrors/"+key)
+	}
+
+	for _, code := range []int{400, 599} {
+		_, err := newProxyCustomGraphQLResponse(&ProxyCustomGraphQLResponseConfig{
+			HTTPErrorCode: new(code),
+			HTTPErrors:    map[string][]string{strconv.Itoa(code): {"errors[0].message == 'x'"}},
+		}, nil)
+		assert.NoError(t, err)
 	}
 }

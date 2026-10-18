@@ -34,9 +34,19 @@ func (pc *ProxyClient) newRequestFunc(
 		req := pc.lbClient.R(method, url)
 		reqHeader := req.Header()
 
-		authenticator := pc.authenticators.GetAuthenticator(route.Method.Operation.Security)
-		if authenticator != nil {
+		operationSecurity := route.Method.Operation.Security
+
+		authenticator := pc.authenticators.GetAuthenticator(operationSecurity)
+
+		switch {
+		case authenticator != nil:
 			req.SetAuthenticator(authenticator)
+		case pc.authenticators.IsSecurityDisabled(operationSecurity):
+			// The operation explicitly disables security (`security: []`).
+			// Override the default authenticator of the HTTP client to not leak credentials.
+			req.SetAuthenticator(proxyhandler.NoopAuthenticator{})
+		default:
+			// Fallback to the default authenticator of the HTTP client (settings.http.authentication) if configured.
 		}
 
 		for key, value := range pc.defaultHeaders {
@@ -67,6 +77,15 @@ func validateRequest(
 ) *httperror.HTTPError {
 	errs := validateRequestParameters(route, request)
 
+	if request.Body() == nil && route.IsRequestBodyRequired() {
+		err := newRequestBodyRequiredError(request.Path())
+		if len(errs) > 0 {
+			err.Errors = append(err.Errors, errs...)
+		}
+
+		return err
+	}
+
 	bodyErrs := validateRequestBody(route.Method.Operation.RequestBody, request.Body())
 	if len(bodyErrs) > 0 {
 		errs = append(errs, bodyErrs...)
@@ -96,7 +115,9 @@ func validateRequest(
 }
 
 func validateRequestBody(requestBody *oaschema.RequestBody, body any) []httperror.ValidationError {
-	if requestBody == nil {
+	// Skip validating optional request bodies that are absent.
+	// Required bodies are checked before calling this function.
+	if requestBody == nil || (body == nil && !requestBody.Required) {
 		return nil
 	}
 

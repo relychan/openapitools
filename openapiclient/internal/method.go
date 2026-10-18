@@ -19,6 +19,7 @@ import (
 
 	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/goutils/httperror"
+	"github.com/relychan/openapitools/oaschema"
 	"github.com/relychan/openapitools/oasvalidator"
 	"github.com/relychan/openapitools/openapiclient/handler"
 	"github.com/relychan/openapitools/openapiclient/handler/proxyhandler"
@@ -215,7 +216,12 @@ func createMethod(
 	params []*highv3.Parameter,
 	options *proxyhandler.InsertRouteOptions,
 ) (MethodHandler, error) {
-	op, errs := oasvalidator.ValidateOperation(document, operation, params)
+	// Operation-level parameters override path-level ones with the same name and location.
+	op, errs := oasvalidator.ValidateOperation(
+		document,
+		operation,
+		oaschema.InheritedPathItemParameters(params, operation),
+	)
 	if len(errs) > 0 {
 		err := httperror.NewHTTPValidationError(errs...)
 		err.Instance = pattern

@@ -82,12 +82,13 @@ func TestEncode(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := Encode(tc.contentType, tc.body, nil)
+			result, resultContentType, err := Encode(tc.contentType, tc.body, nil, nil)
 			if tc.errMsg != "" {
 				assert.ErrorContains(t, err, tc.errMsg)
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, tc.expected, result)
+				assert.Equal(t, tc.contentType, resultContentType)
 			}
 		})
 	}

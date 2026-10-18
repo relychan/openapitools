@@ -149,11 +149,7 @@ paths:
                   schema:
                     type: array
                     items:
-                        exclusiveMaximum: false
-                        exclusiveMinimum: false
                         type: string
-                        maximum: 0
-                        minimum: 0
                         enum:
                             - "available"
                             - "pending"
@@ -201,11 +197,7 @@ paths:
                   schema:
                     type: array
                     items:
-                        exclusiveMaximum: false
-                        exclusiveMinimum: false
                         type: string
-                        maximum: 0
-                        minimum: 0
             responses:
                 "200":
                     description: successful operation
@@ -608,20 +600,12 @@ paths:
                         X-Expires-After:
                             description: date in UTC when token expires
                             schema:
-                                exclusiveMaximum: false
-                                exclusiveMinimum: false
                                 type: string
-                                maximum: 0
-                                minimum: 0
                                 format: date-time
                         X-Rate-Limit:
                             description: calls per hour allowed by the user
                             schema:
-                                exclusiveMaximum: false
-                                exclusiveMinimum: false
                                 type: integer
-                                maximum: 0
-                                minimum: 0
                                 format: int32
                     content:
                         application/json:

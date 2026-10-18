@@ -731,3 +731,88 @@ func BenchmarkResourceUnmarshaler(b *testing.B) {
 		}
 	})
 }
+
+func TestOpenAPIResourceDefinition_NullPatches(t *testing.T) {
+	t.Run("yaml", func(t *testing.T) {
+		var def OpenAPIResourceDefinition
+
+		require.NoError(
+			t,
+			yaml.Load([]byte("ref: testdata/petstore3/openapi.json\npatches: null\n"), &def),
+		)
+		assert.Nil(t, def.Patches)
+		assert.Equal(t, "testdata/petstore3/openapi.json", def.Ref)
+	})
+
+	t.Run("yaml_tilde", func(t *testing.T) {
+		var def OpenAPIResourceDefinition
+
+		require.NoError(t, yaml.Load([]byte("patches: ~\n"), &def))
+		assert.Nil(t, def.Patches)
+	})
+
+	t.Run("json", func(t *testing.T) {
+		var def OpenAPIResourceDefinition
+
+		require.NoError(
+			t,
+			json.Unmarshal(
+				[]byte(`{"ref":"testdata/petstore3/openapi.json","patches":null}`),
+				&def,
+			),
+		)
+		assert.Nil(t, def.Patches)
+	})
+
+	t.Run("invalid_scalar", func(t *testing.T) {
+		var def OpenAPIResourceDefinition
+
+		assert.Error(t, yaml.Load([]byte("patches: foo\n"), &def))
+	})
+}
+
+func TestOpenAPIResourceDefinition_Build_Swagger2WithPatches(t *testing.T) {
+	ctx := context.Background()
+
+	testCases := []struct {
+		name string
+		ref  string
+	}{
+		{name: "json", ref: "testdata/petstore2/swagger.json"},
+		{name: "yaml", ref: "testdata/swagger2/swagger.yaml"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			yamlData := fmt.Sprintf(`
+ref: %s
+patches:
+  - target: "$.info"
+    update:
+      x-overlay-applied: swagger2-patch
+  - target: "$.components.securitySchemes"
+    update:
+      patched_key:
+        type: apiKey
+        in: header
+        name: X-Patched
+`, tc.ref)
+
+			var def OpenAPIResourceDefinition
+			require.NoError(t, yaml.Load([]byte(yamlData), &def))
+
+			doc, _, err := def.Build(ctx)
+			require.NoError(t, err)
+			require.NotNil(t, doc)
+			assert.True(t, len(doc.Version) > 0 && doc.Version[0] == '3')
+
+			ext, ok := doc.Info.Extensions.Get("x-overlay-applied")
+			require.True(t, ok)
+			assert.Equal(t, "swagger2-patch", ext.Value)
+
+			scheme, ok := doc.Components.SecuritySchemes.Get("patched_key")
+			require.True(t, ok)
+			assert.Equal(t, "X-Patched", scheme.Name)
+		})
+	}
+}

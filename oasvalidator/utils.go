@@ -25,7 +25,9 @@ import (
 )
 
 // ValidateContentType validates the content type and prefer the application/json content type
-// if the content type string has many content types.
+// if the content type string has many content types. Only content types that the proxy can encode
+// are accepted: JSON, XML, text, multipart form, URL-encoded form and octet-stream.
+// The returned media type is normalized: the base type and parameter names are lower-cased.
 func ValidateContentType(contentType string) (string, error) {
 	if contentType == "" {
 		return contentType, nil
@@ -34,39 +36,41 @@ func ValidateContentType(contentType string) (string, error) {
 	var result string
 
 	for item := range strings.SplitSeq(contentType, ",") {
-		trimmed := strings.TrimSpace(item)
-
-		parsed, _, err := mime.ParseMediaType(trimmed)
+		parsed, params, err := mime.ParseMediaType(strings.TrimSpace(item))
 		if err != nil {
 			continue
 		}
 
+		normalized := formatMediaType(parsed, params)
+
 		switch {
 		case httpheader.IsContentTypeJSON(parsed):
 			// JSON is the highest priority.
-			if parsed[:2] == "*/" {
+			if strings.HasPrefix(parsed, "*/") {
 				return httpheader.ContentTypeJSON, nil
 			}
 
-			return trimmed, nil
+			return normalized, nil
 		case httpheader.IsContentTypeXML(parsed):
-			if parsed[:2] == "*/" {
-				trimmed = httpheader.ContentTypeXML
+			if strings.HasPrefix(parsed, "*/") {
+				normalized = httpheader.ContentTypeXML
 			}
 		case httpheader.IsContentTypeText(parsed):
-			if parsed[len(parsed)-1] == '*' {
-				trimmed = httpheader.ContentTypeTextPlain
+			if strings.HasSuffix(parsed, "*") {
+				normalized = httpheader.ContentTypeTextPlain
 			}
 		case httpheader.IsContentTypeMultipartForm(parsed):
-			if parsed[len(parsed)-1] == '*' {
-				trimmed = httpheader.ContentTypeMultipartFormData
+			if strings.HasSuffix(parsed, "*") {
+				normalized = httpheader.ContentTypeMultipartFormData
 			}
+		case parsed == httpheader.ContentTypeFormURLEncoded,
+			parsed == httpheader.ContentTypeOctetStream:
 		default:
 			continue
 		}
 
 		if result == "" {
-			result = trimmed
+			result = normalized
 		}
 	}
 
@@ -81,6 +85,7 @@ func ValidateContentType(contentType string) (string, error) {
 // it accepts any well-formed media type, including binary and wildcard types such as image/png,
 // application/pdf or */*, because responses that cannot be decoded are passed through as raw bytes.
 // Content types that [ValidateContentType] supports are still preferred and normalized.
+// The returned media type is normalized: the base type and parameter names are lower-cased.
 func ValidateResponseContentType(contentType string) (string, error) {
 	result, err := ValidateContentType(contentType)
 	if err == nil {
@@ -88,15 +93,24 @@ func ValidateResponseContentType(contentType string) (string, error) {
 	}
 
 	for item := range strings.SplitSeq(contentType, ",") {
-		trimmed := strings.TrimSpace(item)
-
-		_, _, err := mime.ParseMediaType(trimmed)
+		parsed, params, err := mime.ParseMediaType(strings.TrimSpace(item))
 		if err == nil {
-			return trimmed, nil
+			return formatMediaType(parsed, params), nil
 		}
 	}
 
 	return "", ErrInvalidContentType
+}
+
+// formatMediaType serializes a parsed media type. It falls back to the lower-cased base media type
+// if the media type cannot be formatted.
+func formatMediaType(mediaType string, params map[string]string) string {
+	result := mime.FormatMediaType(mediaType, params)
+	if result == "" {
+		return strings.ToLower(mediaType)
+	}
+
+	return result
 }
 
 // FindDuplicatedItems find duplicated items in the array.
@@ -201,15 +215,19 @@ func CompareBoolean(a bool, b bool) int {
 
 // CompareNullableBoolean compares two optional booleans. nil sorts before false, false before true.
 func CompareNullableBoolean(a *bool, b *bool) int {
-	if (a == nil && b == nil) || a == b {
+	if a == nil && b == nil {
 		return 0
 	}
 
-	if a != nil && *a {
+	if a == nil {
+		return -1
+	}
+
+	if b == nil {
 		return 1
 	}
 
-	return -1
+	return CompareBoolean(*a, *b)
 }
 
 func addErrorHints(

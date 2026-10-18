@@ -443,7 +443,7 @@ func BenchmarkDecodeQueryFromParameters(b *testing.B) {
 
 	b.Run("parse_deep_object", func(b *testing.B) {
 		for b.Loop() {
-			_, errs := parseDeepObjectNodes(qValues)
+			_, errs := parseDeepObjectNodes(nil, qValues)
 			if len(errs) > 0 {
 				panic(errs)
 			}
@@ -490,7 +490,7 @@ func BenchmarkDecodeQueryFromParameters(b *testing.B) {
 		require.NoError(b, err)
 
 		for b.Loop() {
-			_, errs := parseDeepObjectNodes(values)
+			_, errs := parseDeepObjectNodes(nil, values)
 			if len(errs) > 0 {
 				panic(errs)
 			}

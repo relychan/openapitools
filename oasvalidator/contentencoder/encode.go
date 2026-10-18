@@ -16,32 +16,75 @@ package contentencoder
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
+	"net/http"
 
+	highv3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/relychan/goutils/httpheader"
 	"github.com/relychan/openapitools/oaschema"
 )
 
+// ErrMultipartWriteUnsupported occurs when [Write] is called with the multipart/form-data content type.
+// The multipart boundary is generated during encoding, so the final Content-Type header
+// cannot be known by the caller in advance. Use [Encode] instead.
+var ErrMultipartWriteUnsupported = errors.New(
+	"multipart/form-data is not supported by the stream writer, use Encode instead",
+)
+
 // Encode encodes the data by content type.
-func Encode(contentType string, body any, media *oaschema.MediaType) ([]byte, error) {
+// It returns the encoded bytes and the Content-Type value that must be sent with the body.
+// The returned content type is the input content type, except for multipart/form-data
+// whose content type includes the generated boundary parameter.
+// The headers argument is the original request headers used to resolve per-part
+// encoding headers of multipart/form-data bodies. It can be nil.
+func Encode(
+	contentType string,
+	body any,
+	media *oaschema.MediaType,
+	headers http.Header,
+) ([]byte, string, error) {
+	var (
+		result []byte
+		err    error
+	)
+
 	switch {
 	case httpheader.IsContentTypeJSON(contentType):
-		return json.Marshal(body)
+		result, err = json.Marshal(body)
 	case httpheader.IsContentTypeXML(contentType):
-		return EncodeXML(body)
+		result, err = EncodeXML(body)
 	case httpheader.IsContentTypeText(contentType):
-		return EncodeText(body)
+		result, err = EncodeText(body)
 	case httpheader.IsContentType(contentType, httpheader.ContentTypeFormURLEncoded):
-		return EncodeFormURLEncoded(body, media)
+		result, err = EncodeFormURLEncoded(body, media)
+	case httpheader.IsContentType(contentType, httpheader.ContentTypeMultipartFormData):
+		highMedia := &highv3.MediaType{}
+
+		if media != nil {
+			highMedia.Encoding = media.Encoding
+		}
+
+		return EncodeMultipartForm(body, headers, highMedia)
 	default:
 		// Encode binary by default.
-		return EncodeBinary(body)
+		result, err = EncodeBinary(body)
 	}
+
+	if err != nil {
+		return nil, "", err
+	}
+
+	return result, contentType, nil
 }
 
 // Write encodes the data by content type and writes it to the stream.
+// The multipart/form-data content type is not supported because the boundary is generated
+// while encoding. Use [Encode] instead.
 func Write(writer io.Writer, contentType string, body any, media *oaschema.MediaType) (int, error) {
 	switch {
+	case httpheader.IsContentType(contentType, httpheader.ContentTypeMultipartFormData):
+		return 0, ErrMultipartWriteUnsupported
 	case httpheader.IsContentTypeJSON(contentType):
 		return -1, json.NewEncoder(writer).Encode(body)
 	case httpheader.IsContentTypeXML(contentType):

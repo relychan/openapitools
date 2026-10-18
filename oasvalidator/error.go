@@ -353,3 +353,39 @@ func ObjectPropertyKeyTypeError(actualType string) *httperror.ValidationError {
 		Detail: "Object property key must be string, but got: " + actualType,
 	}
 }
+
+// ObjectAdditionalPropertyError returns a validation error for a property that is not allowed
+// because the schema sets additionalProperties to false.
+func ObjectAdditionalPropertyError(name string) *httperror.ValidationError {
+	return &httperror.ValidationError{
+		Code:    ErrCodeValidationError,
+		Pointer: "/" + name,
+		Detail:  "Additional property '" + name + "' is not allowed in the object",
+	}
+}
+
+// OneOfMultipleMatchedError returns a validation error when a value matches more than one oneOf schema.
+func OneOfMultipleMatchedError(indexes []int) *httperror.ValidationError {
+	strIndexes := make([]string, len(indexes))
+
+	for i, index := range indexes {
+		strIndexes[i] = strconv.Itoa(index)
+	}
+
+	return &httperror.ValidationError{
+		Code: ErrCodeValidationError,
+		Detail: "The value must match exactly one schema in oneOf, but matched schemas at indexes [" +
+			strings.Join(
+				strIndexes,
+				", ",
+			) + "]",
+	}
+}
+
+// AllOfEnumMismatchedError returns a validation error when the enums of allOf schemas have no common value.
+func AllOfEnumMismatchedError() *httperror.ValidationError {
+	return &httperror.ValidationError{
+		Code:   ErrCodeOpenAPISchemaError,
+		Detail: "Inconsistent enums in allOf. The enum values of allOf schemas do not have any common value",
+	}
+}

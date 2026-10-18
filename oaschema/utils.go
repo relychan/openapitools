@@ -24,7 +24,14 @@ import (
 	"github.com/relychan/goutils/httpheader"
 )
 
-// ExtractCommonParametersOfOperation extracts common parameters from operation's parameters.
+// ExtractCommonParametersOfOperation removes parameters of the operation that are duplicated
+// with path-level parameters (same name and location) and returns the path-level parameters.
+//
+// The returned slice is always the input pathParams: operation-level parameters, including ones
+// with `in: path`, are never hoisted into the list shared by other operations of the path item.
+//
+// Deprecated: path-level parameters take precedence over operation-level ones with this function,
+// which is the opposite of the OpenAPI specification. Use [InheritedPathItemParameters] instead.
 func ExtractCommonParametersOfOperation(
 	pathParams []*highv3.Parameter,
 	operation *highv3.Operation,
@@ -36,22 +43,82 @@ func ExtractCommonParametersOfOperation(
 	remainParams := make([]*highv3.Parameter, 0, len(operation.Parameters))
 
 	for _, param := range operation.Parameters {
-		if slices.ContainsFunc(pathParams, func(originalParam *highv3.Parameter) bool {
-			return param.Name == originalParam.Name && param.In == originalParam.In
-		}) {
+		if param == nil || findParameter(pathParams, param.Name, param.In) >= 0 {
 			continue
 		}
 
-		if param.In == InPath.String() {
-			pathParams = append(pathParams, param)
-		} else {
-			remainParams = append(remainParams, param)
-		}
+		remainParams = append(remainParams, param)
 	}
 
 	operation.Parameters = slices.Clip(remainParams)
 
 	return pathParams
+}
+
+// InheritedPathItemParameters returns the path-level parameters that apply to the operation.
+// Per the OpenAPI specification, an operation-level parameter overrides a path-level parameter
+// with the same name and location, so overridden path-level parameters are excluded.
+//
+// Neither input is mutated. The result is a new slice, safe to be modified by the caller,
+// and is meant to be combined with the operation's own parameters.
+func InheritedPathItemParameters(
+	pathParams []*highv3.Parameter,
+	operation *highv3.Operation,
+) []*highv3.Parameter {
+	if len(pathParams) == 0 {
+		return nil
+	}
+
+	results := make([]*highv3.Parameter, 0, len(pathParams))
+
+	for _, param := range pathParams {
+		if param == nil {
+			continue
+		}
+
+		if operation != nil && findParameter(operation.Parameters, param.Name, param.In) >= 0 {
+			continue
+		}
+
+		// skip duplicated path-level parameters.
+		if findParameter(results, param.Name, param.In) >= 0 {
+			continue
+		}
+
+		results = append(results, param)
+	}
+
+	return slices.Clip(results)
+}
+
+// MergeOperationParameters returns a new slice that contains the operation-level parameters
+// and the inherited path-level parameters. Operation-level parameters override path-level ones
+// with the same name and location. Neither input is mutated.
+func MergeOperationParameters(
+	pathParams []*highv3.Parameter,
+	operation *highv3.Operation,
+) []*highv3.Parameter {
+	inherited := InheritedPathItemParameters(pathParams, operation)
+
+	if operation == nil || len(operation.Parameters) == 0 {
+		return inherited
+	}
+
+	results := make([]*highv3.Parameter, 0, len(operation.Parameters)+len(inherited))
+
+	for _, param := range operation.Parameters {
+		if param != nil {
+			results = append(results, param)
+		}
+	}
+
+	return append(results, inherited...)
+}
+
+func findParameter(params []*highv3.Parameter, name string, location string) int {
+	return slices.IndexFunc(params, func(param *highv3.Parameter) bool {
+		return param != nil && param.Name == name && param.In == location
+	})
 }
 
 // GetDefaultContentType gets the default content type from the content map.
